@@ -1,34 +1,37 @@
-name: Build and Release
+name: Brewing RobustoClient Release
 
 on:
   push:
     tags:
-      - 'v*' 
-  workflow_dispatch: 
+      - 'v*' # We start brewing when a new version tag appears (for example, v1.0.0)
+  workflow_dispatch: # Button for manual start of the coffee machine
 
 jobs:
-  build:
-    name: Build Release
-    runs-on: ubuntu-latest 
+  brew:
+    name: Make Robusta Coffee
+    runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
+    - name: Harvest coffee beans (Download sources)
       uses: actions/checkout@v4
       with:
-        submodules: recursive 
+        submodules: recursive
 
-    - name: Setup .NET 9.0
+    - name: Setup Roasting Machine (.NET 9.0)
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '9.0.x'
 
-    - name: Build and Publish
+    - name: Roast the beans (Restore dependencies)
+      run: dotnet restore RobustoClient.sln
+        
+    - name: Brew the strongest espresso (Build Release)
       run: dotnet publish RobustoClient.sln -c Release -o ./release_output
-
-    - name: Create Release and Upload Artifact
+        
+    - name: Serve the coffee (Upload Release Artifact)
       uses: softprops/action-gh-release@v2
       with:
-        files: ./release_output/RobustoClient.dll 
-        generate_release_notes: true 
+        files: ./release_output/RobustoClient.dll
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
