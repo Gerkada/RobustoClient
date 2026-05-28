@@ -4,7 +4,7 @@ namespace RobustoClient.Systems;
 
 public class RobustaDiscordSystem : EntitySystem
 {
-    private const string DiscordUrl = "https://discord.gg/BKucu6uFUH";
+    private const string DiscordUrl = "https://discord.com/invite/adkEEQQyRj";
     private const string FilePath = "arbc_ds_ws_pnd";
     [Dependency] private readonly IUriOpener _uri = default!;
 
