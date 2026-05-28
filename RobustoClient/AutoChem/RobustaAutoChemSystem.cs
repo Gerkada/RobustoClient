@@ -315,10 +315,10 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                     if (jugLoc == null) { _dispenser = null; CurrentState = AutoChemState.WaitDispenser; return; }
 
                     ReagentDispenserDispenseAmount dose;
-                    if (remaining >= 100) dose = ReagentDispenserDispenseAmount.U100;
-                    else if (remaining >= 50) dose = ReagentDispenserDispenseAmount.U50;
+                    if (remaining >= 120) dose = ReagentDispenserDispenseAmount.U120;
+                    else if (remaining >= 60) dose = ReagentDispenserDispenseAmount.U60;
+                    else if (remaining >= 40) dose = ReagentDispenserDispenseAmount.U40;
                     else if (remaining >= 30) dose = ReagentDispenserDispenseAmount.U30;
-                    else if (remaining >= 25) dose = ReagentDispenserDispenseAmount.U25;
                     else if (remaining >= 20) dose = ReagentDispenserDispenseAmount.U20;
                     else if (remaining >= 15) dose = ReagentDispenserDispenseAmount.U15;
                     else if (remaining >= 10) dose = ReagentDispenserDispenseAmount.U10;

@@ -20,7 +20,7 @@ jobs:
     - name: Setup Roasting Machine (.NET 9.0)
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '9.0.x'
+        dotnet-version: '10.0.x'
 
     - name: Roast the beans (Restore dependencies)
       run: dotnet restore RobustoClient.sln
@@ -31,7 +31,7 @@ jobs:
     - name: Serve the coffee (Upload Release Artifact)
       uses: softprops/action-gh-release@v2
       with:
-        files: ./RobustoClient/bin/Release/net9.0/RobustoClient.dll
+        files: ./RobustoClient/bin/Release/net10.0/RobustoClient.dll
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
