@@ -26,7 +26,7 @@ jobs:
       run: dotnet restore RobustoClient.sln
         
     - name: Brew the strongest espresso (Build Release)
-      run: dotnet build RobustoClient.sln -c Release
+      run: dotnet build RobustoClient/RobustoClient.csproj -c Release
         
     - name: Serve the coffee (Upload Release Artifact)
       uses: softprops/action-gh-release@v2
