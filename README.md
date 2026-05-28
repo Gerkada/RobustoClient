@@ -12,7 +12,7 @@ RobustoClient is a heavily modified, advanced open-source cheat client for Space
 This project is created strictly for educational purposes. The author is not responsible for how this client is used by others.
 
 ## Requirements
-To run this, you need [MarseyLoader](https://github.com/ValidHunters/Marseyloader).
+To run this, you need [MarseyLoader](https://github.com/ValidHunters/Marseyloader) or any other launcher that supports Marseyloader patches like [SanabiLauncher](https://github.com/LaCumbiaDelCoronavirus/SanabiLauncher).
 
 ## Installation
 1. Install the latest version of [MarseyLoader for your operating system](https://github.com/ValidHunters/Marseyloader/releases).
