@@ -1,0 +1,25 @@
+<robusta:RobustaWindow xmlns="https://spacestation14.io"
+                       xmlns:robusta="clr-namespace:RobustoClient.UI.Controls"
+                       xmlns:graphics="clr-namespace:Robust.Client.Graphics;assembly=Robust.Client"
+                       MouseFilter="Stop"
+                       MinWidth="750" MinHeight="420">
+    <PanelContainer>
+        <PanelContainer.PanelOverride>
+            <graphics:StyleBoxFlat BackgroundColor="#0B0D13FA" BorderThickness="1 1 1 1" BorderColor="#1E212B"/>
+        </PanelContainer.PanelOverride>
+    </PanelContainer>
+    <BoxContainer Orientation="Vertical" SeparationOverride="0">
+        <PanelContainer Name="WindowHeader" MinHeight="40">
+            <PanelContainer.PanelOverride>
+                <graphics:StyleBoxFlat BackgroundColor="#12141C" BorderThickness="0 0 0 1" BorderColor="#1E212B"/>
+            </PanelContainer.PanelOverride>
+            <BoxContainer Orientation="Horizontal" Margin="12 0">
+                <Label HorizontalExpand="true" Name="TitleLabel" 
+                       Text="ROBUSTA CLIENT | PREMIUM" VAlign="Center" 
+                       FontColorOverride="#CDD6F4" />
+                <TextureButton Name="CloseButton" StyleClasses="windowCloseButton" VerticalAlignment="Center" Margin="0 0 5 0"/>
+            </BoxContainer>
+        </PanelContainer>
+        <Control Access="Public" Name="ContentsContainer" VerticalExpand="true" />
+    </BoxContainer>
+</robusta:RobustaWindow>

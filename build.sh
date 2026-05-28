@@ -1,2 +1,2 @@
 dotnet build
-yes | cp ArabicaCliento/bin/Debug/net9.0/ArabicaCliento.dll ~/marsey_loader/Marsey/Mods/ArabicaCliento.dll
+yes | cp RobustoClient/bin/Debug/net9.0/RobustoClient.dll ~/marsey_loader/Marsey/Mods/RobustoClient.dll
