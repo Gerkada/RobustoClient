@@ -26,12 +26,12 @@ jobs:
       run: dotnet restore RobustoClient.sln
         
     - name: Brew the strongest espresso (Build Release)
-      run: dotnet publish RobustoClient.sln -c Release -o ./release_output
+      run: dotnet build RobustoClient.sln -c Release
         
     - name: Serve the coffee (Upload Release Artifact)
       uses: softprops/action-gh-release@v2
       with:
-        files: ./release_output/RobustoClient.dll
+        files: ./RobustoClient/bin/Release/net9.0/RobustoClient.dll
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
