@@ -24,15 +24,15 @@ If you want to build the client from source for development purposes:
 1. Clone the repository:
 ```bash
     git clone --recurse-submodules -j4 [https://github.com/Gerkada/RobustoClient.git](https://github.com/Gerkada/RobustoClient.git)
-    ```
+```
 2. Enter the directory:
 ```bash
     cd RobustoClient
-    ```
+```
 3. Build the project:
 ```bash
     dotnet build
-    ```
+```
 4. After building, your compiled version will be located at `RobustoClient/bin/Debug/net9.0/RobustoClient.dll`. Copy it to the MarseyLoader mods folder.
 
 ## Key Features
