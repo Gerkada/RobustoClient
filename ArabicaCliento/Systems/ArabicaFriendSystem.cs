@@ -41,9 +41,14 @@ public class ArabicaFriendSystem : EntitySystem
     {
         if (HasComp<ArabicaFriendComponent>(ent))
             return true;
-        Resolve(ent, ref ent.Comp);
+            
+        // Передаем 'false' третьим аргументом, чтобы отключить спам ошибок в консоль,
+        // если это NPC или манекен без ActorComponent.
+        Resolve(ent, ref ent.Comp, false);
+        
         if (ArabicaConfig.FriendsSet.Contains((ent.Comp?.PlayerSession.Name ?? GetUsername(ent)) ?? string.Empty))
             return true;
+            
         return false;
     }
 

@@ -1,6 +1,7 @@
 using ArabicaCliento.Systems;
 using Content.Shared.Administration;
 using Robust.Shared.Console;
+using Robust.Shared.IoC;
 
 namespace ArabicaCliento.Commands;
 
@@ -27,5 +28,21 @@ public class ForceZoomCommand : IConsoleCommand
 
         var sys = IoCManager.Resolve<IEntityManager>().System<ArabicaAutoZoomSystem>();
         sys.UpdateZoom(zoom);
+        shell.WriteLine($"[Arabica] Force zoom set to {zoom} and enabled.");
+    }
+}
+
+[AnyCommand]
+public class ToggleZoomCommand : IConsoleCommand
+{
+    public string Command => "arabica.auto_zoom.toggle";
+    public string Description => "Toggles the forced zoom on or off";
+    public string Help => "arabica.auto_zoom.toggle";
+
+    public void Execute(IConsoleShell shell, string argStr, string[] args)
+    {
+        var sys = IoCManager.Resolve<IEntityManager>().System<ArabicaAutoZoomSystem>();
+        sys.ToggleZoom();
+        shell.WriteLine("[Arabica] Force zoom toggled.");
     }
 }

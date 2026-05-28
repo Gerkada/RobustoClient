@@ -1,0 +1,140 @@
+[INFO] CON: > autochem Desoxyephedrine 50
+[INFO] autochem: База данных инициализирована! Загружено рецептов: 273
+[INFO] autochem: [PLAN] Target: Desoxyephedrine, Amount: 47.5, Yield/Cycle: 4, GlobalLCM: 1, Cycles: 12
+[INFO] autochem: [PLAN] Target: Desoxyephedrine, Amount: 50, Yield/Cycle: 4, GlobalLCM: 1, Cycles: 13
+[INFO] autochem: --- ТЕХНОЛОГИЧЕСКАЯ КАРТА: Desoxyephedrine (50u) ---
+  [Этап 1] Synthesis: Oil: WeldingFuel (2u), Hydrogen (2u), Carbon (2u)
+  [Этап 2] Synthesis: Ammonia: Hydrogen (3u), Nitrogen (1u)
+  [Этап 3] Synthesis: Diethylamine: Ethanol (2u)
+  [Этап 4] Synthesis: Ephedrine: Hydrogen (4u), Sugar (4u)
+  [Этап 5] Synthesis: Desoxyephedrine: Carbon (13u), Iodine (13u), Phosphorus (13u)
+  [Этап 6] Heat for Desoxyephedrine: 370K
+---------------------------------------------------------
+
+[INFO] autochem: [HYPER-DEBUG] Авто-химик готов.
+[INFO] CON: [AutoChem] План принят: Desoxyephedrine (50u). Ожидаю стакан...
+[INFO] autochem: [START] Synthesis: Oil
+[WARN] autochem: [WAIT] Реагент WeldingFuel не найден! Налейте вручную 2u.
+[INFO] autochem: [VERIFY] Ручной налив WeldingFuel подтвержден.
+[INFO] autochem: [INFO] Вставьте стакан в chemical dispenser для Hydrogen...
+[INFO] autochem: [INFO] Вставьте стакан в chemical dispenser для Hydrogen...
+[INFO] autochem: [INFO] Вставьте стакан в chemical dispenser для Hydrogen...
+[INFO] autochem: [INFO] Вставьте стакан в chemical dispenser для Hydrogen...
+[INFO] autochem: [INFO] Вставьте стакан в chemical dispenser для Hydrogen...
+[INFO] autochem: [INFO] Вставьте стакан в chemical dispenser для Hydrogen...
+[INFO] autochem: [INFO] Вставьте стакан в chemical dispenser для Hydrogen...
+[INFO] autochem: [INFO] Вставьте стакан в chemical dispenser для Hydrogen...
+[INFO] autochem: [INFO] Вставьте стакан в chemical dispenser для Hydrogen...
+[INFO] autochem: [INFO] Вставьте стакан в chemical dispenser для Hydrogen...
+[INFO] autochem: [INFO] Вставьте стакан в chemical dispenser для Hydrogen...
+[INFO] autochem: [DEBUG] Раздатчик готов. Начинаю налив Hydrogen.
+[INFO] autochem: [SYNC] Установка дозы U1...
+[INFO] autochem: [ACTION] Налив Hydrogen (попытка U1u). Осталось в плане: 2u
+[INFO] autochem: [VERIFY] Hydrogen: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 2.0u, Hydrogen: 1.0u
+[INFO] autochem: [ACTION] Налив Hydrogen (попытка U1u). Осталось в плане: 1u
+[INFO] autochem: [VERIFY] Hydrogen: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 2.0u, Hydrogen: 2.0u
+[INFO] autochem: [ACTION] Налив Carbon (попытка U1u). Осталось в плане: 2u
+[INFO] autochem: [VERIFY] Carbon: залито 3u (измерено 3.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 1.0u, Hydrogen: 1.0u, Oil: 3.0u
+[INFO] autochem: [WAIT] Стабилизация раствора... (4.0u -> 5.0u)
+[INFO] autochem: [START] Synthesis: Ammonia
+[INFO] autochem: [DEBUG] Раздатчик готов. Начинаю налив Hydrogen.
+[INFO] autochem: [SYNC] Установка дозы U1...
+[INFO] autochem: [ACTION] Налив Hydrogen (попытка U1u). Осталось в плане: 3u
+[INFO] autochem: [VERIFY] Hydrogen: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 1.0u, Hydrogen: 2.0u, Oil: 3.0u
+[INFO] autochem: [ACTION] Налив Hydrogen (попытка U1u). Осталось в плане: 2u
+[INFO] autochem: [VERIFY] Hydrogen: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 1.0u, Hydrogen: 3.0u, Oil: 3.0u
+[INFO] autochem: [ACTION] Налив Hydrogen (попытка U1u). Осталось в плане: 1u
+[INFO] autochem: [VERIFY] Hydrogen: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 1.0u, Hydrogen: 4.0u, Oil: 3.0u
+[INFO] autochem: [ACTION] Налив Nitrogen (попытка U1u). Осталось в плане: 1u
+[INFO] autochem: [VERIFY] Nitrogen: залито 4u (измерено 4.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 1.0u, Hydrogen: 1.0u, Oil: 3.0u, Ammonia: 4.0u
+[INFO] autochem: [WAIT] Стабилизация раствора... (8.0u -> 9.0u)
+[INFO] autochem: [START] Synthesis: Diethylamine
+[INFO] autochem: [DEBUG] Раздатчик готов. Начинаю налив Ethanol.
+[INFO] autochem: [SYNC] Установка дозы U1...
+[INFO] autochem: [ACTION] Налив Ethanol (попытка U1u). Осталось в плане: 2u
+[INFO] autochem: [VERIFY] Ethanol: залито 2u (измерено 2.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 1.0u, Hydrogen: 1.0u, Oil: 3.0u, Ammonia: 3.0u, Diethylamine: 2.0u
+[INFO] autochem: [WAIT] Стабилизация раствора... (9.0u -> 10.0u)
+[INFO] autochem: [START] Synthesis: Ephedrine
+[INFO] autochem: [DEBUG] Раздатчик готов. Начинаю налив Hydrogen.
+[INFO] autochem: [SYNC] Установка дозы U1...
+[INFO] autochem: [ACTION] Налив Hydrogen (попытка U1u). Осталось в плане: 4u
+[INFO] autochem: [VERIFY] Hydrogen: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 1.0u, Hydrogen: 2.0u, Oil: 3.0u, Ammonia: 3.0u, Diethylamine: 2.0u
+[INFO] autochem: [ACTION] Налив Hydrogen (попытка U1u). Осталось в плане: 3u
+[INFO] autochem: [VERIFY] Hydrogen: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 1.0u, Hydrogen: 3.0u, Oil: 3.0u, Ammonia: 3.0u, Diethylamine: 2.0u
+[INFO] autochem: [ACTION] Налив Hydrogen (попытка U1u). Осталось в плане: 2u
+[INFO] autochem: [VERIFY] Hydrogen: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 1.0u, Hydrogen: 4.0u, Oil: 3.0u, Ammonia: 3.0u, Diethylamine: 2.0u
+[INFO] autochem: [ACTION] Налив Hydrogen (попытка U1u). Осталось в плане: 1u
+[INFO] autochem: [VERIFY] Hydrogen: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 1.0u, Hydrogen: 5.0u, Oil: 3.0u, Ammonia: 3.0u, Diethylamine: 2.0u
+[INFO] autochem: [ACTION] Налив Sugar (попытка U1u). Осталось в плане: 4u
+[INFO] autochem: [VERIFY] Sugar: залито 4u (измерено 4.0u).
+[INFO] autochem: [CONTENT] В стакане: WeldingFuel: 1.0u, Hydrogen: 4.0u, Oil: 2.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u
+[INFO] autochem: [WAIT] Стабилизация раствора... (14.0u -> 15.0u)
+[INFO] autochem: [START] Synthesis: Desoxyephedrine
+[INFO] autochem: [DEBUG] Раздатчик готов. Начинаю налив Carbon.
+[INFO] autochem: [SYNC] Установка дозы U10...
+[INFO] autochem: [ACTION] Налив Carbon (попытка U10u). Осталось в плане: 13u
+[INFO] autochem: [VERIFY] Carbon: залито 9u (измерено 9.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 9.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u
+[INFO] autochem: [SYNC] Установка дозы U1...
+[INFO] autochem: [ACTION] Налив Carbon (попытка U1u). Осталось в плане: 4u
+[INFO] system.map: Grid NT-Arrivals 1101 (96/n214214) changed parent. Old parent: Arrivals Terminal (98/n212991). New parent: FTL (95/n214695)
+[INFO] autochem: [VERIFY] Carbon: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 10.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u
+[INFO] autochem: [ACTION] Налив Carbon (попытка U1u). Осталось в плане: 3u
+[INFO] autochem: [VERIFY] Carbon: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 11.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u
+[INFO] autochem: [ACTION] Налив Carbon (попытка U1u). Осталось в плане: 2u
+[INFO] autochem: [VERIFY] Carbon: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 12.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u
+[INFO] autochem: [ACTION] Налив Carbon (попытка U1u). Осталось в плане: 1u
+[INFO] autochem: [VERIFY] Carbon: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 13.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u
+[INFO] autochem: [SYNC] Установка дозы U10...
+[INFO] autochem: [ACTION] Налив Iodine (попытка U10u). Осталось в плане: 13u
+[INFO] autochem: [VERIFY] Iodine: залито 10u (измерено 10.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 13.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u, Iodine: 10.0u
+[INFO] autochem: [SYNC] Установка дозы U1...
+[INFO] autochem: [ACTION] Налив Iodine (попытка U1u). Осталось в плане: 3u
+[INFO] autochem: [VERIFY] Iodine: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 13.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u, Iodine: 11.0u
+[INFO] autochem: [ACTION] Налив Iodine (попытка U1u). Осталось в плане: 2u
+[WARN] eng: MainLoop: Cannot keep up!
+[INFO] autochem: [VERIFY] Iodine: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 13.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u, Iodine: 12.0u
+[INFO] autochem: [ACTION] Налив Iodine (попытка U1u). Осталось в плане: 1u
+[INFO] autochem: [VERIFY] Iodine: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 13.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u, Iodine: 13.0u
+[INFO] autochem: [SYNC] Установка дозы U10...
+[INFO] autochem: [ACTION] Налив Phosphorus (попытка U10u). Осталось в плане: 13u
+[INFO] autochem: [VERIFY] Phosphorus: залито 10u (измерено 10.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 13.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u, Iodine: 13.0u, Phosphorus: 10.0u
+[INFO] autochem: [SYNC] Установка дозы U1...
+[INFO] autochem: [ACTION] Налив Phosphorus (попытка U1u). Осталось в плане: 3u
+[INFO] autochem: [VERIFY] Phosphorus: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 13.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u, Iodine: 13.0u, Phosphorus: 11.0u
+[INFO] autochem: [ACTION] Налив Phosphorus (попытка U1u). Осталось в плане: 2u
+[INFO] autochem: [VERIFY] Phosphorus: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 13.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u, Iodine: 13.0u, Phosphorus: 12.0u
+[INFO] autochem: [ACTION] Налив Phosphorus (попытка U1u). Осталось в плане: 1u
+[INFO] autochem: [VERIFY] Phosphorus: залито 1u (измерено 1.0u).
+[INFO] autochem: [CONTENT] В стакане: Carbon: 13.0u, Hydrogen: 3.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Ephedrine: 4.0u, Iodine: 13.0u, Phosphorus: 13.0u
+[INFO] autochem: [WAIT] Стабилизация раствора... (54.0u -> 55.0u)
+[INFO] autochem: [START] Heat for Desoxyephedrine
+[INFO] system.map: Grid NT-Arrivals 1101 (96/n214214) changed parent. Old parent: FTL (95/n214695). New parent: Dev (1/n186740)
+[INFO] autochem: >>> 370K ДОСТИГНУТА! СНИМАЙ! <<<
+[INFO] autochem: [DEBUG] Стакан снят с плитки.
+[INFO] autochem: [HYPER-DEBUG] План завершен.
+[INFO] autochem: [CONTENT] В стакане: Carbon: 6.0u, Phosphorus: 9.0u, Oil: 5.0u, Ammonia: 3.0u, Diethylamine: 1.0u, Benzene: 3.0u, Iodine: 9.0u, Desoxyephedrine: 16.0u
+[INFO] autochem: [AutoChem] Готово!

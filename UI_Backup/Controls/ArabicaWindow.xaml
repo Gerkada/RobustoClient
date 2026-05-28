@@ -1,0 +1,21 @@
+<arabica:ArabicaWindow xmlns="https://spacestation14.io"
+                       xmlns:arabica="clr-namespace:ArabicaCliento.UI.Controls"
+                       xmlns:graphics="clr-namespace:Robust.Client.Graphics;assembly=Robust.Client"
+                       MouseFilter="Stop"
+                       MinWidth="200" MinHeight="150">
+    <PanelContainer>
+        <PanelContainer.PanelOverride>
+            <graphics:StyleBoxFlat BackgroundColor="#060f1b99" BorderThickness="5 5 5 5" BorderColor="#4d4d4d"/>
+        </PanelContainer.PanelOverride>
+    </PanelContainer>
+    <BoxContainer Orientation="Vertical" SeparationOverride="0">
+        <PanelContainer Name="WindowHeader" StyleClasses="windowHeader">
+            <BoxContainer Orientation="Horizontal">
+                <Label Margin="5 0 0 0" HorizontalExpand="true" Name="TitleLabel" StyleIdentifier="foo" ClipText="True"
+                       Text="ArabicaWindow" VAlign="Center" FontColorOverride="#f1f1f1cc" />
+                <TextureButton Name="CloseButton" StyleClasses="windowCloseButton" VerticalAlignment="Center" />
+            </BoxContainer>
+        </PanelContainer>
+        <Control Access="Public" Name="ContentsContainer" Margin="0 2" RectClipContent="True" VerticalExpand="true" />
+    </BoxContainer>
+</arabica:ArabicaWindow>

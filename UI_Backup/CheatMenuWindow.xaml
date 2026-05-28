@@ -1,0 +1,30 @@
+<arabica:ArabicaWindow xmlns="https://spacestation14.io"
+                       xmlns:arabica="clr-namespace:ArabicaCliento.UI.Controls"
+                       MinSize="600 400"
+                       SetSize="600 400">
+    <BoxContainer Orientation="Vertical" HorizontalAlignment="Center" VerticalExpand="True" VerticalAlignment="Center"
+                  SeparationOverride="5">
+        <Button ToggleMode="True" Text="Ranged Aimbot" StyleClasses="ButtonSquare" Name="Ranged" />
+        <Button ToggleMode="True" Text="Aim Prediction" StyleClasses="ButtonSquare" Name="PredictionToggle" />
+        <Button ToggleMode="True" Text="Melee Aimbot" StyleClasses="ButtonSquare" Name="Melee" />
+        <Button ToggleMode="True" Text="Melee Triggerbot" StyleClasses="ButtonSquare" Name="MeleeTrigger" />
+        <Button ToggleMode="True" Text="AutoSpin" StyleClasses="ButtonSquare" Name="AutoSpin" />
+        <Button ToggleMode="True" Text="AntiSlip" StyleClasses="ButtonSquare" Name="AntiSlip" />
+        <Button ToggleMode="True" Text="Syndicate Detector" StyleClasses="ButtonSquare" Name="SyndicateDetector" />
+        <Button ToggleMode="True" Text="Fov Disabler" StyleClasses="ButtonSquare" Name="DOD" />
+        <Button ToggleMode="True" Text="ESP (Name Tags)" StyleClasses="ButtonSquare" Name="EspBtn" />
+        <Button ToggleMode="True" Text="Fullbright (No Darkness)" StyleClasses="ButtonSquare" Name="FullbrightBtn" />
+        <Button ToggleMode="True" Text="Overlays Disabler" StyleClasses="ButtonSquare" Name="OverlaysDisable" />
+        <Button ToggleMode="True" Text="No Recoil" Name="NoRecoil" StyleClasses="ButtonSquare" />
+        <Button Text="Open Station Map" StyleClasses="ButtonSquare" Name="OpenMapBtn" />
+        <Button Text="Open Tactical Radar" StyleClasses="ButtonSquare" Name="OpenTacticalRadarBtn" />
+
+        <BoxContainer Orientation="Horizontal">
+            <LineEdit Name="ItemSearchInput" PlaceHolder="Enter item name..." HorizontalExpand="True"/>
+            <Button ToggleMode="True" Text="Search" Name="ItemSearchBtn" />
+        </BoxContainer>
+        
+        <!-- <Button ToggleMode="True" Text="Log players" StyleClasses="ButtonSquare" Name="LogPlayers" /> -->
+        <Button Text="OPEN DISCORD" StyleClasses="ButtonColorRed" Name="Discord" />
+    </BoxContainer>
+</arabica:ArabicaWindow>

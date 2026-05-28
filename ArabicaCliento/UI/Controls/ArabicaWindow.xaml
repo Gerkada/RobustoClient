@@ -2,20 +2,24 @@
                        xmlns:arabica="clr-namespace:ArabicaCliento.UI.Controls"
                        xmlns:graphics="clr-namespace:Robust.Client.Graphics;assembly=Robust.Client"
                        MouseFilter="Stop"
-                       MinWidth="200" MinHeight="150">
+                       MinWidth="750" MinHeight="420">
     <PanelContainer>
         <PanelContainer.PanelOverride>
-            <graphics:StyleBoxFlat BackgroundColor="#060f1b99" BorderThickness="5 5 5 5" BorderColor="#4d4d4d"/>
+            <graphics:StyleBoxFlat BackgroundColor="#0B0D13FA" BorderThickness="1 1 1 1" BorderColor="#1E212B"/>
         </PanelContainer.PanelOverride>
     </PanelContainer>
     <BoxContainer Orientation="Vertical" SeparationOverride="0">
-        <PanelContainer Name="WindowHeader" StyleClasses="windowHeader">
-            <BoxContainer Orientation="Horizontal">
-                <Label Margin="5 0 0 0" HorizontalExpand="true" Name="TitleLabel" StyleIdentifier="foo" ClipText="True"
-                       Text="ArabicaWindow" VAlign="Center" FontColorOverride="#f1f1f1cc" />
-                <TextureButton Name="CloseButton" StyleClasses="windowCloseButton" VerticalAlignment="Center" />
+        <PanelContainer Name="WindowHeader" MinHeight="40">
+            <PanelContainer.PanelOverride>
+                <graphics:StyleBoxFlat BackgroundColor="#12141C" BorderThickness="0 0 0 1" BorderColor="#1E212B"/>
+            </PanelContainer.PanelOverride>
+            <BoxContainer Orientation="Horizontal" Margin="12 0">
+                <Label HorizontalExpand="true" Name="TitleLabel" 
+                       Text="ARABICA CLIENT | PREMIUM" VAlign="Center" 
+                       FontColorOverride="#CDD6F4" />
+                <TextureButton Name="CloseButton" StyleClasses="windowCloseButton" VerticalAlignment="Center" Margin="0 0 5 0"/>
             </BoxContainer>
         </PanelContainer>
-        <Control Access="Public" Name="ContentsContainer" Margin="0 2" RectClipContent="True" VerticalExpand="true" />
+        <Control Access="Public" Name="ContentsContainer" VerticalExpand="true" />
     </BoxContainer>
 </arabica:ArabicaWindow>

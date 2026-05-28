@@ -1,12 +1,13 @@
+using System;
 using Content.Shared.MouseRotator;
 using Robust.Client.Graphics;
 using Robust.Client.Input;
 using Robust.Client.Player;
 using Robust.Shared.Map;
 using Robust.Shared.Timing;
+using Robust.Shared.Maths;
 
 namespace ArabicaCliento.Systems;
-
 
 public class ArabicaSpinSystem : EntitySystem
 {
@@ -26,9 +27,10 @@ public class ArabicaSpinSystem : EntitySystem
             if (!_input.MouseScreenPosition.IsValid)
                 return;
 
-        var player = _player.LocalEntity;
+        // Получение локального игрока
+        var player = _player.LocalSession?.AttachedEntity;
 
-        if (player == null || !TryComp<MouseRotatorComponent>(player, out var rotator))
+        if (player == null || !TryComp<MouseRotatorComponent>(player.Value, out var rotator))
             return;
 
         Angle angle;
@@ -45,9 +47,10 @@ public class ArabicaSpinSystem : EntitySystem
         else
         {
             var xform = Transform(player.Value);
-
             var coords = _input.MouseScreenPosition;
-            var mapPos = _eye.PixelToMap(coords);
+            
+            // Конвертация координат мыши
+            var mapPos = _eye.ScreenToMap(coords);
 
             if (mapPos.MapId == MapId.Nullspace)
                 return;
@@ -55,7 +58,6 @@ public class ArabicaSpinSystem : EntitySystem
             angle = (mapPos.Position - _transform.GetMapCoordinates(xform).Position).ToWorldAngle();
             curRot = _transform.GetWorldRotation(xform);
         }
-
 
         if (rotator.Simple4DirMode)
         {
@@ -75,13 +77,7 @@ public class ArabicaSpinSystem : EntitySystem
         if (Math.Abs(diff.Theta) < rotator.AngleTolerance.Theta)
             return;
 
-        if (rotator.GoalRotation != null)
-        {
-            var goalDiff = Angle.ShortestDistance(angle, rotator.GoalRotation.Value);
-            if (Math.Abs(goalDiff.Theta) < rotator.AngleTolerance.Theta)
-                return;
-        }
-
+        // Отправляем пакет на сервер
         RaisePredictiveEvent(new RequestMouseRotatorRotationEvent
         {
             Rotation = angle

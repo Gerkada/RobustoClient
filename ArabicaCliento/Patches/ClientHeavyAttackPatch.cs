@@ -4,6 +4,9 @@ using Robust.Shared.Map;
 using ArabicaCliento.Systems;
 using Content.Client.Weapons.Melee;
 using Robust.Client.GameObjects;
+using Robust.Shared.GameObjects;
+using Robust.Shared.IoC;
+using System.Numerics; // Для Vector2.Zero
 
 namespace ArabicaCliento.Patches;
 
@@ -11,10 +14,8 @@ namespace ArabicaCliento.Patches;
 public class ClientHeavyAttackPatch
 {
     private static IEntityManager? _entMan;
-    private static TransformSystem? _transform;
     private static ArabicaAimSystem? _aim;
 
-    
     [HarmonyPrefix]
     private static void Prefix(ref EntityUid user,
         ref EntityCoordinates coordinates,
@@ -22,12 +23,18 @@ public class ClientHeavyAttackPatch
         ref MeleeWeaponComponent component)
     {
         if (!ArabicaConfig.MeleeAimbotEnabled) return;
-        _entMan ??= IoCManager.Resolve<EntityManager>();
-        _transform ??= _entMan.System<TransformSystem>();
+        
+        _entMan ??= IoCManager.Resolve<IEntityManager>();
         _aim ??= _entMan.System<ArabicaAimSystem>();
 
-        var output = _aim.GetClosestToEntInRange(user, component.Range, [user]);
+        // Ищем цель строго в радиусе поражения нашего оружия
+        var output = _aim.GetClosestToEntInRange(user, component.Range, new HashSet<EntityUid> { user });
+        
         if (output == null) return;
-        coordinates = _transform.ToCoordinates(coordinates.EntityId, output.Value.Position);
+
+        // GOD MODE ДЛЯ МИЛИ:
+        // Полностью игнорируем то, куда мы кликнули мышкой (пол, стена и т.д.).
+        // Привязываем тяжелую атаку ровно к центру сущности врага!
+        coordinates = new EntityCoordinates(output.Value.Entity, Vector2.Zero);
     }
 }

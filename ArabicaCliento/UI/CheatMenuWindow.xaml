@@ -1,17 +1,101 @@
 <arabica:ArabicaWindow xmlns="https://spacestation14.io"
                        xmlns:arabica="clr-namespace:ArabicaCliento.UI.Controls"
-                       MinSize="600 400"
-                       SetSize="600 400">
-    <BoxContainer Orientation="Vertical" HorizontalAlignment="Center" VerticalExpand="True" VerticalAlignment="Center"
-                  SeparationOverride="5">
-        <Button ToggleMode="True" Text="Ranged Aimbot" StyleClasses="ButtonSquare" Name="Ranged" />
-        <Button ToggleMode="True" Text="Melee Aimbot" StyleClasses="ButtonSquare" Name="Melee" />
-        <Button ToggleMode="True" Text="AutoSpin" StyleClasses="ButtonSquare" Name="AutoSpin" />
-        <Button ToggleMode="True" Text="AntiSlip" StyleClasses="ButtonSquare" Name="AntiSlip" />
-        <Button ToggleMode="True" Text="Syndicate Detector" StyleClasses="ButtonSquare" Name="SyndicateDetector" />
-        <Button ToggleMode="True" Text="Fov Disabler" StyleClasses="ButtonSquare" Name="DOD" />
-        <Button ToggleMode="True" Text="Overlays Disabler" StyleClasses="ButtonSquare" Name="OverlaysDisable" />
-        <!-- <Button ToggleMode="True" Text="Log players" StyleClasses="ButtonSquare" Name="LogPlayers" /> -->
-        <Button Text="OPEN DISCORD" StyleClasses="ButtonColorRed" Name="Discord" />
+                       xmlns:graphics="clr-namespace:Robust.Client.Graphics;assembly=Robust.Client"
+                       MinSize="750 420"
+                       SetSize="750 420">
+    <BoxContainer Orientation="Horizontal" SeparationOverride="0">
+        <!-- Sidebar -->
+        <PanelContainer MinWidth="180">
+            <PanelContainer.PanelOverride>
+                <graphics:StyleBoxFlat BackgroundColor="#12141C" BorderThickness="0 0 1 0" BorderColor="#1E212B"/>
+            </PanelContainer.PanelOverride>
+            <BoxContainer Orientation="Vertical" Margin="10 20" SeparationOverride="10">
+                <Button Text="COMBAT" Name="TabCombat" StyleClasses="ButtonSquare" HorizontalAlignment="Stretch" />
+                <Button Text="VISUALS" Name="TabVisuals" StyleClasses="ButtonSquare" HorizontalAlignment="Stretch" />
+                <Button Text="UTILITY" Name="TabUtility" StyleClasses="ButtonSquare" HorizontalAlignment="Stretch" />
+                
+                <Control VerticalExpand="True" />
+                
+                <!-- Sidebar Footer -->
+                <BoxContainer Orientation="Vertical" SeparationOverride="4" Margin="5 0">
+                    <BoxContainer Orientation="Horizontal" SeparationOverride="6">
+                        <PanelContainer MinWidth="8" MinHeight="8" VerticalAlignment="Center">
+                            <PanelContainer.PanelOverride>
+                                <graphics:StyleBoxFlat BackgroundColor="#40ff40" />
+                            </PanelContainer.PanelOverride>
+                        </PanelContainer>
+                        <Label Text="Status: Active" FontColorOverride="#6E7681" />
+                    </BoxContainer>
+                    <Label Text="Version: 2.1.0" FontColorOverride="#4E555F" />
+                </BoxContainer>
+                
+                <Button Text="DISCORD" StyleClasses="ButtonColorRed" Name="Discord" HorizontalAlignment="Stretch" Margin="0 5 0 0" />
+            </BoxContainer>
+        </PanelContainer>
+
+        <!-- Main Content -->
+        <BoxContainer Orientation="Vertical" HorizontalExpand="True" Margin="20" SeparationOverride="15">
+            <ScrollContainer VerticalExpand="True">
+                <BoxContainer Orientation="Vertical" Name="ContentContainer" SeparationOverride="12" HorizontalExpand="True">
+                    
+                    <!-- Combat Section -->
+                    <BoxContainer Orientation="Vertical" Name="CombatSection" SeparationOverride="8">
+                        <Label Text="COMBAT" FontColorOverride="#6E7681" Margin="0 0 0 5"/>
+                        <BoxContainer Orientation="Horizontal" SeparationOverride="10">
+                             <Button ToggleMode="True" Text="Ranged Aimbot" Name="Ranged" HorizontalExpand="True" />
+                             <Button ToggleMode="True" Text="Aim Prediction" Name="PredictionToggle" HorizontalExpand="True" />
+                        </BoxContainer>
+                        <BoxContainer Orientation="Horizontal" SeparationOverride="10">
+                             <Button ToggleMode="True" Text="Melee Aimbot" Name="Melee" HorizontalExpand="True" />
+                             <Button ToggleMode="True" Text="Melee Triggerbot" Name="MeleeTrigger" HorizontalExpand="True" />
+                        </BoxContainer>
+                        <BoxContainer Orientation="Horizontal" SeparationOverride="10">
+                             <Button ToggleMode="True" Text="AutoSpin" Name="AutoSpin" HorizontalExpand="True" />
+                             <Button ToggleMode="True" Text="No Recoil" Name="NoRecoil" HorizontalExpand="True" />
+                        </BoxContainer>
+                    </BoxContainer>
+
+                    <!-- Visuals Section -->
+                    <BoxContainer Orientation="Vertical" Name="VisualsSection" SeparationOverride="8">
+                        <Label Text="VISUALS" FontColorOverride="#6E7681" Margin="0 10 0 5"/>
+                        <BoxContainer Orientation="Horizontal" SeparationOverride="10">
+                            <Button ToggleMode="True" Text="ESP (Name Tags)" Name="EspBtn" HorizontalExpand="True" />
+                            <Button ToggleMode="True" Text="Fullbright" Name="FullbrightBtn" HorizontalExpand="True" />
+                        </BoxContainer>
+                        <BoxContainer Orientation="Horizontal" SeparationOverride="10">
+                            <Button ToggleMode="True" Text="Fov Disabler" Name="DOD" HorizontalExpand="True" />
+                            <Button ToggleMode="True" Text="Overlays Disabler" Name="OverlaysDisable" HorizontalExpand="True" />
+                        </BoxContainer>
+                    </BoxContainer>
+
+                    <!-- Utility Section -->
+                    <BoxContainer Orientation="Vertical" Name="UtilitySection" SeparationOverride="8">
+                        <Label Text="UTILITY" FontColorOverride="#6E7681" Margin="0 10 0 5"/>
+                        <BoxContainer Orientation="Horizontal" SeparationOverride="10">
+                            <Button ToggleMode="True" Text="AntiSlip" Name="AntiSlip" HorizontalExpand="True" />
+                            <Button ToggleMode="True" Text="Syndicate Detector" Name="SyndicateDetector" HorizontalExpand="True" />
+                        </BoxContainer>
+                        
+                        <Label Text="Ping Compensation" FontColorOverride="#6E7681" Margin="0 5 0 0"/>
+                        <BoxContainer Orientation="Horizontal" SeparationOverride="5">
+                             <Button Text="Local" Name="PingLocal" HorizontalExpand="True" />
+                             <Button Text="Stable" Name="PingStable" HorizontalExpand="True" />
+                             <Button Text="Laggy" Name="PingLaggy" HorizontalExpand="True" />
+                             <Button Text="Auto" Name="PingAuto" HorizontalExpand="True" />
+                        </BoxContainer>
+
+                        <BoxContainer Orientation="Horizontal" SeparationOverride="10">
+                            <Button Text="Open Station Map" Name="OpenMapBtn" HorizontalExpand="True" />
+                            <Button Text="Open Tactical Radar" Name="OpenTacticalRadarBtn" HorizontalExpand="True" />
+                        </BoxContainer>
+                        <BoxContainer Orientation="Horizontal" SeparationOverride="5" Margin="0 10 0 0">
+                            <LineEdit Name="ItemSearchInput" PlaceHolder="Item Search..." HorizontalExpand="True" MinWidth="200"/>
+                            <Button ToggleMode="True" Text="Search" Name="ItemSearchBtn" />
+                        </BoxContainer>
+                    </BoxContainer>
+
+                </BoxContainer>
+            </ScrollContainer>
+        </BoxContainer>
     </BoxContainer>
 </arabica:ArabicaWindow>
