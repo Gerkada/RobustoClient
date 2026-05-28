@@ -20,14 +20,14 @@ public sealed class RobustaItemSearchOverlay : Overlay
     private readonly Font _font;
     private EntityLookupSystem? _entityLookup;
 
-    // Кэш для производительности
+    // Performance cache
     private readonly List<(EntityUid Uid, Vector2 ScreenPos, string Name)> _cachedItems = new();
     private MapId _lastMapId = MapId.Nullspace;
     private int _frameCounter = 0;
     private const int CacheUpdateInterval = 15; 
     private Vector2 _lastPlayerPos = Vector2.Zero;
 
-    public override OverlaySpace Space => OverlaySpace.ScreenSpace; // Исправили магическую цифру
+    public override OverlaySpace Space => OverlaySpace.ScreenSpace;
 
     public RobustaItemSearchOverlay()
     {
@@ -36,7 +36,7 @@ public sealed class RobustaItemSearchOverlay : Overlay
         _playerManager = IoCManager.Resolve<IPlayerManager>();
         _transform = _entMan.System<SharedTransformSystem>();
         
-        // Берем надежный дефолтный шрифт
+        // Use a reliable default font
         var cache = IoCManager.Resolve<IResourceCache>();
         _font = new VectorFont(cache.GetResource<FontResource>("/Fonts/NotoSans/NotoSans-Regular.ttf"), 10);
     }
@@ -46,7 +46,7 @@ public sealed class RobustaItemSearchOverlay : Overlay
         if (!RobustaConfig.ItemSearchEnabled || string.IsNullOrWhiteSpace(RobustaConfig.ItemSearchQuery))
             return;
 
-        // ИСПРАВЛЕНИЕ: Правильный локальный игрок
+        // Correct local player
         var local = _playerManager.LocalSession?.AttachedEntity;
         if (local == null)
             return;
@@ -58,7 +58,7 @@ public sealed class RobustaItemSearchOverlay : Overlay
 
         var mapId = localXform.MapID;
         var worldViewport = _eyeManager.GetWorldViewport();
-        var playerWorldPos = _transform.GetWorldPosition(localXform); // ИСПРАВЛЕНИЕ: Безопасные координаты
+        var playerWorldPos = _transform.GetWorldPosition(localXform); // Safe coordinates
 
         var movedDistSq = (playerWorldPos - _lastPlayerPos).LengthSquared();
         bool playerMoved = movedDistSq > 4f;
@@ -75,14 +75,14 @@ public sealed class RobustaItemSearchOverlay : Overlay
         var localScreen = args.ViewportControl?.WorldToScreen(playerWorldPos);
         if (localScreen == null) return;
 
-        // Цвет линий и текста (например, голубой)
+        // Line and text color (e.g., cyan)
         var color = Color.Cyan;
 
         foreach (var (uid, screenPos, name) in _cachedItems)
         {
-            // Рисуем линию от нас к предмету
+            // Draw line from local player to item
             args.ScreenHandle.DrawLine(localScreen.Value, screenPos, color);
-            // Рисуем название предмета
+            // Draw item name
             args.ScreenHandle.DrawString(_font, screenPos - new Vector2(0f, 10f), name, color);
         }
     }
@@ -107,13 +107,13 @@ public sealed class RobustaItemSearchOverlay : Overlay
                 if (!name.ToLowerInvariant().Contains(queryLower))
                     continue;
 
-                // Безопасное получение позиции даже в контейнерах
+                // Safe position retrieval even in containers
                 var worldPos = _transform.GetWorldPosition(xform);
                 var screenPos = _eyeManager.WorldToScreen(worldPos);
                 
                 _cachedItems.Add((uid, screenPos, name));
             }
         }
-        catch { /* Игнорируем ошибки при поиске */ }
+        catch { /* Ignore search errors */ }
     }
 }

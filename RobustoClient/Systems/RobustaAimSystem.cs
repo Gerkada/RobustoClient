@@ -53,7 +53,7 @@ public class RobustaAimSystem : EntitySystem
 
         if (!_lockedTarget.HasValue)
         {
-            // ИСПОЛЬЗУЕМ ПИКСЕЛЬНЫЙ FOV
+            // USE PIXEL FOV
             var target = GetClosestInScreenFov(inputMan.MouseScreenPosition, RobustaConfig.AimFovPixels, new HashSet<EntityUid> { localPlayer.Value });
             if (target != null)
             {
@@ -89,7 +89,7 @@ public class RobustaAimSystem : EntitySystem
             };
         }
 
-        // ИСПОЛЬЗУЕМ ПИКСЕЛЬНЫЙ FOV
+        // USE PIXEL FOV
         var target = GetClosestInScreenFov(mousePos, RobustaConfig.AimFovPixels, new HashSet<EntityUid> { localPlayer.Value });
         if (target == null) return null;
 
@@ -107,7 +107,7 @@ public class RobustaAimSystem : EntitySystem
         var localPlayer = _player.LocalSession?.AttachedEntity;
         if (localPlayer == null) return null;
 
-        // Определяем скорость броска динамически
+        // Determine throw speed dynamically
         float throwSpeed = RobustaConfig.DefaultThrowSpeed;
         if (TryComp<HandsComponent>(localPlayer.Value, out var hands))
         {
@@ -127,7 +127,7 @@ public class RobustaAimSystem : EntitySystem
             };
         }
 
-        // ИСПОЛЬЗУЕМ ПИКСЕЛЬНЫЙ FOV
+        // USE PIXEL FOV
         var target = GetClosestInScreenFov(mousePos, RobustaConfig.AimFovPixels, new HashSet<EntityUid> { localPlayer.Value });
         if (target == null) return null;
 
@@ -139,21 +139,21 @@ public class RobustaAimSystem : EntitySystem
     }
 
     // ==========================================================
-    // ПОИСК ЦЕЛИ ПО ДИСТАНЦИИ В ПИКСЕЛЯХ НА ЭКРАНЕ
+    // SEARCH TARGET BY DISTANCE IN PIXELS ON SCREEN
     // ==========================================================
     public AimOutput? GetClosestInScreenFov(ScreenCoordinates mouseScreenPos, float fovRadiusPixels, HashSet<EntityUid>? exclude = null)
     {
         var mapCoords = _eyeManager.ScreenToMap(mouseScreenPos);
         if (mapCoords.MapId == MapId.Nullspace) return null;
 
-        // Берем сущности в широком мировом радиусе (20 метров хватает с запасом на весь экран)
+        // Get entities in a wide world radius (20 meters is enough to cover the whole screen)
         var entitiesInRange = _lookup.GetEntitiesInRange(mapCoords, 20f, LookupFlags.Uncontained);
         if (exclude != null) entitiesInRange.ExceptWith(exclude);
 
         MapCoordinates? bestCoordinates = null;
         EntityUid? bestEntity = null;
         
-        // Начальный лимит - это радиус нашего FOV. Все, кто дальше, даже не будут рассматриваться.
+        // Initial limit is our FOV radius. Anyone further away will not be considered.
         float closestPixelDistance = fovRadiusPixels; 
 
         foreach (var ent in entitiesInRange)
@@ -163,13 +163,13 @@ public class RobustaAimSystem : EntitySystem
 
             var entityMapPos = _transform.GetMapCoordinates(transform);
             
-            // Переводим координаты моба в координаты монитора
+            // Translate mob coordinates to screen coordinates
             var entityScreenPos = _eyeManager.CoordinatesToScreen(transform.Coordinates);
             
-            // Вычисляем расстояние от курсора до моба В ПИКСЕЛЯХ
+            // Calculate distance from cursor to mob IN PIXELS
             var pixelDistance = (mouseScreenPos.Position - entityScreenPos.Position).Length();
 
-            // Если моб внутри нашего FOV и он ближе к курсору, чем предыдущий найденный
+            // If the mob is within our FOV and closer to the cursor than the previous one found
             if (pixelDistance <= closestPixelDistance)
             {
                 closestPixelDistance = pixelDistance;
@@ -187,7 +187,7 @@ public class RobustaAimSystem : EntitySystem
         return new AimOutput { Entity = bestEntity.Value, Position = bestCoordinates.Value, Velocity = velocity };
     }
 
-    // --- Методы оставляем для совместимости других систем (например мили-аимбота) ---
+    // --- Methods kept for compatibility with other systems (e.g., melee aimbot) ---
     public AimOutput? GetClosestInRange(ScreenCoordinates screenCoordinates, float range, HashSet<EntityUid>? exclude = null)
     {
         var mapCoords = _eyeManager.ScreenToMap(screenCoordinates);

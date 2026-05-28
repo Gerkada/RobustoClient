@@ -24,7 +24,7 @@ public sealed class RobustaSyndicateDetectorSystem : EntitySystem
     private readonly Dictionary<EntityUid, (bool Uplink, bool Contra, List<ImplantInfo> Implants, TimeSpan LastCheck)> _cache = new();
     private readonly TimeSpan _cacheLifetime = TimeSpan.FromSeconds(1);
 
-    // Набор валют, которые 100% принадлежат антагонистам
+    // Set of currencies that 100% belong to antagonists
     private readonly HashSet<string> _antagCurrencies = new()  
     {  
         "Telecrystal", 
@@ -49,7 +49,7 @@ public sealed class RobustaSyndicateDetectorSystem : EntitySystem
 
         ScanEntity(uid, ref hasUplink, ref hasContra, scannedEntities);
         
-        // --- СКАНЕР ИМПЛАНТОВ ---
+        // --- IMPLANT SCANNER ---
         if (TryComp<ImplantedComponent>(uid, out var implanted))
         {
             bool foundSpecific = false;
@@ -86,7 +86,7 @@ public sealed class RobustaSyndicateDetectorSystem : EntitySystem
                 }
             }
 
-            // ФОЛЛБЕК: Если компонент есть, а конкретики нет (или сервер не шлет энтити внутри контейнера)
+            // FALLBACK: If component exists but no specifics (or server doesn't send entities inside the container)
             if (!foundSpecific)
             {
                 implants.Add(new ImplantInfo("Unknown Implant", "Neutral"));
@@ -99,7 +99,7 @@ public sealed class RobustaSyndicateDetectorSystem : EntitySystem
 
     private bool CheckUplink(EntityUid target)
     {
-        // 1. Проверяем наличие магазина и его баланс
+        // 1. Check for the presence of a store and its balance
         if (TryComp<StoreComponent>(target, out var store))
         {
             foreach (var currencyPair in store.Balance)
@@ -111,7 +111,7 @@ public sealed class RobustaSyndicateDetectorSystem : EntitySystem
             }
         }
 
-        // 2. Проверка скрытых скидок
+        // 2. Check for hidden discounts
         if (TryComp<StoreDiscountComponent>(target, out var discountComponent))
         {
             foreach (var discount in discountComponent.Discounts)

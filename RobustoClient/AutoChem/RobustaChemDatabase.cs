@@ -8,25 +8,25 @@ namespace RobustoClient.Systems.AutoChem;
 
 public static class RobustaChemDatabase
 {
-    // Словарь: "ID конечного химиката" -> "Прототип реакции, которая его создает"
+    // Dictionary: "Target reagent ID" -> "Reaction prototype that creates it"
     public static Dictionary<string, ReactionPrototype> RecipesByProduct = new(StringComparer.OrdinalIgnoreCase);
     
     public static bool IsInitialized = false;
 
-    // Этот метод нужно вызвать один раз (например, при загрузке клиента или первом включении бота)
+    // This method should be called once (e.g., during client load or first bot activation)
     public static void Initialize()
     {
         if (IsInitialized) return;
 
-        // Пытаемся получить менеджер прототипов напрямую через IoC
+        // Attempting to get the prototype manager directly via IoC
         var protoMan = IoCManager.Resolve<IPrototypeManager>();
         
         int recipeCount = 0;
 
-        // Перебираем прототипы реакций
+        // Iterating through reaction prototypes
         foreach (var reaction in protoMan.EnumeratePrototypes<ReactionPrototype>())
         {
-            // Проверяем, есть ли у реакции продукты
+            // Checking if the reaction has products
             if (reaction.Products == null || reaction.Products.Count == 0)
                 continue;
 
@@ -34,7 +34,7 @@ public static class RobustaChemDatabase
 
             foreach (var product in reaction.Products.Keys)
             {
-                // Сохраняем самый "лучший" рецепт для этого продукта
+                // Saving the "best" recipe for this product
                 if (!RecipesByProduct.TryGetValue(product, out var existing) || 
                     currentScore > CalculateRecipeScore(existing))
                 {
@@ -45,32 +45,32 @@ public static class RobustaChemDatabase
         }
 
         IsInitialized = true;
-        Logger.GetSawmill("autochem").Info($"База данных инициализирована! Загружено рецептов: {recipeCount}");
+        Logger.GetSawmill("autochem").Info($"Database initialized! Recipes loaded: {recipeCount}");
     }
 
     private static int CalculateRecipeScore(ReactionPrototype reaction)
     {
-        // Базовый вес на основе приоритета игры
+        // Base weight based on game priority
         int score = reaction.Priority * 100;
 
-        // Огромный штраф за использование биологических жидкостей или "грязных" компонентов
+        // Large penalty for using biological fluids or "dirty" components
         var badReagents = new[] { "Blood", "Urine", "Vomit", "AmmoniaBlood", "SpaceCleaner", "Slime", "Facum" };
         
         foreach (var reactant in reaction.Reactants.Keys)
         {
             if (badReagents.Any(r => reactant.Contains(r, StringComparison.OrdinalIgnoreCase)))
-                score -= 2000; // Удвоили штраф
+                score -= 2000; // Doubled the penalty
         }
 
-        // Штраф за грязные ID самих реакций
+        // Penalty for dirty reaction IDs
         if (reaction.ID.Contains("Blood") || reaction.ID.Contains("Urine") || reaction.ID.Contains("Vomit"))
             score -= 2000;
 
-        // Штраф за нагрев (лучше смешать просто так, чем греть)
+        // Heating penalty (prefer mixing over heating)
         if (reaction.MinimumTemperature > 295f)
             score -= 50;
 
-        // Бонус за простые газы и базовые металлы (то, что обычно есть в раздатчике)
+        // Bonus for simple gases and base metals (common dispenser items)
         var commonReagents = new[] { "Hydrogen", "Nitrogen", "Oxygen", "Carbon", "Iron", "Iodine", "Phosphorus" };
         foreach (var reactant in reaction.Reactants.Keys)
         {
@@ -82,7 +82,7 @@ public static class RobustaChemDatabase
     }
 
     /// <summary>
-    /// Получить прямой рецепт для химиката (что нужно залить, чтобы он получился)
+    /// Get the direct recipe for a chemical (what needs to be dispensed to create it)
     /// </summary>
     public static ReactionPrototype? GetRecipe(string targetReagentId)
     {
@@ -92,21 +92,21 @@ public static class RobustaChemDatabase
         {
             return recipe;
         }
-        return null; // Рецепта не существует (это базовый элемент типа Углерода или Воды)
+        return null; // Recipe does not exist (base element like Carbon or Water)
     }
 
     /// <summary>
-    /// Проверяет, нужен ли нагрев для этого рецепта
+    /// Checks if heating is required for this recipe
     /// </summary>
     public static bool RequiresHeating(ReactionPrototype recipe)
     {
-        // В SS14 базовая комнатная температура ~293.15 Кельвина (20°C)
-        // Если реакция требует больше (например, 300+), значит нужен нагреватель
+        // In SS14, base room temperature is ~293.15 Kelvin (20°C)
+        // If the reaction requires more (e.g., 300+), a heater is needed
         return recipe.MinimumTemperature > 295f; 
     }
 
     /// <summary>
-    /// Ищет похожие ID реагентов в загруженной базе
+    /// Searches for similar reagent IDs in the loaded database
     /// </summary>
     public static List<string> SearchReagents(string query)
     {
@@ -114,7 +114,7 @@ public static class RobustaChemDatabase
         
         return RecipesByProduct.Keys
             .Where(k => k.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .Take(10) // Не спамим слишком сильно, берем первые 10
+            .Take(10) // Limit output to the first 10 matches to avoid spam
             .ToList();
     }
 }

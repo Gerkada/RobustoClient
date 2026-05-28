@@ -40,40 +40,40 @@ public class GunAimOverlay(
         if (mapPos.MapId == MapId.Nullspace)
             return;
 
-        // Отрисовка только в боевом режиме
+        // Only draw in combat mode
         if (!combatModeSystem.IsInCombatMode(playerEntity))
             return;
 
         var mouseScreenPos = input.MouseScreenPosition;
         var mouseWorldPos = eye.PixelToMap(mouseScreenPos);
 
-        // --- ЛОГИКА РАДИУСА БЛИЖНЕГО БОЯ ---
+        // --- MELEE RADIUS LOGIC ---
         if (RobustaConfig.MeleeAimbotEnabled)
         {
-            // Получаем систему рук через EntityManager
+            // Get hands system through EntityManager
             var handsSystem = entManager.System<Content.Shared.Hands.EntitySystems.SharedHandsSystem>();
             
-            // TryGetActiveItem — самый стабильный метод в текущем API. 
-            // Он сам найдет компоненты и вернет сущность в активной руке.
+            // TryGetActiveItem is the most stable method in the current API. 
+            // It will find the components and return the entity in the active hand.
             if (handsSystem.TryGetActiveItem(playerEntity.Value, out var heldItem))
             {
-                // Проверяем, является ли предмет оружием ближнего боя
+                // Check if the item is a melee weapon
                 if (entManager.TryGetComponent<MeleeWeaponComponent>(heldItem, out var melee))
                 {
-                    // Рисуем круг радиуса атаки вокруг игрока (в мировых координатах)
-                    // Используем Cyan, чтобы визуально отличать от радиуса аима пушек
+                    // Draw an attack radius circle around the player (in world coordinates)
+                    // Use Cyan to visually distinguish from the gun aim radius
                     worldHandle.DrawCircle(mapPos.Position, melee.Range, Color.Cyan.WithAlpha(0.15f), false);
                 }
             }
         }
 
-        // --- ЛОГИКА ДАЛЬНЕГО БОЯ ---
+        // --- RANGED LOGIC ---
         if (RobustaConfig.RangedAimbotEnabled && mapPos.MapId == mouseWorldPos.MapId)
         {
             var aimSystem = entManager.System<RobustaAimSystem>();
             var exclude = new HashSet<EntityUid> { playerEntity.Value };
 
-            // Отрисовка круга FOV (с учетом зума камеры)
+            // Draw FOV circle (accounting for camera zoom)
             var centerScreen = mouseScreenPos;
             var edgeScreen = new ScreenCoordinates(mouseScreenPos.Position + new Vector2(RobustaConfig.AimFovPixels, 0), mouseScreenPos.Window);
             var centerWorld = eye.PixelToMap(centerScreen).Position;
@@ -85,7 +85,7 @@ public class GunAimOverlay(
             AimOutput? drawTarget = null;
             bool isLocked = false;
 
-            // 1. ПРОВЕРЯЕМ ЗАХВАТ: Если цель залочена, берем её
+            // 1. CHECK LOCK: If the target is locked, use it
             if (aimSystem.LockedTarget.HasValue && entManager.EntityExists(aimSystem.LockedTarget.Value))
             {
                 var lockedEnt = aimSystem.LockedTarget.Value;
@@ -97,22 +97,22 @@ public class GunAimOverlay(
             }
             else
             {
-                // 2. ПОИСК ЦЕЛИ: Если лока нет, ищем ближайшего моба в FOV
+                // 2. TARGET SEARCH: If there is no lock, search for the closest mob in FOV
                 drawTarget = aimSystem.GetClosestInScreenFov(mouseScreenPos, RobustaConfig.AimFovPixels, exclude);
             }
 
-            // ОТРИСОВКА ВИЗУАЛА
+            // VISUAL DRAWING
             if (drawTarget != null)
             {
                 var targetPos = drawTarget.Value.Position.Position;
                 
-                // Цвет: Зеленый, если цель в локе. Красный, если просто в зоне видимости.
+                // Color: Green if target is locked. Red if just in visibility zone.
                 var targetColor = isLocked ? Color.LimeGreen : Color.Red;
                 
-                // Snapline от мышки до цели
+                // Snapline from mouse to target
                 worldHandle.DrawLine(mouseWorldPos.Position, targetPos, targetColor.WithAlpha(0.5f));
 
-                // Крестик на цели
+                // Crosshair on target
                 worldHandle.DrawCircle(targetPos, 0.2f, targetColor, false);
                 worldHandle.DrawLine(targetPos - new Vector2(0.3f, 0), targetPos + new Vector2(0.3f, 0), targetColor);
                 worldHandle.DrawLine(targetPos - new Vector2(0, 0.3f), targetPos + new Vector2(0, 0.3f), targetColor);

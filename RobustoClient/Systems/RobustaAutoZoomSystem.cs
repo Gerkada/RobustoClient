@@ -13,42 +13,42 @@ public class RobustaAutoZoomSystem : LocalPlayerSystem
     [Dependency] private readonly IPlayerManager _player = default!;
 
     private float _zoom = 1.5f;
-    private bool _isEnabled = true; // По умолчанию зум включен
+    private bool _isEnabled = true; // Zoom enabled by default
 
-    // Метод для переключателя (Toggle)
+    // Toggle method
     public void ToggleZoom()
     {
         _isEnabled = !_isEnabled;
         if (!_isEnabled)
         {
-            RestoreZoom(); // Мягко возвращаем камеру в норму
+            RestoreZoom(); // Softly restore camera to normal
         }
     }
 
     public void UpdateZoom(float zoom)
     {
         _zoom = zoom;
-        _isEnabled = true; // Если задали значение вручную, автоматически включаем
+        _isEnabled = true; // If value is set manually, enable automatically
     }
 
     public override void Update(float frameTime)
     {
         base.Update(frameTime);
 
-        // Если выключено или нет игрока - ничего не делаем
+        // Do nothing if disabled or no player
         if (!_isEnabled || _player.LocalEntity == null)
             return;
 
         if (!TryComp<EyeComponent>(_player.LocalEntity.Value, out var eyeComponent))
             return;
 
-        // ЖЕСТКАЯ БЛОКИРОВКА ЗУМА: каждый кадр проверяем и ставим наше значение,
-        // чтобы изменения ФОВа его не сбрасывали.
+        // HARD ZOOM LOCK: check and set our value every frame
+        // so FOV changes don't reset it.
         var targetVector = new Vector2(_zoom, _zoom);
         if (eyeComponent.Eye.Zoom != targetVector)
         {
             eyeComponent.Eye.Zoom = targetVector;
-            eyeComponent.NetSyncEnabled = false; // Блокируем синхронизацию с сервером
+            eyeComponent.NetSyncEnabled = false; // Block server synchronization
         }
     }
 
@@ -58,7 +58,7 @@ public class RobustaAutoZoomSystem : LocalPlayerSystem
             return;
             
         eyeComponent.NetSyncEnabled = false;
-        // Само значение зума выставится в следующем же кадре в Update
+        // Zoom value will be set in the next Update frame
     }
 
     protected override void OnDetached(LocalPlayerDetachedEvent ev)
@@ -66,7 +66,7 @@ public class RobustaAutoZoomSystem : LocalPlayerSystem
         RestoreZoom(ev.Entity);
     }
 
-    // Вспомогательный метод для сброса зума к настройкам базовой игры
+    // Helper method to reset zoom to base game settings
     private void RestoreZoom(EntityUid? entity = null)
     {
         var target = entity ?? _player.LocalEntity;
@@ -74,8 +74,8 @@ public class RobustaAutoZoomSystem : LocalPlayerSystem
 
         if (TryComp<EyeComponent>(target.Value, out var eyeComponent))
         {
-            eyeComponent.Eye.Zoom = eyeComponent.Zoom; // Сброс до дефолта движка
-            eyeComponent.NetSyncEnabled = true; // Возвращаем контроль серверу
+            eyeComponent.Eye.Zoom = eyeComponent.Zoom; // Reset to engine default
+            eyeComponent.NetSyncEnabled = true; // Return control to server
         }
     }
 }

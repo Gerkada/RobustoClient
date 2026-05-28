@@ -35,13 +35,13 @@ public class DispensePlan
     public string GetPlanSummary()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"--- ТЕХНОЛОГИЧЕСКАЯ КАРТА: {TargetReagent} ({TargetAmount}u) ---");
+        sb.AppendLine($"--- RECIPE CARD: {TargetReagent} ({TargetAmount}u) ---");
         int i = 1;
         foreach (var phase in RawPhases)
         {
             if (phase.Type == PhaseType.Dispense && phase.Ingredients.Count == 0) continue;
             
-            sb.Append($"  [Этап {i++}] {phase.Description}");
+            sb.Append($"  [Phase {i++}] {phase.Description}");
             if (phase.Type == PhaseType.Dispense)
             {
                 sb.Append(": ");
@@ -195,7 +195,7 @@ public static class RobustaRecipeSolver
         var recipe = RobustaChemDatabase.GetRecipe(reagentId);
         if (recipe == null) return true;
 
-        // 1. Сначала обеспечиваем все под-реакции
+        // 1. First, satisfy all sub-reactions
         foreach (var (reactantId, reactantData) in recipe.Reactants)
         {
             if (reactantData.Catalyst) continue;
@@ -210,7 +210,7 @@ public static class RobustaRecipeSolver
             }
         }
 
-        // 2. Группируем ингредиенты из раздатчика
+        // 2. Group dispenser ingredients
         var synthesisPhase = new ChemPhase 
         { 
             Type = PhaseType.Dispense, 
@@ -242,7 +242,7 @@ public static class RobustaRecipeSolver
             });
         }
 
-        // 3. ДОБАВЛЯЕМ ОТДЕЛЬНУЮ ФАЗУ ОЖИДАНИЯ
+        // 3. ADD SEPARATE WAIT PHASE
         plan.RawPhases.Add(new ChemPhase {
             Type = PhaseType.Wait,
             WaitReagents = new List<string> { reagentId },

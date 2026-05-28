@@ -6,18 +6,18 @@ using Robust.Shared.IoC;
 namespace RobustoClient.Systems.AutoChem;
 
 /// <summary>
-/// Консольная команда для запуска нашего авто-химика прямо из игры
+/// Console command for launching the automated chemistry system from the game.
 /// </summary>
 public sealed class AutoChemCommand : IConsoleCommand
 {
-    // Название команды, которую ты будешь писать в консоль
+    // Command name for the console.
     public string Command => "autochem";
-    public string Description => "Управление автоматической варкой химикатов";
-    public string Help => "Использование:\n" +
-                          "  autochem <reagent_id> <amount> - Начать варку\n" +
-                          "  autochem calculate <reagent>   - Расчитать идеальную порцию (до 100u)\n" +
-                          "  autochem search <query>        - Поиск реагента\n" +
-                          "  autochem stop                  - Остановить текущий процесс";
+    public string Description => "Management of automated chemical brewing";
+    public string Help => "Usage:\n" +
+                          "  autochem <reagent_id> <amount> - Start brewing\n" +
+                          "  autochem calculate <reagent>   - Calculate the ideal batch (up to 100u)\n" +
+                          "  autochem search <query>        - Search for a reagent\n" +
+                          "  autochem stop                  - Stop the current process";
 
     public void Execute(IConsoleShell shell, string argStr, string[] args)
     {
@@ -27,7 +27,7 @@ public sealed class AutoChemCommand : IConsoleCommand
         if (args.Length == 1 && args[0] == "stop")
         {
             autoChem.StopJob();
-            shell.WriteLine("[AutoChem] Процесс остановлен.");
+            shell.WriteLine("[AutoChem] Process stopped.");
             return;
         }
 
@@ -37,19 +37,19 @@ public sealed class AutoChemCommand : IConsoleCommand
             float best = RobustaRecipeSolver.CalculateBestBatch(calcReagent, 100f);
             if (best <= 0)
             {
-                shell.WriteError($"[AutoChem] Рецепт '{calcReagent}' не найден.");
+                shell.WriteError($"[AutoChem] Recipe '{calcReagent}' not found.");
                 return;
             }
-            shell.WriteLine($"[AutoChem] Лучшая порция для '{calcReagent}' (без мусора и перелива): {best}u");
-            shell.WriteLine($"Используйте: autochem {calcReagent} {best}");
+            shell.WriteLine($"[AutoChem] Best batch for '{calcReagent}' (no waste or overflow): {best}u");
+            shell.WriteLine($"Use: autochem {calcReagent} {best}");
             return;
         }
 
         if (args.Length == 2 && args[0] == "search")
         {
             var results = RobustaChemDatabase.SearchReagents(args[1]);
-            if (results.Count == 0) shell.WriteError("[AutoChem] Ничего не найдено.");
-            else shell.WriteLine($"[AutoChem] Результаты поиска: {string.Join(", ", results)}");
+            if (results.Count == 0) shell.WriteError("[AutoChem] Nothing found.");
+            else shell.WriteLine($"[AutoChem] Search results: {string.Join(", ", results)}");
             return;
         }
 
@@ -62,7 +62,7 @@ public sealed class AutoChemCommand : IConsoleCommand
         var reagent = args[0];
         if (!int.TryParse(args[1], out var amountInt))
         {
-            shell.WriteError("Количество должно быть числом!");
+            shell.WriteError("Amount must be a number!");
             return;
         }
 
@@ -70,16 +70,16 @@ public sealed class AutoChemCommand : IConsoleCommand
         
         if (plan == null)
         {
-            shell.WriteError($"[AutoChem] Рецепт '{reagent}' не найден!");
+            shell.WriteError($"[AutoChem] Recipe '{reagent}' not found!");
             var suggestions = RobustaChemDatabase.SearchReagents(reagent);
             if (suggestions.Count > 0)
             {
-                shell.WriteLine($"Возможно, вы имели в виду: {string.Join(", ", suggestions)}");
+                shell.WriteLine($"Perhaps you meant: {string.Join(", ", suggestions)}");
             }
             return;
         }
 
         autoChem.StartJob(reagent, FixedPoint2.New(amountInt));
-        shell.WriteLine($"[AutoChem] План принят: {reagent} ({amountInt}u). Ожидаю стакан...");
+        shell.WriteLine($"[AutoChem] Plan accepted: {reagent} ({amountInt}u). Waiting for beaker...");
     }
 }

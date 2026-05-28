@@ -33,7 +33,7 @@ public sealed class RobustaNetworkHands : EntitySystem
 
     public void MakePills(EntityUid chemMaster, uint dosage, uint count, string label)
     {
-        // Убрали ChemMasterMode. Таблетки делаются напрямую из буфера!
+        // Removed ChemMasterMode. Pills are now created directly from the buffer!
         SendBuiMessage(chemMaster, new ChemMasterCreatePillsMessage(dosage, count, label));
     }
 
@@ -41,7 +41,7 @@ public sealed class RobustaNetworkHands : EntitySystem
     {
         if (TryComp<UserInterfaceComponent>(machine, out var uiComp))
         {
-            // Используем ClientOpenInterfaces вместо закрытого Interfaces
+            // Using ClientOpenInterfaces instead of the private Interfaces
             foreach (var key in uiComp.ClientOpenInterfaces.Keys)
             {
                 _bui.ClientSendUiMessage((machine, uiComp), key, message);

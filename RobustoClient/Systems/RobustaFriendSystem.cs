@@ -42,8 +42,8 @@ public class RobustaFriendSystem : EntitySystem
         if (HasComp<RobustaFriendComponent>(ent))
             return true;
             
-        // Передаем 'false' третьим аргументом, чтобы отключить спам ошибок в консоль,
-        // если это NPC или манекен без ActorComponent.
+        // Pass 'false' as the third argument to disable console error spam
+        // if it's an NPC or dummy without ActorComponent.
         Resolve(ent, ref ent.Comp, false);
         
         if (RobustaConfig.FriendsSet.Contains((ent.Comp?.PlayerSession.Name ?? GetUsername(ent)) ?? string.Empty))

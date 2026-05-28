@@ -11,7 +11,6 @@ using Robust.Shared.IoC;
 using Robust.Shared.Maths;
 using Robust.Shared.Map;
 using Content.Shared.Mobs.Components;
-// УДАЛИЛИ: Content.Shared.NukeOps и Content.Shared.Roles.Components
 
 namespace RobustoClient.UI;
 
@@ -26,7 +25,7 @@ public sealed class RobustaRadarControl : Control
     private readonly SharedTransformSystem _transform;
     private readonly Font _font;
 
-    // Настройки радара
+    // Radar settings
     private const float RadarRangeMeters = 30f; 
     private int _frameCounter = 0;
     private const int UpdateInterval = 10; 
@@ -120,13 +119,13 @@ public sealed class RobustaRadarControl : Control
             var targetPos = _transform.GetWorldPosition(uid);
             var name = _entMan.GetComponentOrNull<MetaDataComponent>(uid)?.EntityName ?? "Unknown";
 
-            // 1. Поиск игроков и мобов
+            // 1. Search for players and mobs
             if (_entMan.HasComponent<MobStateComponent>(uid))
             {
                 Color color = Color.LimeGreen;
                 var type = RadarMarkerType.Player;
 
-                // ЭВРИСТИКА ВМЕСТО КОМПОНЕНТОВ: Ищем ключевые слова Синдиката в имени
+                // HEURISTICS INSTEAD OF COMPONENTS: Searching for Syndicate keywords in the name
                 var nameLower = name.ToLowerInvariant();
                 if (nameLower.Contains("syndicate") || nameLower.Contains("operative") || nameLower.Contains("nuke"))
                 {
@@ -138,7 +137,7 @@ public sealed class RobustaRadarControl : Control
                 continue;
             }
 
-            // 2. Поиск предметов
+            // 2. Search for items
             if (RobustaConfig.ItemSearchEnabled && !string.IsNullOrWhiteSpace(RobustaConfig.ItemSearchQuery))
             {
                 if (name.Contains(RobustaConfig.ItemSearchQuery, StringComparison.OrdinalIgnoreCase))

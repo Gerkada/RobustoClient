@@ -4,7 +4,7 @@ using RobustoClient.Systems;
 
 namespace RobustoClient.Patches;
 
-// 1. ПАТЧ НА ОТДАЧУ
+// 1. RECOIL PATCH
 [HarmonyPatch(typeof(CameraRecoilSystem), "KickCamera")]
 public class NoRecoilPatch
 {

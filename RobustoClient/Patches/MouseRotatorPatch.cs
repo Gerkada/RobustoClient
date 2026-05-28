@@ -51,8 +51,8 @@ internal class MouseRotatorPatch
 
                 if (diff.LengthSquared() > 0.001f)
                 {
-                    // 1. ПОВОРОТ
-                    // Работает, если включена ЛИБО наводка, ЛИБО авто-удар (т.к. без поворота удар не пройдет)
+                    // 1. ROTATION
+                    // Works if either aimbot or auto-attack is enabled (as attack won't land without rotation)
                     if (RobustaConfig.MeleeAimbotEnabled || RobustaConfig.MeleeTriggerbotEnabled)
                     {
                         var baseAngle = diff.ToAngle();
@@ -60,8 +60,8 @@ internal class MouseRotatorPatch
                         xformSystem.SetWorldRotation(localPlayer.Value, correctedAngle);
                     }
 
-                    // 2. АВТО-АТАКА (Triggerbot)
-                    // Теперь зависит от СВОЕЙ собственной настройки
+                    // 2. AUTO-ATTACK (Triggerbot)
+                    // Now depends on its own setting
                     if (RobustaConfig.MeleeTriggerbotEnabled)
                     {
                         var handsSystem = entityManager.System<Content.Shared.Hands.EntitySystems.SharedHandsSystem>();
@@ -74,11 +74,11 @@ internal class MouseRotatorPatch
                             {
                                 var targetCoords = new EntityCoordinates(target.Value.Entity, Vector2.Zero);
 
-                                // Логика удара
+                                // Attack logic
                                 Traverse.Create(meleeSystem).Method("ClientLightAttack", 
                                     localPlayer.Value, target.Value.Position, targetCoords, weapon.Value, melee).GetValue();
 
-                                // Визуал
+                                // Visuals
                                 Traverse.Create(meleeSystem).Method("PlayMeleeWeaponAnimation", 
                                     weapon.Value, melee, diff.ToAngle(), target.Value.Entity, false).GetValue();
 
@@ -87,7 +87,7 @@ internal class MouseRotatorPatch
                         }
                     }
                     
-                    // Блокируем стандартный поворот мыши, если хоть что-то из нашего активно
+                    // Block standard mouse rotation if any of our features are active
                     if (RobustaConfig.MeleeAimbotEnabled || RobustaConfig.MeleeTriggerbotEnabled)
                         return false; 
                 }

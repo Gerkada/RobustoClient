@@ -27,7 +27,7 @@ public class RobustaSpinSystem : EntitySystem
             if (!_input.MouseScreenPosition.IsValid)
                 return;
 
-        // Получение локального игрока
+        // Get local player
         var player = _player.LocalSession?.AttachedEntity;
 
         if (player == null || !TryComp<MouseRotatorComponent>(player.Value, out var rotator))
@@ -48,8 +48,8 @@ public class RobustaSpinSystem : EntitySystem
         {
             var xform = Transform(player.Value);
             var coords = _input.MouseScreenPosition;
-            
-            // Конвертация координат мыши
+
+            // Convert mouse coordinates
             var mapPos = _eye.ScreenToMap(coords);
 
             if (mapPos.MapId == MapId.Nullspace)
@@ -77,7 +77,7 @@ public class RobustaSpinSystem : EntitySystem
         if (Math.Abs(diff.Theta) < rotator.AngleTolerance.Theta)
             return;
 
-        // Отправляем пакет на сервер
+        // Send packet to server
         RaisePredictiveEvent(new RequestMouseRotatorRotationEvent
         {
             Rotation = angle

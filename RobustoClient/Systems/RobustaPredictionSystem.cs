@@ -27,7 +27,7 @@ public class RobustaPredictionSystem : EntitySystem
             case RobustaConfig.PingMode.Laggy: return 0.1f;   // ~200ms RTT
             case RobustaConfig.PingMode.Auto:
             default:
-                // Пинг в SS14 — это RTT (туда-обратно). Нам нужно время до сервера.
+                // Ping in SS14 is RTT (round-trip time). We need the one-way time to the server.
                 if (_net.IsClient && _net.Channels.Any())
                 {
                     return _net.Channels.First().Ping / 2000f;
@@ -45,7 +45,7 @@ public class RobustaPredictionSystem : EntitySystem
         Vector2 targetPos = _transform.GetWorldPosition(targetXform);
 
         // ==========================================
-        // ФИКС ДЛЯ ЛЕЖАЧИХ И КРИТОВЫХ ЦЕЛЕЙ
+        // FIX FOR PRONE AND CRITICAL TARGETS
         // ==========================================
         try 
         {
@@ -65,7 +65,7 @@ public class RobustaPredictionSystem : EntitySystem
         } 
 
         // ==========================================
-        // ФИКС ДЛЯ ХИТСКАНА (Лазеров)
+        // FIX FOR HITSCAN (Lasers)
         // ==========================================
         if (projectileSpeed >= 999f)
         {
@@ -73,7 +73,7 @@ public class RobustaPredictionSystem : EntitySystem
         }
 
         // ==========================================
-        // ОСНОВНОЙ ПРЕДИКТ
+        // MAIN PREDICTION
         // ==========================================
         Vector2 targetVel = Vector2.Zero;
         Vector2 shooterBaseVel = Vector2.Zero;
@@ -85,7 +85,7 @@ public class RobustaPredictionSystem : EntitySystem
 
         if (compensateShooterVelocity)
         {
-            // Для ПУЛЬ: снаряд наследует полную скорость игрока (бег + грид)
+            // For BULLETS: projectile inherits full player velocity (run + grid)
             if (TryComp<PhysicsComponent>(shooter, out var shooterPhys))
             {
                 shooterBaseVel = _physics.GetMapLinearVelocity(shooter, shooterPhys);
@@ -93,8 +93,8 @@ public class RobustaPredictionSystem : EntitySystem
         }
         else 
         {
-            // Для БРОСКОВ: предмет наследует ТОЛЬКО скорость грида (станции), 
-            // теряя скорость бега игрока в момент отделения от рук.
+            // For THROWS: item inherits ONLY grid (station) velocity, 
+            // losing player run speed when released from hands.
             if (shooterXform.GridUid.HasValue)
             {
                 shooterBaseVel = _physics.GetMapLinearVelocity(shooterXform.GridUid.Value);
@@ -105,7 +105,7 @@ public class RobustaPredictionSystem : EntitySystem
 
         if (relVel.LengthSquared() < 0.1f)
         {
-            // Добавляем упреждение по пингу даже для "стоячей" цели на случай микро-движений
+            // Add ping lead even for "stationary" targets in case of micro-movements
             float pingT = GetPingSeconds();
             return targetPos + (targetVel * pingT);
         }
@@ -123,7 +123,7 @@ public class RobustaPredictionSystem : EntitySystem
             t = relPos.Length() / projectileSpeed;
         }
 
-        // КОРРЕКЦИЯ ПИНГА: добавляем задержку сети к времени полета
+        // PING CORRECTION: add network delay to flight time
         t += GetPingSeconds();
 
         t = Math.Clamp(t, 0.01f, 1.5f);

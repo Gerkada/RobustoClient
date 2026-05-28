@@ -78,7 +78,7 @@ public class GunUpdatePatch
 
                     var hitscanKeywords = new[] { "hitscan", "beam", "instant", "raycast" };
 
-                    // 1. ДЕТЕКТ ПО КОМПОНЕНТАМ ОРУЖИЯ
+                    // 1. DETECTION VIA WEAPON COMPONENTS
                     foreach (var c in gunComps)
                     {
                         string cName = c.GetType().Name.ToLower();
@@ -90,7 +90,7 @@ public class GunUpdatePatch
                         }
                     }
 
-                    // 2. ДЕТЕКТ ПО ИМЕНИ / ID (Основной метод для клиента)
+                    // 2. DETECTION VIA NAME / ID (Primary method for client)
                     _entMan.TryGetComponent<MetaDataComponent>(gunUid.Value, out var meta);
                     if (!isHitscan && meta != null && meta.EntityPrototype != null)
                     {
@@ -106,7 +106,7 @@ public class GunUpdatePatch
                         }
                     }
 
-                    // 3. ВАЙТЛИСТ (Фоллбек-страховка)
+                    // 3. WHITELIST (Fallback insurance)
                     if (!isHitscan && meta != null && meta.EntityPrototype != null)
                     {
                         var hitscanPrototypes = new HashSet<string> { 
@@ -124,7 +124,7 @@ public class GunUpdatePatch
                         }
                     }
 
-                    // 4. ПОИСК СКОРОСТИ (Для Баллистики)
+                    // 4. VELOCITY SEARCH (For Ballistics)
                     if (!isHitscan)
                     {
                         var potentialNames = new[] { "ProjectileSpeedModified", "ProjectileSpeed", "speed", "_projectileSpeed" };
@@ -143,7 +143,7 @@ public class GunUpdatePatch
 
                     if (bulletSpeed > 150f) isHitscan = true;
 
-                    // ЛОГИРОВАНИЕ
+                    // LOGGING
                     if (isHitscan)
                         Logger.GetSawmill("RobustaAim").Info($"> DETECT: {gunName} | Type: HITSCAN | Src: {detectedInComp}");
                     else

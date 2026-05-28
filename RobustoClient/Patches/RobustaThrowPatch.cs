@@ -70,7 +70,7 @@ public static class RobustaThrowPatch
         var fullMsg = __args[1];   
         if (clientMsg == null || fullMsg == null) return;
 
-        // Запускаем взлом только в момент нажатия (клика)
+        // Start the exploit only at the moment of click (press)
         var stateObj = GetValue(clientMsg, "State");
         if (stateObj == null || stateObj.ToString() != "Down") return;
 

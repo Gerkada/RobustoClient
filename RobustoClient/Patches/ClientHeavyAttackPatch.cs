@@ -6,7 +6,7 @@ using Content.Client.Weapons.Melee;
 using Robust.Client.GameObjects;
 using Robust.Shared.GameObjects;
 using Robust.Shared.IoC;
-using System.Numerics; // Для Vector2.Zero
+using System.Numerics; // For Vector2.Zero
 
 namespace RobustoClient.Patches;
 
@@ -27,14 +27,14 @@ public class ClientHeavyAttackPatch
         _entMan ??= IoCManager.Resolve<IEntityManager>();
         _aim ??= _entMan.System<RobustaAimSystem>();
 
-        // Ищем цель строго в радиусе поражения нашего оружия
+        // Look for target strictly within weapon range
         var output = _aim.GetClosestToEntInRange(user, component.Range, new HashSet<EntityUid> { user });
         
         if (output == null) return;
 
-        // GOD MODE ДЛЯ МИЛИ:
-        // Полностью игнорируем то, куда мы кликнули мышкой (пол, стена и т.д.).
-        // Привязываем тяжелую атаку ровно к центру сущности врага!
+        // MELEE GOD MODE:
+        // Completely ignore where the mouse was clicked (floor, wall, etc.).
+        // Bind the heavy attack exactly to the center of the enemy entity!
         coordinates = new EntityCoordinates(output.Value.Entity, Vector2.Zero);
     }
 }

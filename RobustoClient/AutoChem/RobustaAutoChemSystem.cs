@@ -70,7 +70,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
         
         if (_currentPlan == null) 
         {
-            _sawmill.Error($"[HYPER-DEBUG] ОШИБКА: Рецепт для {reagent} не найден!");
+            _sawmill.Error($"[DEBUG] ERROR: Recipe for {reagent} not found!");
             return; 
         }
 
@@ -88,7 +88,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
         _lastTotalAmountBefore = 0f;
         _lastProductAmountBefore = 0f;
         _lastReagentAmountBefore = 0f;
-        _sawmill.Info("[HYPER-DEBUG] Авто-химик готов.");
+        _sawmill.Info("[DEBUG] Auto-chemist ready.");
     }
 
     public void StopJob()
@@ -97,7 +97,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
         _currentPlan = null;
         _dispenser = null;
         _beaker = null;
-        _sawmill.Info("[AutoChem] Работа остановлена.");
+        _sawmill.Info("[AutoChem] Operation stopped.");
     }
 
     public override void Update(float frameTime)
@@ -115,7 +115,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
         {
             _beaker = _scanner.GetBeakerInHand();
             if (_beaker == null) return;
-            _sawmill.Info($"[DEBUG] Стакан зафиксирован.");
+            _sawmill.Info($"[DEBUG] Beaker detected.");
             LogBeakerContents();
         }
 
@@ -126,7 +126,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
 
                 if (_currentPlan.PhaseQueue.Count == 0)
                 {
-                    _sawmill.Info("[HYPER-DEBUG] План завершен.");
+                    _sawmill.Info("[DEBUG] Plan completed.");
                     CurrentState = AutoChemState.Finish;
                     return;
                 }
@@ -138,7 +138,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
 
                 if (currentVol > capacity + 0.5f)
                 {
-                    _sawmill.Error($"[OVERFLOW] Объем {currentVol:F1}u превышает лимит стакана {capacity}u! ОСТАНОВКА.");
+                    _sawmill.Error($"[OVERFLOW] Volume {currentVol:F1}u exceeds beaker limit {capacity}u! STOPPING.");
                     StopJob();
                     return;
                 }
@@ -148,7 +148,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                     _stabilizationTimer += 0.5f;
                     if (_stabilizationTimer < 2.0f) 
                     {
-                        _sawmill.Info($"[WAIT] Стабилизация раствора... ({_lastTotalAmountBefore:F1}u -> {currentVol:F1}u)");
+                        _sawmill.Info($"[WAIT] Stabilizing solution... ({_lastTotalAmountBefore:F1}u -> {currentVol:F1}u)");
                         _lastTotalAmountBefore = currentVol;
                         return; 
                     }
@@ -158,23 +158,23 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                 _targetTempReached = false;
                 _lastTotalAmountBefore = currentVol;
 
-                // УМНЫЙ ПРОПУСК: Только для фаз ожидания и нагрева
+                // SMART SKIP: Only for wait and heat phases
                 if (nextPhase.Type != PhaseType.Dispense)
                 {
-                    // Если продукт этой фазы уже в стакане
+                    // If product of this phase is already in the beaker
                     if (nextPhase.TargetProduct != null && currentContents.ContainsKey(nextPhase.TargetProduct) && currentContents[nextPhase.TargetProduct] > 0.1f)
                     {
-                        _sawmill.Info($"[SKIP] Фаза '{nextPhase.Description}' пропущена, так как {nextPhase.TargetProduct} уже получен.");
+                        _sawmill.Info($"[SKIP] Phase '{nextPhase.Description}' skipped because {nextPhase.TargetProduct} is already obtained.");
                         _currentPlan.PhaseQueue.Dequeue();
                         return; 
                     }
 
-                    // Проверка на наличие продуктов из БУДУЩИХ фаз (глобальный пропуск для Wait/Heat)
+                    // Check for products from FUTURE phases (global skip for Wait/Heat)
                     foreach (var futurePhase in _currentPlan.PhaseQueue.Skip(1))
                     {
                         if (futurePhase.TargetProduct != null && currentContents.ContainsKey(futurePhase.TargetProduct) && currentContents[futurePhase.TargetProduct] > 0.1f)
                         {
-                            _sawmill.Info($"[SKIP] Фаза '{nextPhase.Description}' пропущена, так как обнаружен продукт будущей фазы: {futurePhase.TargetProduct}");
+                            _sawmill.Info($"[SKIP] Phase '{nextPhase.Description}' skipped because a product of a future phase was detected: {futurePhase.TargetProduct}");
                             _currentPlan.PhaseQueue.Dequeue();
                             return;
                         }
@@ -203,7 +203,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
 
                     if (_dispenseQueue.Count == 0 && nextPhase.Ingredients.Count > 0)
                     {
-                        _sawmill.Error("[ABORT] Нет места!");
+                        _sawmill.Error("[ABORT] No space!");
                         _currentPlan.PhaseQueue.Dequeue();
                         return;
                     }
@@ -231,7 +231,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                 
                 if (_dispenser == null) 
                 { 
-                    _sawmill.Warning($"[WAIT] Реагент {firstR} не найден! Налейте вручную {firstAmt}u.");
+                    _sawmill.Warning($"[WAIT] Reagent {firstR} not found! Please add {firstAmt}u manually.");
                     _lastTotalAmountBefore = _scanner.GetFullBreakdown(_beaker!.Value).Values.Sum();
                     CurrentState = AutoChemState.WaitManual; 
                     return; 
@@ -242,12 +242,12 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                     _stabilizationTimer += 0.5f;
                     if (_stabilizationTimer >= 2.0f)
                     {
-                        _sawmill.Info($"[INFO] Вставьте стакан в {MetaData(_dispenser.Value).EntityName} для {firstR}...");
+                        _sawmill.Info($"[INFO] Insert beaker into {MetaData(_dispenser.Value).EntityName} for {firstR}...");
                         _stabilizationTimer = 0f;
                     }
                     return; 
                 }
-                _sawmill.Info($"[DEBUG] Раздатчик готов. Начинаю налив {firstR}.");
+                _sawmill.Info($"[DEBUG] Dispenser ready. Starting to dispense {firstR}.");
                 CurrentState = AutoChemState.Dispensing;
                 _stabilizationTimer = 0f;
                 break;
@@ -295,7 +295,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                             int pouredInt = (int)Math.Round(delta);
                             if (pouredInt < 1) pouredInt = 1; 
 
-                            _sawmill.Info($"[VERIFY] {_lastReagentAdded}: залито {pouredInt}u (измерено {delta:F1}u).");
+                            _sawmill.Info($"[VERIFY] {_lastReagentAdded}: dispensed {pouredInt}u (measured {delta:F1}u).");
                             _waitingForDispenseConfirm = false;
                             
                             var list = _dispenseQueue.ToList();
@@ -327,7 +327,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
 
                     if (_lastActiveDose != dose)
                     {
-                        _sawmill.Info($"[SYNC] Установка дозы {dose}...");
+                        _sawmill.Info($"[SYNC] Setting dose {dose}...");
                         _networkHands.SendBuiMessage(_dispenser.Value, new ReagentDispenserSetDispenseAmountMessage(dose));
                         _lastActiveDose = dose;
                         return;
@@ -341,7 +341,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                     _lastProductAmountBefore = (_targetProduct != null && snapBefore.TryGetValue(_targetProduct, out var pOld)) ? pOld : 0f;
                     _waitingForDispenseConfirm = true;
 
-                    _sawmill.Info($"[ACTION] Налив {reagentId} (попытка {dose}u). Осталось в плане: {remaining}u");
+                    _sawmill.Info($"[ACTION] Dispensing {reagentId} (attempting {dose}u). Remaining in plan: {remaining}u");
                     _networkHands.SendBuiMessage(_dispenser.Value, new ReagentDispenserDispenseReagentMessage(jugLoc.Value));
                 }
                 else
@@ -373,7 +373,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
 
                 if (_scanner.GetReagentAmount(_beaker.Value, mR) >= mN || added >= (mN - 0.1f)) 
                 { 
-                    _sawmill.Info($"[VERIFY] Ручной налив {mR} подтвержден.");
+                    _sawmill.Info($"[VERIFY] Manual dispensing of {mR} confirmed.");
                     _dispenseQueue.Dequeue(); 
                     _lastTotalAmountBefore = curV; 
                     
@@ -397,10 +397,10 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                 bool allDone = true;
                 foreach (var r in wPhase.WaitReagents)
                 {
-                    // УМНАЯ ПРОВЕРКА: Если самого реагента нет, проверим не появился ли его продукт
+                    // SMART CHECK: If the reagent itself is missing, check if its product has appeared
                     if (!contents.ContainsKey(r) || contents[r] < 0.1f)
                     {
-                        // Проверяем все БУДУЩИЕ фазы на наличие их результатов (целевых продуктов)
+                        // Check all FUTURE phases for their results (target products)
                         bool foundInFuture = false;
                         foreach (var futurePhase in _currentPlan.PhaseQueue.Skip(1))
                         {
@@ -421,7 +421,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
 
                 if (allDone)
                 {
-                    _sawmill.Info($"[SUCCESS] Реагенты получены или уже переработаны.");
+                    _sawmill.Info($"[SUCCESS] Reagents obtained or already processed.");
                     _currentPlan.PhaseQueue.Dequeue();
                     CurrentState = AutoChemState.CheckNextPhase;
                     _stabilizationTimer = 0f;
@@ -432,7 +432,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                     _stabilizationTimer += 0.5f;
                     if (_stabilizationTimer >= 2.0f)
                     {
-                        _sawmill.Info($"[WAIT] Ожидание реакции {string.Join(", ", wPhase.WaitReagents)}... (Объем: {contents.Values.Sum():F1}u)");
+                        _sawmill.Info($"[WAIT] Waiting for reaction {string.Join(", ", wPhase.WaitReagents)}... (Volume: {contents.Values.Sum():F1}u)");
                         _stabilizationTimer = 0f;
                     }
                 }
@@ -456,7 +456,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                 {
                     if (!_targetTempReached)
                     {
-                        _sawmill.Info($">>> {hPhase.TargetTemperature}K ДОСТИГНУТА! СНИМАЙ! <<<");
+                        _sawmill.Info($">>> {hPhase.TargetTemperature}K REACHED! REMOVE BEAKER! <<<");
                         _targetTempReached = true;
                     }
                 }
@@ -464,7 +464,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                 var heaterNow = _scanner.FindMachine("heater");
                 if (heaterNow == null || !_scanner.IsBeakerInsideMachine(heaterNow.Value, _beaker.Value))
                 {
-                    _sawmill.Info("[DEBUG] Стакан снят с плитки.");
+                    _sawmill.Info("[DEBUG] Beaker removed from heater.");
                     if (_targetTempReached)
                     {
                         _currentPlan.PhaseQueue.Dequeue();
@@ -472,7 +472,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                     }
                     else
                     {
-                        _sawmill.Warning("[WARN] Стакан снят раньше времени! Возврат к ожиданию плитки.");
+                        _sawmill.Warning("[WARN] Beaker removed prematurely! Returning to heater wait.");
                         CurrentState = AutoChemState.WaitHeater;
                     }
                 }
@@ -483,7 +483,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
                 {
                     _examineSyncTimer = 0f;
                     LogBeakerContents();
-                    _sawmill.Info("[AutoChem] Готово!");
+                    _sawmill.Info("[AutoChem] Done!");
                     CurrentState = AutoChemState.Idle;
                 }
                 break;
@@ -496,11 +496,11 @@ public sealed class RobustaAutoChemSystem : EntitySystem
         var contents = _scanner.GetFullBreakdown(_beaker.Value);
         if (contents.Count == 0)
         {
-            _sawmill.Info("[CONTENT] Стакан пуст.");
+            _sawmill.Info("[CONTENT] Beaker is empty.");
             return;
         }
         var list = string.Join(", ", contents.Select(kv => $"{kv.Key}: {kv.Value:F1}u"));
-        _sawmill.Info($"[CONTENT] В стакане: {list}");
+        _sawmill.Info($"[CONTENT] In beaker: {list}");
     }
 
     public string GetStatusInfo()

@@ -68,7 +68,7 @@ public sealed class RobustaWorldScanner : EntitySystem
         var name = meta.EntityName.ToLower();
 
         return proto.Contains("beaker") || proto.Contains("jug") || proto.Contains("vial") || 
-               name.Contains("мензурк") || name.Contains("стакан") || name.Contains("колб") || name.Contains("beaker");
+               name.Contains("beaker") || name.Contains("glass") || name.Contains("flask") || name.Contains("vial");
     }
 
     public EntityUid? FindMachine(string keyword)
@@ -145,14 +145,13 @@ public sealed class RobustaWorldScanner : EntitySystem
         if (localPlayer == null) return null;
 
         var playerPos = _transform.GetMapCoordinates(localPlayer.Value);
-        // Увеличили радиус до 15, так как хим-лабы бывают большими
+        // Increased radius to 15, as chem labs can be large
         var entities = _lookup.GetEntitiesInRange(playerPos, 15f, LookupFlags.Uncontained);
 
         foreach (var ent in entities)
         {
             if (FindJugLocation(ent, reagentId) != null) 
             {
-                // Logger.GetSawmill("autochem").Debug($"[SCANNER] Найден аппарат {ent} для реагента {reagentId}");
                 return ent;
             }
         }
@@ -237,7 +236,7 @@ public sealed class RobustaWorldScanner : EntitySystem
         return totalAmount;
     }
 
-    // --- ГИПЕР-ДЕБАГГЕР: Получить полный список всех реагентов ---
+    // --- DEBUG: Get a full breakdown of all reagents ---
     public Dictionary<string, float> GetFullBreakdown(EntityUid beakerUid)
     {
         var result = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);

@@ -12,13 +12,13 @@ public sealed class RobustaEspSystem : EntitySystem
     {
         base.Initialize();
         
-        // Добавляем наш ESP в менеджер отрисовки игры
+        // Add our ESP to the game's overlay manager
         if (!_overlayManager.HasOverlay<RobustaEspOverlay>())
         {
             _overlayManager.AddOverlay(new RobustaEspOverlay());
         }
 
-        // ДОБАВЛЯЕМ ПОИСКОВИК ПРЕДМЕТОВ
+        // Add item searcher
         if (!_overlayManager.HasOverlay<RobustaItemSearchOverlay>())
             _overlayManager.AddOverlay(new RobustaItemSearchOverlay());
     }

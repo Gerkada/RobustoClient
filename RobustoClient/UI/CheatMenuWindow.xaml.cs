@@ -84,7 +84,7 @@ public sealed partial class CheatMenuWindow : RobustaWindow
 
     private void UpdatePingButtons()
     {
-        // Удаляем все возможные цветовые классы перед добавлением нужного
+        // Remove all possible color classes before adding the required one
         string[] colors = { "ButtonColorGreen", "ButtonColorRed" };
         foreach (var color in colors)
         {

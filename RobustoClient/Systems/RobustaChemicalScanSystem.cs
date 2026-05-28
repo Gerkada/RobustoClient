@@ -13,8 +13,8 @@ using Content.Client.Examine;
 
 namespace RobustoClient.Systems;
 
-// Мы больше не используем LocalPlayerAddCompSystem для Shared-компонента, 
-// чтобы избежать конфликтов синхронизации (мерцания).
+// We no longer use LocalPlayerAddCompSystem for the Shared-component
+// to avoid synchronization conflicts (flickering).
 public sealed class RobustaChemicalScanSystem : EntitySystem
 {
     [Dependency] private readonly IEntityManager _entMan = default!;
@@ -24,20 +24,20 @@ public sealed class RobustaChemicalScanSystem : EntitySystem
     {
         base.Initialize();
         
-        // 1. Разрешаем сканирование растворов на клиенте всегда
+        // 1. Always allow solution scanning on client
         SubscribeLocalEvent<SolutionScanEvent>(OnSolutionScan);
         
-        // 2. Добавляем кнопку анализа (клиентский верб)
+        // 2. Add analysis button (client verb)
         SubscribeLocalEvent<GetVerbsEvent<ExamineVerb>>(OnGetExamineVerbs);
 
-        // 3. ПЕРЕХВАТ СООБЩЕНИЙ СЕРВЕРА
-        // Чтобы сервер не затирал наше окно осмотра "пустыми" данными
+        // 3. INTERCEPT SERVER MESSAGES
+        // To prevent server from overwriting our examine window with "empty" data
         SubscribeNetworkEvent<ExamineSystemMessages.ExamineInfoResponseMessage>(OnExamineInfoResponse);
     }
 
     private void OnSolutionScan(SolutionScanEvent args)
     {
-        args.CanScan = true; // Чит: мы всегда можем сканировать
+        args.CanScan = true; // Always allow scanning
     }
 
     private void OnExamineInfoResponse(ExamineSystemMessages.ExamineInfoResponseMessage ev)
@@ -46,7 +46,7 @@ public sealed class RobustaChemicalScanSystem : EntitySystem
         if (!_entMan.TryGetComponent<ExaminableSolutionComponent>(uid, out var component))
             return;
 
-        // Если сервер прислал инфу об объекте с химией, принудительно вшиваем туда данные о растворе
+        // If server sent info about an object with chemistry, force injection of solution data
         var solutionSystem = _entMan.System<SharedSolutionContainerSystem>();
         if (solutionSystem.TryGetSolution(uid, component.Solution, out _, out var solution))
         {
@@ -96,7 +96,7 @@ public sealed class RobustaChemicalScanSystem : EntitySystem
                     _entMan.System<ExamineSystem>().SendExamineTooltip(args.User, args.Target, finalMsg, false, false);
                 }
             },
-            Text = "Хим-анализ (Robusta)",
+            Text = "Chem-analysis (Robusta)",
             Category = VerbCategory.Examine,
             Icon = new SpriteSpecifier.Texture(new("/Textures/Interface/VerbIcons/drink.svg.192dpi.png")),
             ClientExclusive = true,

@@ -19,7 +19,7 @@ public class ClientLightAttackPatch
     [HarmonyPrefix]
     private static void Prefix(
         EntityUid attacker, 
-        ref MapCoordinates mousePos, // ФИКС: Перехватываем позицию мыши!
+        ref MapCoordinates mousePos, // Intercept mouse position
         ref EntityCoordinates coordinates, 
         MeleeWeaponComponent meleeComponent)
     {
@@ -28,15 +28,15 @@ public class ClientLightAttackPatch
         _entMan ??= IoCManager.Resolve<IEntityManager>();
         _aim ??= _entMan.System<RobustaAimSystem>();
 
-        // Ищем цель в радиусе поражения
+        // Search for target in range
         var output = _aim.GetClosestToEntInRange(attacker, meleeComponent.Range, new HashSet<EntityUid> { attacker });
         
         if (output == null) return;
 
-        // 1. Подменяем глобальную позицию мыши на идеальные координаты врага.
+        // 1. Replace global mouse position with ideal enemy coordinates.
         mousePos = output.Value.Position;
 
-        // 2. Привязываем координаты самой атаки к сущности врага
+        // 2. Bind the attack coordinates to the enemy entity
         coordinates = new EntityCoordinates(output.Value.Entity, Vector2.Zero);
     }
 }

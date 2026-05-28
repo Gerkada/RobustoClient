@@ -54,7 +54,7 @@ public sealed class RobustaEspOverlay : Overlay
         var syndiDetector = _entMan.System<RobustaSyndicateDetectorSystem>();
 
         // ==========================================
-        // БЛОК 1: ЖИВЫЕ ИГРОКИ
+        // BLOCK 1: ALIVE PLAYERS
         // ==========================================
         var query = _entMan.EntityQueryEnumerator<MobStateComponent, TransformComponent, MetaDataComponent>();
         
@@ -66,7 +66,7 @@ public sealed class RobustaEspOverlay : Overlay
             var screenPos = args.ViewportControl?.WorldToScreen(worldPos);
             if (screenPos == null) continue;
 
-            // --- ЖОБ И ИМЯ ---
+            // --- JOB AND NAME ---
             string jobTitle = "";
             if (_invSystem.TryGetSlotEntity(uid, "id", out var slotEnt) && slotEnt.HasValue)
             {
@@ -78,14 +78,14 @@ public sealed class RobustaEspOverlay : Overlay
                     jobTitle = idCard.LocalizedJobTitle ?? "";
             }
 
-            // --- УНИФИЦИРОВАННАЯ ОТРИСОВКА ---
+            // --- UNIFIED RENDERING ---
             var basePos = screenPos.Value;
             float leftX = basePos.X - 40;
             float rightX = basePos.X + 40;
             float topY = basePos.Y - 45;
             float bottomY = basePos.Y + 10;
             
-            // 1. Имя и Должность (Сверху вниз от головы)
+            // 1. Name and Job (Top to bottom from head)
             var nameColor = Color.White;
             if (jobTitle.Contains("Security") || jobTitle.Contains("Officer") || jobTitle.Contains("Warden") || jobTitle.Contains("Captain"))
                 nameColor = Color.FromHex("#7070ff");
@@ -104,7 +104,7 @@ public sealed class RobustaEspOverlay : Overlay
                 topY -= 12;
             }
 
-            // 2. Предмет в руках (Снизу)
+            // 2. Item in hands (Bottom)
             if (_entMan.TryGetComponent<HandsComponent>(uid, out var hands))
             {
                 var heldItems = new List<string>();
@@ -124,7 +124,7 @@ public sealed class RobustaEspOverlay : Overlay
                 }
             }
 
-            // 3. Статус и Импланты (Сбоку справа)
+            // 3. Status and Implants (Right side)
             var syndiStatus = syndiDetector.CheckPlayerStatus(uid);
             float sideY = basePos.Y - 30;
 
@@ -153,7 +153,7 @@ public sealed class RobustaEspOverlay : Overlay
         }
 
         // ==========================================
-        // БЛОК 2: ПЕДАЛИ И ПРИЗРАКИ
+        // BLOCK 2: ADMINS AND GHOSTS
         // ==========================================
         var ghostQuery = _entMan.EntityQueryEnumerator<GhostComponent, TransformComponent, MetaDataComponent>();
         while (ghostQuery.MoveNext(out var uid, out var ghost, out var xform, out var meta))

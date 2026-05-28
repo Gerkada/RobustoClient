@@ -12,13 +12,13 @@ public static class RobustaMapOpener
         var entMan = IoCManager.Resolve<IEntityManager>();
         var playerMan = IoCManager.Resolve<IPlayerManager>();
         
-        // Получаем позицию игрока
+        // Get player position
         var player = playerMan.LocalSession?.AttachedEntity;
         
         if (player == null || !player.Value.IsValid())
             return;
 
-        // Получаем компонент трансформации, чтобы узнать, на каком гриде (станции) мы стоим
+        // Get transform component to determine which grid (station) we are on
         if (!entMan.TryGetComponent(player.Value, out TransformComponent? xform))
             return;
 
@@ -30,11 +30,11 @@ public static class RobustaMapOpener
         if (entMan.TryGetComponent(grid.Value, out MetaDataComponent? meta))
             stationName = meta.EntityName;
 
-        // Создаем окно карты (при каждом клике новое, чтобы избежать багов с закрытием)
+        // Create map window (new one on each click to avoid closing bugs)
         var window = new StationMapWindow();
-        window.Title = "Robusta GPS"; // Можешь назвать как угодно
+        window.Title = "Robusta GPS"; // Title can be anything
 
-        // Передаем карте название станции, сам грид и нашего персонажа для центровки
+        // Pass station name, grid, and character to the map for centering
         window.Set(stationName, grid.Value, player.Value);
         window.OpenCentered();
     }

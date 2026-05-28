@@ -14,7 +14,7 @@ public sealed class RobustaVisualsSystem : EntitySystem
     [Dependency] private readonly ILightManager _lightManager = default!;
 
     private int _updateCounter = 0;
-    private const int UpdateInterval = 15; // Обновляем не каждый кадр, чтобы не жрать FPS
+    private const int UpdateInterval = 15; // Update not every frame to save FPS
 
     public override void Update(float frameTime)
     {
@@ -24,7 +24,7 @@ public sealed class RobustaVisualsSystem : EntitySystem
 
         _updateCounter = 0;
 
-        // В новых версиях SS14 сущность игрока берется через LocalSession
+        // In newer SS14 versions, the player entity is retrieved via LocalSession
         var localEntity = _playerManager.LocalSession?.AttachedEntity;
         if (localEntity == null)
             return;
@@ -39,12 +39,12 @@ public sealed class RobustaVisualsSystem : EntitySystem
     {
         if (RobustaConfig.FullbrightEnabled)
         {
-            // Отключаем глобальное освещение и тени
+            // Disable global lighting and shadows
             _lightManager.Enabled = false;
             _lightManager.DrawLighting = false;
             _lightManager.DrawShadows = false; 
             
-            // Отключаем расчет света для камеры конкретного игрока
+            // Disable light calculation for the specific player camera
             if (eyeComponent.Eye != null)
             {
                 eyeComponent.Eye.DrawLight = false;
@@ -52,7 +52,7 @@ public sealed class RobustaVisualsSystem : EntitySystem
         }
         else
         {
-            // Возвращаем ванильные настройки
+            // Restore vanilla settings
             _lightManager.Enabled = true;
             _lightManager.DrawLighting = true;
             _lightManager.DrawShadows = true;

@@ -30,30 +30,30 @@ public static class RobustaConfig
 
     public static bool EspEnabled = false;
 
-    public static bool UsePrediction = false; // Включает/выключает упреждение
+    public static bool UsePrediction = false; // Toggles prediction
 
     public static bool ItemSearchEnabled = false;
     public static string ItemSearchQuery = "";
 
-    // Радиус (FOV) в котором аимбот ищет цель (в метрах/тайлах от курсора)
+    // Radius (FOV) where aimbot searches for target (in meters/tiles from cursor)
     public static float AimRadius = 5f; 
 
-    // Максимальная дистанция, на которой Target Lock продолжает держать цель (чтобы лок сбрасывался, если цель ушла за экран)
+    // Maximum distance at which Target Lock continues to hold the target (so that lock resets if target goes off-screen)
     public static float MaxLockDistance = 15f;
 
     public static Keyboard.Key TargetLockKey = Keyboard.Key.Space;
 
     public static bool ThrowAimbotEnabled = true;
 
-    public static float AimFovPixels { get; set; } = 100f; // Радиус захвата аимбота в пикселях (Screen FOV)
+    public static float AimFovPixels { get; set; } = 100f; // Aimbot capture radius in pixels (Screen FOV)
     
-    // Средняя скорость полета брошенного предмета (нужно для предикта)
+    // Average speed of a thrown item (needed for prediction)
     public static float DefaultThrowSpeed = 11f;
 
-    // Дефолтная скорость пули для предикта (40.0 - стандарт для большинства огнестрела в актуальном билде)
+    // Default bullet speed for prediction (40.0 is standard for most firearms in current build)
     public static float DefaultProjectileSpeed = 40f;
 
-    // Компенсация пинга
+    // Ping compensation
     public enum PingMode { Local, Stable, Laggy, Auto }
     public static PingMode CurrentPingMode = PingMode.Auto;
     public static int ManualPingMs = 0; 
@@ -62,6 +62,4 @@ public static class RobustaConfig
 
 
     public static HashSet<string> FriendsSet = [];
-
-    //public static bool LogPlayers = true;
 }
