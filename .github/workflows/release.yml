@@ -1,0 +1,34 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*' 
+  workflow_dispatch: 
+
+jobs:
+  build:
+    name: Build Release
+    runs-on: ubuntu-latest 
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive 
+
+    - name: Setup .NET 9.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Build and Publish
+      run: dotnet publish RobustoClient.sln -c Release -o ./release_output
+
+    - name: Create Release and Upload Artifact
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ./release_output/RobustoClient.dll 
+        generate_release_notes: true 
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
