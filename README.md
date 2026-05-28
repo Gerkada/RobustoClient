@@ -1,5 +1,9 @@
 # RobustoClient
 
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/Gerkada/RobustoClient?style=flat-square)
+![.NET](https://img.shields.io/badge/.NET-10.0-blue?style=flat-square)
+![License](https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square)
+
 Based on the original Arabica client by noverd. Massive thanks for the foundational framework.
 
 RobustoClient is a heavily modified, advanced open-source cheat client for Space Station 14. It features a completely rewritten architecture for critical systems, including a flawless mathematical AutoChem solver, precise combat prediction, and advanced entity detection.
@@ -13,7 +17,7 @@ To run this, you need [MarseyLoader](https://github.com/ValidHunters/Marseyloade
 ## Installation
 1. Install the latest version of [MarseyLoader for your operating system](https://github.com/ValidHunters/Marseyloader/releases).
 2. Go to the [RobustoClient release page](https://github.com/Gerkada/RobustoClient/releases).
-3. Download the latest version of RobustoClient (.dll).
+3. Download the latest version of RobustoClient (`.dll`).
 4. Place the file in the `Marsey/Mods` folder in the MarseyLoader directory.
 5. Launch MarseyLoader, go to the *Plugins* section, and activate RobustoClient.
 6. Enjoy!
@@ -23,17 +27,17 @@ If you want to build the client from source for development purposes:
 
 1. Clone the repository:
 ```bash
-    git clone --recurse-submodules -j4 [https://github.com/Gerkada/RobustoClient.git](https://github.com/Gerkada/RobustoClient.git)
+git clone --recurse-submodules -j4 [https://github.com/Gerkada/RobustoClient.git](https://github.com/Gerkada/RobustoClient.git)
 ```
 2. Enter the directory:
 ```bash
-    cd RobustoClient
+cd RobustoClient
 ```
-3. Build the project:
+3. Build the project in Release mode:
 ```bash
-    dotnet build
+dotnet build RobustoClient/RobustoClient.csproj -c Release
 ```
-4. After building, your compiled version will be located at `RobustoClient/bin/Debug/net10.0/RobustoClient.dll`. Copy it to the MarseyLoader mods folder.
+4. After building, your compiled version will be located at `RobustoClient/bin/Release/net10.0/RobustoClient.dll`. Copy it to the MarseyLoader mods folder.
 
 ## Key Features
 
@@ -58,4 +62,4 @@ If you want to build the client from source for development purposes:
 I welcome any contributions to the client. If you have ideas for improvements, new features, or find a bug, please open a ticket in the Issues section on GitHub.
 
 ## License
-This project is licensed under the GPL-3.0 license.
+This project is licensed under the [GPL-3.0 License](LICENSE).
