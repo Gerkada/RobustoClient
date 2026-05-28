@@ -33,7 +33,7 @@ If you want to build the client from source for development purposes:
 ```bash
     dotnet build
 ```
-4. After building, your compiled version will be located at `RobustoClient/bin/Debug/net9.0/RobustoClient.dll`. Copy it to the MarseyLoader mods folder.
+4. After building, your compiled version will be located at `RobustoClient/bin/Debug/net10.0/RobustoClient.dll`. Copy it to the MarseyLoader mods folder.
 
 ## Key Features
 
