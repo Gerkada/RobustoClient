@@ -1,6 +1,6 @@
 # RobustoClient
 
-![GitHub release](https://img.shields.io/github/v/tag/Gerkada/RobustoClient?style=flat-square&label=release)
+![GitHub release](https://flat.badgen.net/github/release/Gerkada/RobustoClient)
 ![.NET](https://img.shields.io/badge/.NET-10.0-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square)
 
