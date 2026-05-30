@@ -2,7 +2,6 @@ using System.Reflection;
 using RobustoClient.Systems.Abstract;
 using Content.Shared.Chemistry;
 using Content.Shared.Chemistry.Components;
-using Content.Shared.Chemistry.Components.SolutionManager;
 using Content.Shared.Chemistry.EntitySystems;
 using Content.Shared.Examine;
 using Content.Shared.Verbs;
@@ -40,15 +39,61 @@ public sealed class RobustaChemicalScanSystem : EntitySystem
         args.CanScan = true; // Always allow scanning
     }
 
+    private static object? GetMemberValue(object obj, string name)
+    {
+        if (obj == null) return null;
+        var type = obj.GetType();
+        var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+        var prop = type.GetProperty(name, flags);
+        if (prop != null) return prop.GetValue(obj);
+        var field = type.GetField(name, flags);
+        if (field != null) return field.GetValue(obj);
+        return null;
+    }
+
     private void OnExamineInfoResponse(ExamineSystemMessages.ExamineInfoResponseMessage ev)
     {
         var uid = _entMan.GetEntity(ev.EntityUid);
-        if (!_entMan.TryGetComponent<ExaminableSolutionComponent>(uid, out var component))
-            return;
+        
+        object? component = null;
+        foreach (var comp in _entMan.GetComponents(uid))
+        {
+            if (comp.GetType().Name == "ExaminableSolutionComponent")
+            {
+                component = comp;
+                break;
+            }
+        }
+        if (component == null) return;
+
+        var solutionName = GetMemberValue(component, "Solution") as string ?? "default";
 
         // If server sent info about an object with chemistry, force injection of solution data
         var solutionSystem = _entMan.System<SharedSolutionContainerSystem>();
-        if (solutionSystem.TryGetSolution(uid, component.Solution, out _, out var solution))
+        
+        // Use reflection to call TryGetSolution to avoid TypeLoadException on SolutionManagerComponent
+        var solutionManagerType = typeof(SharedSolutionContainerSystem).Assembly
+            .GetType("Content.Shared.Chemistry.Components.SolutionManager.SolutionManagerComponent") 
+            ?? typeof(SharedSolutionContainerSystem).Assembly
+            .GetType("Content.Shared.Chemistry.Components.SolutionContainerManagerComponent");
+
+        if (solutionManagerType == null) return;
+
+        var entityType = typeof(Entity<>).MakeGenericType(solutionManagerType);
+        var tryGetSolutionMethod = solutionSystem.GetType().GetMethods()
+            .FirstOrDefault(m => m.Name == "TryGetSolution" && 
+                                 m.GetParameters().Length == 5 &&
+                                 m.GetParameters()[0].ParameterType.IsGenericType &&
+                                 m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(Entity<>));
+
+        if (tryGetSolutionMethod == null) return;
+
+        // Construct Entity<T> via reflection
+        var entityInstance = Activator.CreateInstance(entityType, uid, null);
+        var parameters = new object?[] { entityInstance, solutionName, null, null, false };
+        var result = (bool)tryGetSolutionMethod.Invoke(solutionSystem, parameters)!;
+
+        if (result && parameters[3] is Solution solution)
         {
             var method = solutionSystem.GetType().GetMethod("GetSolutionExamine", 
                 BindingFlags.Instance | BindingFlags.NonPublic);
@@ -67,15 +112,47 @@ public sealed class RobustaChemicalScanSystem : EntitySystem
         if (!args.CanInteract || !args.CanAccess)
             return;
 
-        if (!_entMan.TryGetComponent<ExaminableSolutionComponent>(args.Target, out var component))
-            return;
+        object? component = null;
+        foreach (var comp in _entMan.GetComponents(args.Target))
+        {
+            if (comp.GetType().Name == "ExaminableSolutionComponent")
+            {
+                component = comp;
+                break;
+            }
+        }
+        if (component == null) return;
+
+        var solutionName = GetMemberValue(component, "Solution") as string ?? "default";
 
         var localPlayer = _player.LocalSession?.AttachedEntity;
         if (localPlayer == null || args.User != localPlayer)
             return;
 
         var solutionSystem = _entMan.System<SharedSolutionContainerSystem>();
-        if (!solutionSystem.TryGetSolution(args.Target, component.Solution, out _, out var solution))
+        
+        // Use reflection to call TryGetSolution to avoid TypeLoadException
+        var solutionManagerType = typeof(SharedSolutionContainerSystem).Assembly
+            .GetType("Content.Shared.Chemistry.Components.SolutionManager.SolutionManagerComponent")
+            ?? typeof(SharedSolutionContainerSystem).Assembly
+            .GetType("Content.Shared.Chemistry.Components.SolutionContainerManagerComponent");
+
+        if (solutionManagerType == null) return;
+
+        var entityType = typeof(Entity<>).MakeGenericType(solutionManagerType);
+        var tryGetSolutionMethod = solutionSystem.GetType().GetMethods()
+            .FirstOrDefault(m => m.Name == "TryGetSolution" && 
+                                 m.GetParameters().Length == 5 &&
+                                 m.GetParameters()[0].ParameterType.IsGenericType &&
+                                 m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(Entity<>));
+
+        if (tryGetSolutionMethod == null) return;
+
+        var entityInstance = Activator.CreateInstance(entityType, args.Target, null);
+        var parameters = new object?[] { entityInstance, solutionName, null, null, false };
+        var result = (bool)tryGetSolutionMethod.Invoke(solutionSystem, parameters)!;
+
+        if (!result || parameters[3] is not Solution solution)
             return;
 
         var verb = new ExamineVerb()

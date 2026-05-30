@@ -12,7 +12,6 @@ using Content.Shared.Chemistry.Components;
 using Content.Shared.Chemistry.EntitySystems;
 using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Storage;
-using Content.Shared.Chemistry.Components.SolutionManager;
 using Robust.Shared.Containers;
 
 namespace RobustoClient.Systems.AutoChem;
@@ -162,14 +161,23 @@ public sealed class RobustaWorldScanner : EntitySystem
     {
         var entitiesToScan = new HashSet<EntityUid> { beakerUid };
         
-        if (_entMan.TryGetComponent<SolutionContainerManagerComponent>(beakerUid, out var solManager))
+        foreach (var comp in _entMan.GetComponents(beakerUid))
         {
-            foreach (var solName in solManager.Containers)
+            var compName = comp.GetType().Name;
+            if (compName == "SolutionContainerManagerComponent" || compName == "SolutionManagerComponent")
             {
-                if (_containerSystem.TryGetContainer(beakerUid, $"solution@{solName}", out var container) && 
-                    container is ContainerSlot slot && slot.ContainedEntity.HasValue)
+                var containers = GetMemberValue(comp, "Containers") as IEnumerable;
+                if (containers != null)
                 {
-                    entitiesToScan.Add(slot.ContainedEntity.Value);
+                    foreach (var solObj in containers)
+                    {
+                        if (solObj is string solName && 
+                            _containerSystem.TryGetContainer(beakerUid, $"solution@{solName}", out var container) && 
+                            container is ContainerSlot slot && slot.ContainedEntity.HasValue)
+                        {
+                            entitiesToScan.Add(slot.ContainedEntity.Value);
+                        }
+                    }
                 }
             }
         }
@@ -195,7 +203,7 @@ public sealed class RobustaWorldScanner : EntitySystem
                     if (sol != null) action(sol);
                 }
                 
-                if (name == "SolutionContainerManagerComponent")
+                if (name == "SolutionContainerManagerComponent" || name == "SolutionManagerComponent")
                 {
                     var dict = GetMemberValue(comp, "Solutions") as IDictionary;
                     if (dict != null)
