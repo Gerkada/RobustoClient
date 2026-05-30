@@ -28,13 +28,13 @@ public sealed class RobustaAutoChemOverlay : Overlay
     {
         _autoChem ??= _entMan.System<RobustaAutoChemSystem>();
         
-        if (_autoChem.CurrentState == AutoChemState.Idle) return;
+        if (_autoChem.CurrentState is IdleState) return;
 
         var screenHandle = args.ScreenHandle;
         var viewportSize = args.Viewport.Size;
         
         // --- DATA ---
-        string statusText = $"[AutoChem] {_autoChem.CurrentState}";
+        string statusText = $"[AutoChem] {_autoChem.CurrentState.GetType().Name.Replace("State", "")}";
         string infoText = _autoChem.GetStatusInfo();
         float progress = _autoChem.GetProgress();
 

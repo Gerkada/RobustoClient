@@ -10,490 +10,114 @@ using Content.Shared.FixedPoint;
 
 namespace RobustoClient.Systems.AutoChem;
 
-public enum AutoChemState
-{
-    Idle,
-    CheckNextPhase,
-    WaitDispenser,
-    Dispensing,
-    WaitManual,
-    WaitReaction,
-    WaitHeater,
-    Heating,
-    Finish
-}
-
 public sealed class RobustaAutoChemSystem : EntitySystem
 {
     [Dependency] private readonly RobustaWorldScanner _scanner = default!;
     [Dependency] private readonly RobustaNetworkHands _networkHands = default!;
 
     private ISawmill _sawmill = default!;
-    public AutoChemState CurrentState { get; private set; } = AutoChemState.Idle;
-
-    private DispensePlan? _currentPlan;
     
-    private EntityUid? _dispenser;
-    private EntityUid? _beaker;
+    // Properties for State Pattern access
+    public IEntityManager EntManager => EntityManager;
+    public RobustaWorldScanner Scanner => _scanner;
+    public RobustaNetworkHands NetworkHands => _networkHands;
+    public ISawmill Logger => _sawmill;
+    public IChemState CurrentState { get; private set; } = new IdleState();
 
-    private float _timer = 0f;
-    private float _examineSyncTimer = 0f;
-    private float _stabilizationTimer = 0f;
-    private float? _lastNetworkTemp;
-    private bool _targetTempReached = false;
-    private Queue<(string Reagent, int Amount)> _dispenseQueue = new();
+    public DispensePlan? CurrentPlan { get; set; }
+    public EntityUid? Dispenser { get; set; }
+    public EntityUid? Beaker { get; set; }
 
-    private string? _lastReagentAdded;
-    private string? _targetProduct;
-    private int _lastRequestedDose;
-    private float _lastReagentAmountBefore;
-    private float _lastTotalAmountBefore;
-    private float _lastProductAmountBefore;
-    private ReagentDispenserDispenseAmount? _lastActiveDose;
-    private bool _waitingForDispenseConfirm = false;
+    public float Timer { get; set; } = 0f;
+    public float ExamineSyncTimer { get; set; } = 0f;
+    public float StabilizationTimer { get; set; } = 0f;
+    public float? LastNetworkTemp { get; set; }
+    public bool TargetTempReached { get; set; } = false;
+    public Queue<(string Reagent, int Amount)> DispenseQueue { get; set; } = new();
 
-    private static readonly Regex TempRegex = new(@"(\d+(\.\d+)?)\s*K", RegexOptions.Compiled);
+    public string? LastReagentAdded { get; set; }
+    public string? TargetProduct { get; set; }
+    public int LastRequestedDose { get; set; }
+    public float LastReagentAmountBefore { get; set; }
+    public float LastTotalAmountBefore { get; set; }
+    public float LastProductAmountBefore { get; set; }
+    public ReagentDispenserDispenseAmount? LastActiveDose { get; set; }
+    public bool WaitingForDispenseConfirm { get; set; } = false;
+
+    public static readonly Regex TempRegex = new(@"(\d+(\.\d+)?)\s*K", RegexOptions.Compiled);
 
     public override void Initialize()
     {
         base.Initialize();
-        _sawmill = Logger.GetSawmill("autochem");
+        _sawmill = Robust.Shared.Log.Logger.GetSawmill("autochem");
     }
 
     public void StartJob(string reagent, FixedPoint2 amount)
     {
-        _beaker = _scanner.GetBeakerInHand();
+        Beaker = _scanner.GetBeakerInHand();
         float capacity = 50f;
-        if (_beaker != null) capacity = _scanner.GetBeakerCapacity(_beaker.Value);
+        if (Beaker != null) capacity = _scanner.GetBeakerCapacity(Beaker.Value);
 
-        _currentPlan = RobustaRecipeSolver.CreatePlan(reagent, amount, capacity);
+        CurrentPlan = RobustaRecipeSolver.CreatePlan(reagent, amount, capacity);
         
-        if (_currentPlan == null) 
+        if (CurrentPlan == null) 
         {
             _sawmill.Error($"[DEBUG] ERROR: Recipe for {reagent} not found!");
             return; 
         }
 
-        _sawmill.Info(_currentPlan.GetPlanSummary());
+        _sawmill.Info(CurrentPlan.GetPlanSummary());
 
-        CurrentState = AutoChemState.CheckNextPhase;
-        _timer = 0f;
-        _examineSyncTimer = 0f;
-        _stabilizationTimer = 0f;
-        _lastNetworkTemp = null;
-        _targetTempReached = false;
-        _dispenseQueue.Clear();
-        _waitingForDispenseConfirm = false;
-        _lastActiveDose = null;
-        _lastTotalAmountBefore = 0f;
-        _lastProductAmountBefore = 0f;
-        _lastReagentAmountBefore = 0f;
+        CurrentState = new CheckNextPhaseState();
+        Timer = 0f;
+        ExamineSyncTimer = 0f;
+        StabilizationTimer = 0f;
+        LastNetworkTemp = null;
+        TargetTempReached = false;
+        DispenseQueue.Clear();
+        WaitingForDispenseConfirm = false;
+        LastActiveDose = null;
+        LastTotalAmountBefore = 0f;
+        LastProductAmountBefore = 0f;
+        LastReagentAmountBefore = 0f;
         _sawmill.Info("[DEBUG] Auto-chemist ready.");
     }
 
     public void StopJob()
     {
-        CurrentState = AutoChemState.Idle;
-        _currentPlan = null;
-        _dispenser = null;
-        _beaker = null;
+        CurrentState = new IdleState();
+        CurrentPlan = null;
+        Dispenser = null;
+        Beaker = null;
         _sawmill.Info("[AutoChem] Operation stopped.");
     }
 
     public override void Update(float frameTime)
     {
         base.Update(frameTime);
-        if (CurrentState == AutoChemState.Idle || _currentPlan == null) return;
+        if (CurrentState is IdleState || CurrentPlan == null) return;
 
-        _timer += frameTime;
-        _examineSyncTimer += frameTime;
+        Timer += frameTime;
+        ExamineSyncTimer += frameTime;
 
-        if (_timer < 0.5f) return;
-        _timer = 0f;
+        if (Timer < 0.5f) return;
+        Timer = 0f;
 
-        if (_beaker == null || !EntityManager.EntityExists(_beaker.Value))
+        if (Beaker == null || !EntityManager.EntityExists(Beaker.Value))
         {
-            _beaker = _scanner.GetBeakerInHand();
-            if (_beaker == null) return;
+            Beaker = _scanner.GetBeakerInHand();
+            if (Beaker == null) return;
             _sawmill.Info($"[DEBUG] Beaker detected.");
             LogBeakerContents();
         }
 
-        switch (CurrentState)
-        {
-            case AutoChemState.CheckNextPhase:
-                if (_beaker == null || _currentPlan == null) return;
-
-                if (_currentPlan.PhaseQueue.Count == 0)
-                {
-                    _sawmill.Info("[DEBUG] Plan completed.");
-                    CurrentState = AutoChemState.Finish;
-                    return;
-                }
-
-                var nextPhase = _currentPlan.PhaseQueue.Peek();
-                var currentContents = _scanner.GetFullBreakdown(_beaker.Value);
-                var currentVol = currentContents.Values.Sum();
-                var capacity = _scanner.GetBeakerCapacity(_beaker.Value);
-
-                if (currentVol > capacity + 0.5f)
-                {
-                    _sawmill.Error($"[OVERFLOW] Volume {currentVol:F1}u exceeds beaker limit {capacity}u! STOPPING.");
-                    StopJob();
-                    return;
-                }
-
-                if (Math.Abs(currentVol - _lastTotalAmountBefore) > 0.1f)
-                {
-                    _stabilizationTimer += 0.5f;
-                    if (_stabilizationTimer < 2.0f) 
-                    {
-                        _sawmill.Info($"[WAIT] Stabilizing solution... ({_lastTotalAmountBefore:F1}u -> {currentVol:F1}u)");
-                        _lastTotalAmountBefore = currentVol;
-                        return; 
-                    }
-                }
-
-                _stabilizationTimer = 0f;
-                _targetTempReached = false;
-                _lastTotalAmountBefore = currentVol;
-
-                // SMART SKIP: Only for wait and heat phases
-                if (nextPhase.Type != PhaseType.Dispense)
-                {
-                    // If product of this phase is already in the beaker
-                    if (nextPhase.TargetProduct != null && currentContents.ContainsKey(nextPhase.TargetProduct) && currentContents[nextPhase.TargetProduct] > 0.1f)
-                    {
-                        _sawmill.Info($"[SKIP] Phase '{nextPhase.Description}' skipped because {nextPhase.TargetProduct} is already obtained.");
-                        _currentPlan.PhaseQueue.Dequeue();
-                        return; 
-                    }
-
-                    // Check for products from FUTURE phases (global skip for Wait/Heat)
-                    foreach (var futurePhase in _currentPlan.PhaseQueue.Skip(1))
-                    {
-                        if (futurePhase.TargetProduct != null && currentContents.ContainsKey(futurePhase.TargetProduct) && currentContents[futurePhase.TargetProduct] > 0.1f)
-                        {
-                            _sawmill.Info($"[SKIP] Phase '{nextPhase.Description}' skipped because a product of a future phase was detected: {futurePhase.TargetProduct}");
-                            _currentPlan.PhaseQueue.Dequeue();
-                            return;
-                        }
-                    }
-                }
-
-                if (nextPhase.Type == PhaseType.Dispense)
-                {
-                    if (_dispenseQueue.Count == 0)
-                    {
-                        float totalToDispense = nextPhase.Ingredients.Values.Sum(v => v.Float());
-
-                        if (currentVol + totalToDispense > capacity + 0.1f)
-                        {
-                            float available = capacity - currentVol;
-                            float scale = available / totalToDispense;
-                            foreach (var (rId, amt) in nextPhase.Ingredients)
-                                _dispenseQueue.Enqueue((rId, (int)Math.Floor(amt.Float() * Math.Max(0, scale))));
-                        }
-                        else
-                        {
-                            foreach (var (rId, amt) in nextPhase.Ingredients)
-                                _dispenseQueue.Enqueue((rId, (int)Math.Round(amt.Float())));
-                        }
-                    }
-
-                    if (_dispenseQueue.Count == 0 && nextPhase.Ingredients.Count > 0)
-                    {
-                        _sawmill.Error("[ABORT] No space!");
-                        _currentPlan.PhaseQueue.Dequeue();
-                        return;
-                    }
-
-                    CurrentState = AutoChemState.WaitDispenser;
-                    _sawmill.Info($"[START] {nextPhase.Description}");
-                    _targetProduct = nextPhase.TargetProduct;
-                }
-                else if (nextPhase.Type == PhaseType.Wait)
-                {
-                    CurrentState = AutoChemState.WaitReaction;
-                    _sawmill.Info($"[START] {nextPhase.Description}");
-                }
-                else if (nextPhase.Type == PhaseType.Heat)
-                {
-                    CurrentState = AutoChemState.WaitHeater;
-                    _sawmill.Info($"[START] {nextPhase.Description}");
-                }
-                break;
-
-            case AutoChemState.WaitDispenser:
-                if (_currentPlan == null || _dispenseQueue.Count == 0) { CurrentState = AutoChemState.CheckNextPhase; return; }
-                var (firstR, firstAmt) = _dispenseQueue.Peek();
-                _dispenser = _scanner.FindMachineWithReagent(firstR);
-                
-                if (_dispenser == null) 
-                { 
-                    _sawmill.Warning($"[WAIT] Reagent {firstR} not found! Please add {firstAmt}u manually.");
-                    _lastTotalAmountBefore = _scanner.GetFullBreakdown(_beaker!.Value).Values.Sum();
-                    CurrentState = AutoChemState.WaitManual; 
-                    return; 
-                }
-
-                if (_beaker == null || !_scanner.IsBeakerInsideMachine(_dispenser.Value, _beaker.Value)) 
-                {
-                    _stabilizationTimer += 0.5f;
-                    if (_stabilizationTimer >= 2.0f)
-                    {
-                        _sawmill.Info($"[INFO] Insert beaker into {MetaData(_dispenser.Value).EntityName} for {firstR}...");
-                        _stabilizationTimer = 0f;
-                    }
-                    return; 
-                }
-                _sawmill.Info($"[DEBUG] Dispenser ready. Starting to dispense {firstR}.");
-                CurrentState = AutoChemState.Dispensing;
-                _stabilizationTimer = 0f;
-                break;
-
-            case AutoChemState.Dispensing:
-                if (_beaker == null || _dispenser == null || _currentPlan == null) { CurrentState = AutoChemState.CheckNextPhase; return; }
-                if (_dispenseQueue.Count > 0)
-                {
-                    var (reagentId, remaining) = _dispenseQueue.Peek();
-                    
-                    if (_waitingForDispenseConfirm)
-                    {
-                        var currentSnap = _scanner.GetFullBreakdown(_beaker.Value);
-                        float currentReagentAmt = currentSnap.TryGetValue(_lastReagentAdded!, out var rAmt) ? rAmt : 0f;
-                        float currentProductAmt = (_targetProduct != null && currentSnap.TryGetValue(_targetProduct, out var pAmt)) ? pAmt : 0f;
-                        float snapTotal = currentSnap.Values.Sum();
-
-                        float reagentIncrease = currentReagentAmt - _lastReagentAmountBefore;
-                        float productIncrease = currentProductAmt - _lastProductAmountBefore;
-                        float volumeIncrease = snapTotal - _lastTotalAmountBefore;
-
-                        if (reagentIncrease > 0.05f || productIncrease > 0.05f || volumeIncrease > 0.05f)
-                        {
-                            float delta = reagentIncrease;
-                            if (productIncrease > 0.05f)
-                            {
-                                float yield = 1f;
-                                float reactantRatio = 1f;
-                                if (_targetProduct != null)
-                                {
-                                    var recipe = RobustaChemDatabase.GetRecipe(_targetProduct);
-                                    if (recipe != null)
-                                    {
-                                        if (recipe.Products.TryGetValue(_targetProduct, out var yAmt)) yield = yAmt.Float();
-                                        if (recipe.Reactants.TryGetValue(_lastReagentAdded!, out var rData)) reactantRatio = rData.Amount.Float();
-                                    }
-                                }
-                                delta = reagentIncrease + (productIncrease * (reactantRatio / yield));
-                            }
-                            else if (delta < 0.05f && volumeIncrease > 0.05f)
-                            {
-                                delta = volumeIncrease;
-                            }
-
-                            int pouredInt = (int)Math.Round(delta);
-                            if (pouredInt < 1) pouredInt = 1; 
-
-                            _sawmill.Info($"[VERIFY] {_lastReagentAdded}: dispensed {pouredInt}u (measured {delta:F1}u).");
-                            _waitingForDispenseConfirm = false;
-                            
-                            var list = _dispenseQueue.ToList();
-                            var head = list[0];
-                            int newRemaining = head.Amount - pouredInt;
-                            list.RemoveAt(0);
-                            if (newRemaining > 0) list.Insert(0, (reagentId, newRemaining));
-                            _dispenseQueue = new Queue<(string, int)>(list);
-                            
-                            LogBeakerContents();
-                            return; 
-                        }
-                        return; 
-                    }
-
-                    var jugLoc = _scanner.FindJugLocation(_dispenser.Value, reagentId);
-                    if (jugLoc == null) { _dispenser = null; CurrentState = AutoChemState.WaitDispenser; return; }
-
-                    ReagentDispenserDispenseAmount dose;
-                    if (remaining >= 120) dose = ReagentDispenserDispenseAmount.U120;
-                    else if (remaining >= 60) dose = ReagentDispenserDispenseAmount.U60;
-                    else if (remaining >= 40) dose = ReagentDispenserDispenseAmount.U40;
-                    else if (remaining >= 30) dose = ReagentDispenserDispenseAmount.U30;
-                    else if (remaining >= 20) dose = ReagentDispenserDispenseAmount.U20;
-                    else if (remaining >= 15) dose = ReagentDispenserDispenseAmount.U15;
-                    else if (remaining >= 10) dose = ReagentDispenserDispenseAmount.U10;
-                    else if (remaining >= 5) dose = ReagentDispenserDispenseAmount.U5;
-                    else dose = ReagentDispenserDispenseAmount.U1;
-
-                    if (_lastActiveDose != dose)
-                    {
-                        _sawmill.Info($"[SYNC] Setting dose {dose}...");
-                        _networkHands.SendBuiMessage(_dispenser.Value, new ReagentDispenserSetDispenseAmountMessage(dose));
-                        _lastActiveDose = dose;
-                        return;
-                    }
-
-                    var snapBefore = _scanner.GetFullBreakdown(_beaker.Value);
-                    _lastReagentAdded = reagentId;
-                    _lastRequestedDose = (int)dose; 
-                    _lastReagentAmountBefore = snapBefore.TryGetValue(reagentId, out var rOld) ? rOld : 0f;
-                    _lastTotalAmountBefore = snapBefore.Values.Sum();
-                    _lastProductAmountBefore = (_targetProduct != null && snapBefore.TryGetValue(_targetProduct, out var pOld)) ? pOld : 0f;
-                    _waitingForDispenseConfirm = true;
-
-                    _sawmill.Info($"[ACTION] Dispensing {reagentId} (attempting {dose}u). Remaining in plan: {remaining}u");
-                    _networkHands.SendBuiMessage(_dispenser.Value, new ReagentDispenserDispenseReagentMessage(jugLoc.Value));
-                }
-                else
-                {
-                    _lastActiveDose = null; 
-                    var currentP = _currentPlan.PhaseQueue.Peek();
-                    
-                    bool nextIsHeat = _currentPlan.PhaseQueue.Count > 1 && _currentPlan.PhaseQueue.ElementAt(1).Type == PhaseType.Heat;
-                    if (nextIsHeat || _currentPlan.PhaseQueue.Count == 1)
-                        _networkHands.EjectViaUI(_dispenser.Value);
-
-                    _currentPlan.PhaseQueue.Dequeue(); 
-                    CurrentState = AutoChemState.CheckNextPhase; 
-                }
-                break;
-
-            case AutoChemState.WaitManual:
-                if (_beaker == null || _currentPlan == null) return;
-                if (_dispenseQueue.Count == 0) 
-                { 
-                    _currentPlan.PhaseQueue.Dequeue(); 
-                    CurrentState = AutoChemState.CheckNextPhase; 
-                    return; 
-                }
-                
-                var (mR, mN) = _dispenseQueue.Peek();
-                var curV = _scanner.GetFullBreakdown(_beaker.Value).Values.Sum();
-                float added = curV - _lastTotalAmountBefore;
-
-                if (_scanner.GetReagentAmount(_beaker.Value, mR) >= mN || added >= (mN - 0.1f)) 
-                { 
-                    _sawmill.Info($"[VERIFY] Manual dispensing of {mR} confirmed.");
-                    _dispenseQueue.Dequeue(); 
-                    _lastTotalAmountBefore = curV; 
-                    
-                    if (_dispenseQueue.Count == 0)
-                    {
-                        _currentPlan.PhaseQueue.Dequeue(); 
-                        CurrentState = AutoChemState.CheckNextPhase;
-                    }
-                    else
-                    {
-                        CurrentState = AutoChemState.WaitDispenser; 
-                    }
-                }
-                break;
-
-            case AutoChemState.WaitReaction:
-                if (_beaker == null || _currentPlan == null || _currentPlan.PhaseQueue.Count == 0) return;
-                var wPhase = _currentPlan.PhaseQueue.Peek();
-                var contents = _scanner.GetFullBreakdown(_beaker.Value);
-                
-                bool allDone = true;
-                foreach (var r in wPhase.WaitReagents)
-                {
-                    // SMART CHECK: If the reagent itself is missing, check if its product has appeared
-                    if (!contents.ContainsKey(r) || contents[r] < 0.1f)
-                    {
-                        // Check all FUTURE phases for their results (target products)
-                        bool foundInFuture = false;
-                        foreach (var futurePhase in _currentPlan.PhaseQueue.Skip(1))
-                        {
-                            if (futurePhase.TargetProduct != null && contents.ContainsKey(futurePhase.TargetProduct) && contents[futurePhase.TargetProduct] > 0.1f)
-                            {
-                                foundInFuture = true;
-                                break;
-                            }
-                        }
-
-                        if (!foundInFuture)
-                        {
-                            allDone = false;
-                            break;
-                        }
-                    }
-                }
-
-                if (allDone)
-                {
-                    _sawmill.Info($"[SUCCESS] Reagents obtained or already processed.");
-                    _currentPlan.PhaseQueue.Dequeue();
-                    CurrentState = AutoChemState.CheckNextPhase;
-                    _stabilizationTimer = 0f;
-                    _lastTotalAmountBefore = contents.Values.Sum();
-                }
-                else
-                {
-                    _stabilizationTimer += 0.5f;
-                    if (_stabilizationTimer >= 2.0f)
-                    {
-                        _sawmill.Info($"[WAIT] Waiting for reaction {string.Join(", ", wPhase.WaitReagents)}... (Volume: {contents.Values.Sum():F1}u)");
-                        _stabilizationTimer = 0f;
-                    }
-                }
-                break;
-
-            case AutoChemState.WaitHeater:
-                if (_beaker == null) return;
-                var heater = _scanner.FindMachine("heater");
-                if (heater != null && _scanner.IsBeakerInsideMachine(heater.Value, _beaker.Value)) 
-                {
-                    CurrentState = AutoChemState.Heating;
-                }
-                break;
-
-            case AutoChemState.Heating:
-                if (_beaker == null || _currentPlan == null || _currentPlan.PhaseQueue.Count == 0) return;
-                var hPhase = _currentPlan.PhaseQueue.Peek();
-                var t = _scanner.GetBeakerTemperature(_beaker.Value) ?? _lastNetworkTemp;
-                
-                if (t >= hPhase.TargetTemperature)
-                {
-                    if (!_targetTempReached)
-                    {
-                        _sawmill.Info($">>> {hPhase.TargetTemperature}K REACHED! REMOVE BEAKER! <<<");
-                        _targetTempReached = true;
-                    }
-                }
-
-                var heaterNow = _scanner.FindMachine("heater");
-                if (heaterNow == null || !_scanner.IsBeakerInsideMachine(heaterNow.Value, _beaker.Value))
-                {
-                    _sawmill.Info("[DEBUG] Beaker removed from heater.");
-                    if (_targetTempReached)
-                    {
-                        _currentPlan.PhaseQueue.Dequeue();
-                        CurrentState = AutoChemState.CheckNextPhase;
-                    }
-                    else
-                    {
-                        _sawmill.Warning("[WARN] Beaker removed prematurely! Returning to heater wait.");
-                        CurrentState = AutoChemState.WaitHeater;
-                    }
-                }
-                break;
-
-            case AutoChemState.Finish:
-                if (_examineSyncTimer > 1.0f)
-                {
-                    _examineSyncTimer = 0f;
-                    LogBeakerContents();
-                    _sawmill.Info("[AutoChem] Done!");
-                    CurrentState = AutoChemState.Idle;
-                }
-                break;
-        }
+        CurrentState = CurrentState.Execute(frameTime, this);
     }
 
-    private void LogBeakerContents()
+    public void LogBeakerContents()
     {
-        if (_beaker == null) return;
-        var contents = _scanner.GetFullBreakdown(_beaker.Value);
+        if (Beaker == null) return;
+        var contents = _scanner.GetFullBreakdown(Beaker.Value);
         if (contents.Count == 0)
         {
             _sawmill.Info("[CONTENT] Beaker is empty.");
@@ -505,43 +129,515 @@ public sealed class RobustaAutoChemSystem : EntitySystem
 
     public string GetStatusInfo()
     {
-        if (_currentPlan == null) return "No Plan";
-        switch (CurrentState)
-        {
-            case AutoChemState.CheckNextPhase: return "Stabilizing...";
-            case AutoChemState.WaitDispenser: return "Looking for dispenser...";
-            case AutoChemState.Dispensing: return _dispenseQueue.Count > 0 ? $"Adding {_dispenseQueue.Peek().Reagent}" : "Complete";
-            case AutoChemState.WaitManual:
-                return _dispenseQueue.Count > 0 ? $"MANUAL: {_dispenseQueue.Peek().Reagent} ({_dispenseQueue.Peek().Amount}u)" : "Manual done";
-            case AutoChemState.WaitReaction:
-                if (_currentPlan.PhaseQueue.Count == 0) return "Reaction done";
-                return $"Reacting: {string.Join(", ", _currentPlan.PhaseQueue.Peek().WaitReagents)}";
-            case AutoChemState.WaitHeater: return "Wait for Heater...";
-            case AutoChemState.Heating:
-                if (_currentPlan.PhaseQueue.Count == 0) return "Heating done";
-                var hPhase = _currentPlan.PhaseQueue.Peek();
-                var curT = (_beaker != null) ? (_scanner.GetBeakerTemperature(_beaker.Value) ?? _lastNetworkTemp ?? 0) : 0;
-                return _targetTempReached ? "DONE! Eject beaker!" : $"Heating: {curT:F1}K / {hPhase.TargetTemperature}K";
-            case AutoChemState.Finish: return "ALL DONE! Take beaker.";
-            default: return CurrentState.ToString();
-        }
+        return CurrentState.GetStatusInfo(this);
     }
 
     public float GetProgress()
     {
-        if (_currentPlan == null || _currentPlan.TotalPhases == 0) return 0f;
-        int completed = _currentPlan.TotalPhases - _currentPlan.PhaseQueue.Count;
-        float baseProgress = (float)completed / _currentPlan.TotalPhases;
-        float phaseWeight = 1f / _currentPlan.TotalPhases;
+        return CurrentState.GetProgress(this);
+    }
+}
 
-        if (CurrentState == AutoChemState.Heating && _currentPlan.PhaseQueue.Count > 0)
+// ==========================================
+// STATE IMPLEMENTATIONS
+// ==========================================
+
+public sealed class IdleState : IChemState
+{
+    public IChemState Execute(float frameTime, RobustaAutoChemSystem system) => this;
+    public string GetStatusInfo(RobustaAutoChemSystem system) => "Idle";
+    public float GetProgress(RobustaAutoChemSystem system) => 0f;
+}
+
+public sealed class CheckNextPhaseState : IChemState
+{
+    public IChemState Execute(float frameTime, RobustaAutoChemSystem system)
+    {
+        if (system.Beaker == null || system.CurrentPlan == null) return this;
+
+        if (system.CurrentPlan.PhaseQueue.Count == 0)
         {
-            var phase = _currentPlan.PhaseQueue.Peek();
-            var curT = (_beaker != null) ? (_scanner.GetBeakerTemperature(_beaker.Value) ?? _lastNetworkTemp ?? 293.15f) : 293.15f;
+            system.Logger.Info("[DEBUG] Plan completed.");
+            return new FinishState();
+        }
+
+        var nextPhase = system.CurrentPlan.PhaseQueue.Peek();
+        var currentContents = system.Scanner.GetFullBreakdown(system.Beaker.Value);
+        var currentVol = currentContents.Values.Sum();
+        var capacity = system.Scanner.GetBeakerCapacity(system.Beaker.Value);
+
+        if (currentVol > capacity + 0.5f)
+        {
+            system.Logger.Error($"[OVERFLOW] Volume {currentVol:F1}u exceeds beaker limit {capacity}u! STOPPING.");
+            system.StopJob();
+            return new IdleState();
+        }
+
+        if (Math.Abs(currentVol - system.LastTotalAmountBefore) > 0.1f)
+        {
+            system.StabilizationTimer += 0.5f;
+            if (system.StabilizationTimer < 2.0f) 
+            {
+                system.Logger.Info($"[WAIT] Stabilizing solution... ({system.LastTotalAmountBefore:F1}u -> {currentVol:F1}u)");
+                system.LastTotalAmountBefore = currentVol;
+                return this; 
+            }
+        }
+
+        system.StabilizationTimer = 0f;
+        system.TargetTempReached = false;
+        system.LastTotalAmountBefore = currentVol;
+
+        // SMART SKIP: Only for wait and heat phases
+        if (nextPhase.Type != PhaseType.Dispense)
+        {
+            // If product of this phase is already in the beaker
+            if (nextPhase.TargetProduct != null && currentContents.ContainsKey(nextPhase.TargetProduct) && currentContents[nextPhase.TargetProduct] > 0.1f)
+            {
+                system.Logger.Info($"[SKIP] Phase '{nextPhase.Description}' skipped because {nextPhase.TargetProduct} is already obtained.");
+                system.CurrentPlan.PhaseQueue.Dequeue();
+                return this; 
+            }
+
+            // Check for products from FUTURE phases (global skip for Wait/Heat)
+            foreach (var futurePhase in system.CurrentPlan.PhaseQueue.Skip(1))
+            {
+                if (futurePhase.TargetProduct != null && currentContents.ContainsKey(futurePhase.TargetProduct) && currentContents[futurePhase.TargetProduct] > 0.1f)
+                {
+                    system.Logger.Info($"[SKIP] Phase '{nextPhase.Description}' skipped because a product of a future phase was detected: {futurePhase.TargetProduct}");
+                    system.CurrentPlan.PhaseQueue.Dequeue();
+                    return this;
+                }
+            }
+        }
+
+        if (nextPhase.Type == PhaseType.Dispense)
+        {
+            if (system.DispenseQueue.Count == 0)
+            {
+                float totalToDispense = nextPhase.Ingredients.Values.Sum(v => v.Float());
+
+                if (currentVol + totalToDispense > capacity + 0.1f)
+                {
+                    float available = capacity - currentVol;
+                    float scale = available / totalToDispense;
+                    foreach (var (rId, amt) in nextPhase.Ingredients)
+                        system.DispenseQueue.Enqueue((rId, (int)Math.Floor(amt.Float() * Math.Max(0, scale))));
+                }
+                else
+                {
+                    foreach (var (rId, amt) in nextPhase.Ingredients)
+                        system.DispenseQueue.Enqueue((rId, (int)Math.Round(amt.Float())));
+                }
+            }
+
+            if (system.DispenseQueue.Count == 0 && nextPhase.Ingredients.Count > 0)
+            {
+                system.Logger.Error("[ABORT] No space!");
+                system.CurrentPlan.PhaseQueue.Dequeue();
+                return this;
+            }
+
+            system.Logger.Info($"[START] {nextPhase.Description}");
+            system.TargetProduct = nextPhase.TargetProduct;
+            return new WaitDispenserState();
+        }
+        else if (nextPhase.Type == PhaseType.Wait)
+        {
+            system.Logger.Info($"[START] {nextPhase.Description}");
+            return new WaitReactionState();
+        }
+        else if (nextPhase.Type == PhaseType.Heat)
+        {
+            system.Logger.Info($"[START] {nextPhase.Description}");
+            return new WaitHeaterState();
+        }
+
+        return this;
+    }
+
+    public string GetStatusInfo(RobustaAutoChemSystem system) => "Stabilizing...";
+    public float GetProgress(RobustaAutoChemSystem system) => GetBaseProgress(system);
+
+    private float GetBaseProgress(RobustaAutoChemSystem system)
+    {
+        if (system.CurrentPlan == null || system.CurrentPlan.TotalPhases == 0) return 0f;
+        int completed = system.CurrentPlan.TotalPhases - system.CurrentPlan.PhaseQueue.Count;
+        return (float)completed / system.CurrentPlan.TotalPhases;
+    }
+}
+
+public sealed class WaitDispenserState : IChemState
+{
+    public IChemState Execute(float frameTime, RobustaAutoChemSystem system)
+    {
+        if (system.CurrentPlan == null || system.DispenseQueue.Count == 0) return new CheckNextPhaseState();
+        var (firstR, firstAmt) = system.DispenseQueue.Peek();
+        system.Dispenser = system.Scanner.FindMachineWithReagent(firstR);
+        
+        if (system.Dispenser == null) 
+        { 
+            system.Logger.Warning($"[WAIT] Reagent {firstR} not found! Please add {firstAmt}u manually.");
+            system.LastTotalAmountBefore = system.Scanner.GetFullBreakdown(system.Beaker!.Value).Values.Sum();
+            return new WaitManualState(); 
+        }
+
+        if (system.Beaker == null || !system.Scanner.IsBeakerInsideMachine(system.Dispenser.Value, system.Beaker.Value)) 
+        {
+            system.StabilizationTimer += 0.5f;
+            if (system.StabilizationTimer >= 2.0f)
+            {
+                system.Logger.Info($"[INFO] Insert beaker into {system.EntManager.GetComponent<MetaDataComponent>(system.Dispenser.Value).EntityName} for {firstR}...");
+                system.StabilizationTimer = 0f;
+            }
+            return this; 
+        }
+        system.Logger.Info($"[DEBUG] Dispenser ready. Starting to dispense {firstR}.");
+        system.StabilizationTimer = 0f;
+        return new DispensingState();
+    }
+
+    public string GetStatusInfo(RobustaAutoChemSystem system) => "Looking for dispenser...";
+    public float GetProgress(RobustaAutoChemSystem system) => GetBaseProgress(system);
+
+    private float GetBaseProgress(RobustaAutoChemSystem system)
+    {
+        if (system.CurrentPlan == null || system.CurrentPlan.TotalPhases == 0) return 0f;
+        int completed = system.CurrentPlan.TotalPhases - system.CurrentPlan.PhaseQueue.Count;
+        return (float)completed / system.CurrentPlan.TotalPhases;
+    }
+}
+
+public sealed class DispensingState : IChemState
+{
+    public IChemState Execute(float frameTime, RobustaAutoChemSystem system)
+    {
+        if (system.Beaker == null || system.Dispenser == null || system.CurrentPlan == null) return new CheckNextPhaseState();
+        if (system.DispenseQueue.Count > 0)
+        {
+            var (reagentId, remaining) = system.DispenseQueue.Peek();
+            
+            if (system.WaitingForDispenseConfirm)
+            {
+                var currentSnap = system.Scanner.GetFullBreakdown(system.Beaker.Value);
+                float currentReagentAmt = currentSnap.TryGetValue(system.LastReagentAdded!, out var rAmt) ? rAmt : 0f;
+                float currentProductAmt = (system.TargetProduct != null && currentSnap.TryGetValue(system.TargetProduct, out var pAmt)) ? pAmt : 0f;
+                float snapTotal = currentSnap.Values.Sum();
+
+                float reagentIncrease = currentReagentAmt - system.LastReagentAmountBefore;
+                float productIncrease = currentProductAmt - system.LastProductAmountBefore;
+                float volumeIncrease = snapTotal - system.LastTotalAmountBefore;
+
+                if (reagentIncrease > 0.05f || productIncrease > 0.05f || volumeIncrease > 0.05f)
+                {
+                    float delta = reagentIncrease;
+                    if (productIncrease > 0.05f)
+                    {
+                        float yield = 1f;
+                        float reactantRatio = 1f;
+                        if (system.TargetProduct != null)
+                        {
+                            var recipe = RobustaChemDatabase.GetRecipe(system.TargetProduct);
+                            if (recipe != null)
+                            {
+                                if (recipe.Products.TryGetValue(system.TargetProduct, out var yAmt)) yield = yAmt.Float();
+                                if (recipe.Reactants.TryGetValue(system.LastReagentAdded!, out var rData)) reactantRatio = rData.Amount.Float();
+                            }
+                        }
+                        delta = reagentIncrease + (productIncrease * (reactantRatio / yield));
+                    }
+                    else if (delta < 0.05f && volumeIncrease > 0.05f)
+                    {
+                        delta = volumeIncrease;
+                    }
+
+                    int pouredInt = (int)Math.Round(delta);
+                    if (pouredInt < 1) pouredInt = 1; 
+
+                    system.Logger.Info($"[VERIFY] {system.LastReagentAdded}: dispensed {pouredInt}u (measured {delta:F1}u).");
+                    system.WaitingForDispenseConfirm = false;
+                    
+                    var list = system.DispenseQueue.ToList();
+                    var head = list[0];
+                    int newRemaining = head.Amount - pouredInt;
+                    list.RemoveAt(0);
+                    if (newRemaining > 0) list.Insert(0, (reagentId, newRemaining));
+                    system.DispenseQueue = new Queue<(string, int)>(list);
+                    
+                    system.LogBeakerContents();
+                    return this; 
+                }
+                return this; 
+            }
+
+            var jugLoc = system.Scanner.FindJugLocation(system.Dispenser.Value, reagentId);
+            if (jugLoc == null) { system.Dispenser = null; return new WaitDispenserState(); }
+
+            ReagentDispenserDispenseAmount dose;
+            if (remaining >= 120) dose = ReagentDispenserDispenseAmount.U120;
+            else if (remaining >= 60) dose = ReagentDispenserDispenseAmount.U60;
+            else if (remaining >= 40) dose = ReagentDispenserDispenseAmount.U40;
+            else if (remaining >= 30) dose = ReagentDispenserDispenseAmount.U30;
+            else if (remaining >= 20) dose = ReagentDispenserDispenseAmount.U20;
+            else if (remaining >= 15) dose = ReagentDispenserDispenseAmount.U15;
+            else if (remaining >= 10) dose = ReagentDispenserDispenseAmount.U10;
+            else if (remaining >= 5) dose = ReagentDispenserDispenseAmount.U5;
+            else dose = ReagentDispenserDispenseAmount.U1;
+
+            if (system.LastActiveDose != dose)
+            {
+                system.Logger.Info($"[SYNC] Setting dose {dose}...");
+                system.NetworkHands.SendBuiMessage(system.Dispenser.Value, new ReagentDispenserSetDispenseAmountMessage(dose));
+                system.LastActiveDose = dose;
+                return this;
+            }
+
+            var snapBefore = system.Scanner.GetFullBreakdown(system.Beaker.Value);
+            system.LastReagentAdded = reagentId;
+            system.LastRequestedDose = (int)dose; 
+            system.LastReagentAmountBefore = snapBefore.TryGetValue(reagentId, out var rOld) ? rOld : 0f;
+            system.LastTotalAmountBefore = snapBefore.Values.Sum();
+            system.LastProductAmountBefore = (system.TargetProduct != null && snapBefore.TryGetValue(system.TargetProduct, out var pOld)) ? pOld : 0f;
+            system.WaitingForDispenseConfirm = true;
+
+            system.Logger.Info($"[ACTION] Dispensing {reagentId} (attempting {dose}u). Remaining in plan: {remaining}u");
+            system.NetworkHands.SendBuiMessage(system.Dispenser.Value, new ReagentDispenserDispenseReagentMessage(jugLoc.Value));
+            return this;
+        }
+        else
+        {
+            system.LastActiveDose = null; 
+            
+            bool nextIsHeat = system.CurrentPlan.PhaseQueue.Count > 1 && system.CurrentPlan.PhaseQueue.ElementAt(1).Type == PhaseType.Heat;
+            if (nextIsHeat || system.CurrentPlan.PhaseQueue.Count == 1)
+                system.NetworkHands.EjectViaUI(system.Dispenser.Value);
+
+            system.CurrentPlan.PhaseQueue.Dequeue(); 
+            return new CheckNextPhaseState(); 
+        }
+    }
+
+    public string GetStatusInfo(RobustaAutoChemSystem system) => system.DispenseQueue.Count > 0 ? $"Adding {system.DispenseQueue.Peek().Reagent}" : "Complete";
+    public float GetProgress(RobustaAutoChemSystem system) => GetBaseProgress(system);
+
+    private float GetBaseProgress(RobustaAutoChemSystem system)
+    {
+        if (system.CurrentPlan == null || system.CurrentPlan.TotalPhases == 0) return 0f;
+        int completed = system.CurrentPlan.TotalPhases - system.CurrentPlan.PhaseQueue.Count;
+        return (float)completed / system.CurrentPlan.TotalPhases;
+    }
+}
+
+public sealed class WaitManualState : IChemState
+{
+    public IChemState Execute(float frameTime, RobustaAutoChemSystem system)
+    {
+        if (system.Beaker == null || system.CurrentPlan == null) return this;
+        if (system.DispenseQueue.Count == 0) 
+        { 
+            system.CurrentPlan.PhaseQueue.Dequeue(); 
+            return new CheckNextPhaseState(); 
+        }
+        
+        var (mR, mN) = system.DispenseQueue.Peek();
+        var curV = system.Scanner.GetFullBreakdown(system.Beaker.Value).Values.Sum();
+        float added = curV - system.LastTotalAmountBefore;
+
+        if (system.Scanner.GetReagentAmount(system.Beaker.Value, mR) >= mN || added >= (mN - 0.1f)) 
+        { 
+            system.Logger.Info($"[VERIFY] Manual dispensing of {mR} confirmed.");
+            system.DispenseQueue.Dequeue(); 
+            system.LastTotalAmountBefore = curV; 
+            
+            if (system.DispenseQueue.Count == 0)
+            {
+                system.CurrentPlan.PhaseQueue.Dequeue(); 
+                return new CheckNextPhaseState();
+            }
+            else
+            {
+                return new WaitDispenserState(); 
+            }
+        }
+        return this;
+    }
+
+    public string GetStatusInfo(RobustaAutoChemSystem system) => system.DispenseQueue.Count > 0 ? $"MANUAL: {system.DispenseQueue.Peek().Reagent} ({system.DispenseQueue.Peek().Amount}u)" : "Manual done";
+    public float GetProgress(RobustaAutoChemSystem system) => GetBaseProgress(system);
+
+    private float GetBaseProgress(RobustaAutoChemSystem system)
+    {
+        if (system.CurrentPlan == null || system.CurrentPlan.TotalPhases == 0) return 0f;
+        int completed = system.CurrentPlan.TotalPhases - system.CurrentPlan.PhaseQueue.Count;
+        return (float)completed / system.CurrentPlan.TotalPhases;
+    }
+}
+
+public sealed class WaitReactionState : IChemState
+{
+    public IChemState Execute(float frameTime, RobustaAutoChemSystem system)
+    {
+        if (system.Beaker == null || system.CurrentPlan == null || system.CurrentPlan.PhaseQueue.Count == 0) return this;
+        var wPhase = system.CurrentPlan.PhaseQueue.Peek();
+        var contents = system.Scanner.GetFullBreakdown(system.Beaker.Value);
+        
+        bool allDone = true;
+        foreach (var r in wPhase.WaitReagents)
+        {
+            if (!contents.ContainsKey(r) || contents[r] < 0.1f)
+            {
+                bool foundInFuture = false;
+                foreach (var futurePhase in system.CurrentPlan.PhaseQueue.Skip(1))
+                {
+                    if (futurePhase.TargetProduct != null && contents.ContainsKey(futurePhase.TargetProduct) && contents[futurePhase.TargetProduct] > 0.1f)
+                    {
+                        foundInFuture = true;
+                        break;
+                    }
+                }
+
+                if (!foundInFuture)
+                {
+                    allDone = false;
+                    break;
+                }
+            }
+        }
+
+        if (allDone)
+        {
+            system.Logger.Info($"[SUCCESS] Reagents obtained or already processed.");
+            system.CurrentPlan.PhaseQueue.Dequeue();
+            system.StabilizationTimer = 0f;
+            system.LastTotalAmountBefore = contents.Values.Sum();
+            return new CheckNextPhaseState();
+        }
+        else
+        {
+            system.StabilizationTimer += 0.5f;
+            if (system.StabilizationTimer >= 2.0f)
+            {
+                system.Logger.Info($"[WAIT] Waiting for reaction {string.Join(", ", wPhase.WaitReagents)}... (Volume: {contents.Values.Sum():F1}u)");
+                system.StabilizationTimer = 0f;
+            }
+        }
+        return this;
+    }
+
+    public string GetStatusInfo(RobustaAutoChemSystem system)
+    {
+        if (system.CurrentPlan == null || system.CurrentPlan.PhaseQueue.Count == 0) return "Reaction done";
+        return $"Reacting: {string.Join(", ", system.CurrentPlan.PhaseQueue.Peek().WaitReagents)}";
+    }
+    public float GetProgress(RobustaAutoChemSystem system) => GetBaseProgress(system);
+
+    private float GetBaseProgress(RobustaAutoChemSystem system)
+    {
+        if (system.CurrentPlan == null || system.CurrentPlan.TotalPhases == 0) return 0f;
+        int completed = system.CurrentPlan.TotalPhases - system.CurrentPlan.PhaseQueue.Count;
+        return (float)completed / system.CurrentPlan.TotalPhases;
+    }
+}
+
+public sealed class WaitHeaterState : IChemState
+{
+    public IChemState Execute(float frameTime, RobustaAutoChemSystem system)
+    {
+        if (system.Beaker == null) return this;
+        var heater = system.Scanner.FindMachine("heater");
+        if (heater != null && system.Scanner.IsBeakerInsideMachine(heater.Value, system.Beaker.Value)) 
+        {
+            return new HeatingState();
+        }
+        return this;
+    }
+
+    public string GetStatusInfo(RobustaAutoChemSystem system) => "Wait for Heater...";
+    public float GetProgress(RobustaAutoChemSystem system) => GetBaseProgress(system);
+
+    private float GetBaseProgress(RobustaAutoChemSystem system)
+    {
+        if (system.CurrentPlan == null || system.CurrentPlan.TotalPhases == 0) return 0f;
+        int completed = system.CurrentPlan.TotalPhases - system.CurrentPlan.PhaseQueue.Count;
+        return (float)completed / system.CurrentPlan.TotalPhases;
+    }
+}
+
+public sealed class HeatingState : IChemState
+{
+    public IChemState Execute(float frameTime, RobustaAutoChemSystem system)
+    {
+        if (system.Beaker == null || system.CurrentPlan == null || system.CurrentPlan.PhaseQueue.Count == 0) return this;
+        var hPhase = system.CurrentPlan.PhaseQueue.Peek();
+        var t = system.Scanner.GetBeakerTemperature(system.Beaker.Value) ?? system.LastNetworkTemp;
+        
+        if (t >= hPhase.TargetTemperature)
+        {
+            if (!system.TargetTempReached)
+            {
+                system.Logger.Info($">>> {hPhase.TargetTemperature}K REACHED! REMOVE BEAKER! <<<");
+                system.TargetTempReached = true;
+            }
+        }
+
+        var heaterNow = system.Scanner.FindMachine("heater");
+        if (heaterNow == null || !system.Scanner.IsBeakerInsideMachine(heaterNow.Value, system.Beaker.Value))
+        {
+            system.Logger.Info("[DEBUG] Beaker removed from heater.");
+            if (system.TargetTempReached)
+            {
+                system.CurrentPlan.PhaseQueue.Dequeue();
+                return new CheckNextPhaseState();
+            }
+            else
+            {
+                system.Logger.Warning("[WARN] Beaker removed prematurely! Returning to heater wait.");
+                return new WaitHeaterState();
+            }
+        }
+        return this;
+    }
+
+    public string GetStatusInfo(RobustaAutoChemSystem system)
+    {
+        if (system.CurrentPlan == null || system.CurrentPlan.PhaseQueue.Count == 0) return "Heating done";
+        var hPhase = system.CurrentPlan.PhaseQueue.Peek();
+        var curT = (system.Beaker != null) ? (system.Scanner.GetBeakerTemperature(system.Beaker.Value) ?? system.LastNetworkTemp ?? 0) : 0;
+        return system.TargetTempReached ? "DONE! Eject beaker!" : $"Heating: {curT:F1}K / {hPhase.TargetTemperature}K";
+    }
+
+    public float GetProgress(RobustaAutoChemSystem system)
+    {
+        if (system.CurrentPlan == null || system.CurrentPlan.TotalPhases == 0) return 0f;
+        int completed = system.CurrentPlan.TotalPhases - system.CurrentPlan.PhaseQueue.Count;
+        float baseProgress = (float)completed / system.CurrentPlan.TotalPhases;
+        float phaseWeight = 1f / system.CurrentPlan.TotalPhases;
+
+        if (system.CurrentPlan.PhaseQueue.Count > 0)
+        {
+            var phase = system.CurrentPlan.PhaseQueue.Peek();
+            var curT = (system.Beaker != null) ? (system.Scanner.GetBeakerTemperature(system.Beaker.Value) ?? system.LastNetworkTemp ?? 293.15f) : 293.15f;
             float tProgress = Math.Clamp((curT - 293.15f) / (phase.TargetTemperature - 293.15f), 0f, 1f);
             return baseProgress + (tProgress * phaseWeight);
         }
-
         return baseProgress;
     }
+}
+
+public sealed class FinishState : IChemState
+{
+    public IChemState Execute(float frameTime, RobustaAutoChemSystem system)
+    {
+        if (system.ExamineSyncTimer > 1.0f)
+        {
+            system.ExamineSyncTimer = 0f;
+            system.LogBeakerContents();
+            system.Logger.Info("[AutoChem] Done!");
+            return new IdleState();
+        }
+        return this;
+    }
+
+    public string GetStatusInfo(RobustaAutoChemSystem system) => "ALL DONE! Take beaker.";
+    public float GetProgress(RobustaAutoChemSystem system) => 1.0f;
 }
