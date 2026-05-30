@@ -21,6 +21,7 @@ public sealed class RobustaRadarControl : Control
     [Dependency] private readonly IEntityManager _entMan = default!;
     [Dependency] private readonly IPlayerManager _player = default!;
     [Dependency] private readonly IResourceCache _cache = default!;
+    [Dependency] private readonly IEyeManager _eye = default!;
 
     private readonly SharedTransformSystem _transform;
     private readonly Font _font;
@@ -73,11 +74,22 @@ public sealed class RobustaRadarControl : Control
         handle.DrawCircle(center, 4f, Color.Cyan);
 
         var scale = radius / RadarRangeMeters;
+        
+        // 1. Get camera rotation for synchronization (SS14 stores this already inverted)
+        var radarRot = _eye.CurrentEye?.Rotation ?? Angle.Zero;
 
+        // 2. Draw North indicator (N)
+        var northDir = radarRot.RotateVec(new Vector2(0, 1));
+        var northPos = center + new Vector2(northDir.X, -northDir.Y) * (radius - 12f);
+        handle.DrawString(_font, northPos, "N", Color.Red);
+
+        // 3. Transform world offset to camera-relative space (Forward-Up)
         foreach (var marker in _markers)
         {
             var offsetMeters = marker.WorldPos - playerPos;
-            var uiOffset = new Vector2(offsetMeters.X, -offsetMeters.Y) * scale;
+            
+            var relativeOffset = radarRot.RotateVec(offsetMeters);
+            var uiOffset = new Vector2(relativeOffset.X, -relativeOffset.Y) * scale;
             
             var distancePixels = uiOffset.Length();
             var drawPos = center + uiOffset;
