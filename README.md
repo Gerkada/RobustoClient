@@ -4,7 +4,7 @@
 ![.NET](https://img.shields.io/badge/.NET-10.0-blue?style=flat-square)
 ![License](https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square)
 
-Based on the original Arabica client by noverd. Massive thanks for the foundational framework.
+Based on the original [ArabicaClient](https://github.com/noverd/ArabicaCliento) by noverd. Massive thanks for the foundational framework.
 
 RobustoClient is a heavily modified, advanced open-source cheat client for Space Station 14. It features a completely rewritten architecture for critical systems, including a flawless mathematical AutoChem solver, precise combat prediction, and advanced entity detection.
 
