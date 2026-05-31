@@ -42,6 +42,7 @@ dotnet build RobustoClient/RobustoClient.csproj -c Release
 ## Key Features
 
 - **Smart AutoChem System (NEW)** – A flawless, state-machine-driven chemistry AI. Uses a Top-Down Float solver (Recursive LCM) and Yield-Skewed Verification to brew complex multi-stage recipes without overflowing beakers or wasting reagents.
+- **Smart AutoReload System (NEW)** – A state-machine-driven weapon reload AI. Features automatic ammunition detection (magazines, loose shells, and boxes), support for two-handed wielding mechanics, and intelligent chamber monitoring to prevent unnecessary bolt racking.
 - **Upgraded Aimbot (Melee & Ranged)** – Now features advanced relative velocity (`relVel`) prediction and optimized O(1) weapon resolution via `SharedHandsSystem` for perfect tracking.
 - **Advanced Syndicate Detector** – Bypasses basic PVS restrictions. Analyzes `ContrabandComponent.Severity` to identify actual threats while ignoring sponsor items or civilian contraband.
 - **Friend-or-Foe System (Robusta Friend)** – Aimbot recognizes friends and enemies, focusing only on opponents. Add your friends by username.
