@@ -317,16 +317,19 @@ public sealed class DispensingState : ChemStateBase
             var jugLoc = context.Scanner.FindJugLocation(context.Dispenser.Value, reagentId);
             if (jugLoc == null) { context.Dispenser = null; return WaitDispenserState.Instance; }
 
+            // Determine best dose based on what's actually available on this machine
+            var availableDoses = context.Scanner.GetAvailableDoses(context.Dispenser.Value);
             ReagentDispenserDispenseAmount dose;
-            if (remaining >= 120) dose = ReagentDispenserDispenseAmount.U120;
-            else if (remaining >= 60) dose = ReagentDispenserDispenseAmount.U60;
-            else if (remaining >= 40) dose = ReagentDispenserDispenseAmount.U40;
-            else if (remaining >= 30) dose = ReagentDispenserDispenseAmount.U30;
-            else if (remaining >= 20) dose = ReagentDispenserDispenseAmount.U20;
-            else if (remaining >= 15) dose = ReagentDispenserDispenseAmount.U15;
-            else if (remaining >= 10) dose = ReagentDispenserDispenseAmount.U10;
-            else if (remaining >= 5) dose = ReagentDispenserDispenseAmount.U5;
-            else dose = ReagentDispenserDispenseAmount.U1;
+            
+            if (remaining >= 120 && availableDoses.Contains(ReagentDispenserDispenseAmount.U120)) dose = ReagentDispenserDispenseAmount.U120;
+            else if (remaining >= 60 && availableDoses.Contains(ReagentDispenserDispenseAmount.U60)) dose = ReagentDispenserDispenseAmount.U60;
+            else if (remaining >= 40 && availableDoses.Contains(ReagentDispenserDispenseAmount.U40)) dose = ReagentDispenserDispenseAmount.U40;
+            else if (remaining >= 30 && availableDoses.Contains(ReagentDispenserDispenseAmount.U30)) dose = ReagentDispenserDispenseAmount.U30;
+            else if (remaining >= 20 && availableDoses.Contains(ReagentDispenserDispenseAmount.U20)) dose = ReagentDispenserDispenseAmount.U20;
+            else if (remaining >= 15 && availableDoses.Contains(ReagentDispenserDispenseAmount.U15)) dose = ReagentDispenserDispenseAmount.U15;
+            else if (remaining >= 10 && availableDoses.Contains(ReagentDispenserDispenseAmount.U10)) dose = ReagentDispenserDispenseAmount.U10;
+            else if (remaining >= 5 && availableDoses.Contains(ReagentDispenserDispenseAmount.U5)) dose = ReagentDispenserDispenseAmount.U5;
+            else dose = ReagentDispenserDispenseAmount.U1; // Guaranteed fallback
 
             if (context.LastActiveDose != dose)
             {
@@ -344,7 +347,7 @@ public sealed class DispensingState : ChemStateBase
             context.LastProductAmountBefore = (context.TargetProduct != null && snapBefore.TryGetValue(context.TargetProduct, out var pOld)) ? pOld : 0f;
             context.WaitingForDispenseConfirm = true;
 
-            context.Logger.Info($"[ACTION] Dispensing {reagentId} (attempting {dose}u). Remaining in plan: {remaining}u");
+            context.Logger.Info($"[ACTION] Dispensing {reagentId} (using {dose}u). Remaining: {remaining}u");
             context.NetworkHands.SendBuiMessage(context.Dispenser.Value, new ReagentDispenserDispenseReagentMessage(jugLoc.Value));
             return this;
         }
@@ -354,7 +357,10 @@ public sealed class DispensingState : ChemStateBase
             
             bool nextIsHeat = context.CurrentPlan.PhaseQueue.Count > 1 && context.CurrentPlan.PhaseQueue.ElementAt(1).Type == PhaseType.Heat;
             if (nextIsHeat || context.CurrentPlan.PhaseQueue.Count == 1)
+            {
+                context.Logger.Info("[DEBUG] Dispensing phase complete. Ejecting beaker.");
                 context.NetworkHands.EjectViaUI(context.Dispenser.Value);
+            }
 
             context.CurrentPlan.PhaseQueue.Dequeue(); 
             return CheckNextPhaseState.Instance; 

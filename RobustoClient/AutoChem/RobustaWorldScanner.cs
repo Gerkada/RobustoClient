@@ -8,6 +8,7 @@ using Robust.Shared.GameObjects;
 using Robust.Shared.IoC;
 using Robust.Shared.Map;
 using Robust.Shared.Log;
+using Content.Shared.Chemistry;
 using Content.Shared.Chemistry.Components;
 using Content.Shared.Chemistry.EntitySystems;
 using Content.Shared.Hands.EntitySystems;
@@ -149,7 +150,32 @@ public sealed class RobustaWorldScanner : EntitySystem
 
         foreach (var ent in entities)
         {
-            if (FindJugLocation(ent, reagentId) != null) 
+            // Only consider actual reagent dispensers
+            // On the client, ReagentDispenserComponent might not be visible as it's often server-only.
+            // We use a combination of name-based and component-based detection.
+            bool isDispenser = false;
+            var meta = MetaData(ent);
+            var name = meta.EntityName.ToLower();
+            var proto = (meta.EntityPrototype?.ID ?? "").ToLower();
+
+            if (name.Contains("dispenser") && !name.Contains("kit") && !proto.Contains("kit"))
+            {
+                isDispenser = true;
+            }
+            else
+            {
+                foreach (var comp in _entMan.GetComponents(ent))
+                {
+                    var compName = comp.GetType().Name;
+                    if (compName.Contains("ReagentDispenser") || compName.Contains("SharedReagentDispenser"))
+                    {
+                        isDispenser = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isDispenser && FindJugLocation(ent, reagentId) != null) 
             {
                 return ent;
             }
@@ -317,12 +343,34 @@ public sealed class RobustaWorldScanner : EntitySystem
         return maxTemp > 0 ? maxTemp : null;
     }
 
+    public List<ReagentDispenserDispenseAmount> GetAvailableDoses(EntityUid dispenser)
+    {
+        var doses = new List<ReagentDispenserDispenseAmount>();
+        if (!TryComp<UserInterfaceComponent>(dispenser, out var uiComp)) return doses;
+
+        foreach (var (key, ui) in uiComp.ClientOpenInterfaces)
+        {
+            var state = GetMemberValue(ui, "State") as ReagentDispenserBoundUserInterfaceState;
+            if (state == null) continue;
+
+            // In some versions, the enum itself defines the buttons. 
+            // In others, we might need to check the UI definition.
+            // For now, we'll return all standard enums as a base, 
+            // but the system will fallback if the click fails.
+            return Enum.GetValues<ReagentDispenserDispenseAmount>().ToList();
+        }
+        return doses;
+    }
+
     public ItemStorageLocation? FindJugLocation(EntityUid dispenserUid, string reagentId)
     {
+        // 1. Primary check: ReagentDispenserComponent's specialized inventory
         foreach (var comp in _entMan.GetComponents(dispenserUid))
         {
-            if (comp.GetType().Name.Contains("ReagentDispenserComponent"))
+            var compName = comp.GetType().Name;
+            if (compName.Contains("ReagentDispenser") || compName.Contains("SharedReagentDispenser"))
             {
+                // Try to get the inventory (list of ReagentInventoryItem or similar)
                 var inventory = GetMemberValue(comp, "Inventory") as IEnumerable;
                 if (inventory != null)
                 {
@@ -331,6 +379,7 @@ public sealed class RobustaWorldScanner : EntitySystem
                         var label = GetMemberValue(item, "ReagentLabel") as string;
                         var location = GetMemberValue(item, "StorageLocation");
                         
+                        // Robust label matching: check if requested ID is part of the label or vice versa
                         if (label != null && (label.Contains(reagentId, StringComparison.OrdinalIgnoreCase) || reagentId.Contains(label, StringComparison.OrdinalIgnoreCase)))
                         {
                             if (location is ItemStorageLocation loc) return loc;
@@ -340,6 +389,8 @@ public sealed class RobustaWorldScanner : EntitySystem
             }
         }
 
+        // 2. Fallback check: General StorageComponent
+        // This is useful for older builds or machines that hold "jug" entities directly in storage slots.
         if (TryComp<StorageComponent>(dispenserUid, out var storage))
         {
             foreach (var (itemUid, location) in storage.StoredItems)
@@ -348,10 +399,15 @@ public sealed class RobustaWorldScanner : EntitySystem
                 var proto = (meta.EntityPrototype?.ID ?? "").ToLower();
                 var name = meta.EntityName.ToLower();
 
+                // If the item itself matches the reagent name, it's likely a container for it
                 if (proto.Contains(reagentId.ToLower()) || name.Contains(reagentId.ToLower()))
                     return location;
+
+                // Optionally, we could scan INSIDE these items if they are jugs, but that might be overkill 
+                // as most machines expose the jug directly to the dispenser inventory.
             }
         }
+
         return null;
     }
 }
