@@ -390,7 +390,7 @@ public sealed class PrepareHandsState : ReloadStateBase
         if (context.RetrieveStep == -1)
         {
             context.Timer += frameTime;
-            if (context.Timer < 0.2f) return this;
+            if (context.Timer < 0.1f) return this;
             if (context.GunHandName != null)
             {
                 context.EntManager.RaisePredictiveEvent(new RequestSetHandEvent(context.GunHandName));
@@ -403,7 +403,7 @@ public sealed class PrepareHandsState : ReloadStateBase
         if (context.RetrieveStep == -2)
         {
             context.Timer += frameTime;
-            if (context.Timer < 0.2f) return this;
+            if (context.Timer < 0.1f) return this;
             context.RetrieveStep = 0;
             context.Timer = 0f;
             return this;
@@ -413,7 +413,7 @@ public sealed class PrepareHandsState : ReloadStateBase
         if (context.RetrieveStep == 1)
         {
             context.Timer += frameTime;
-            if (context.Timer < 0.5f)
+            if (context.Timer < 0.25f)
                 return this;
 
             var actualActiveHand = context.HandsSystem.GetActiveHand(context.Player.Value);
@@ -453,7 +453,7 @@ public sealed class PrepareHandsState : ReloadStateBase
         if (context.RetrieveStep == 2)
         {
             context.Timer += frameTime;
-            if (context.Timer < 0.5f)
+            if (context.Timer < 0.25f)
                 return this;
 
             var actualActiveHand = context.HandsSystem.GetActiveHand(context.Player.Value);
@@ -496,7 +496,7 @@ public sealed class ActionState : ReloadStateBase
         if (!context.IsMagazineType)
         {
             context.Timer += frameTime;
-            if (context.Timer < 0.5f)
+            if (context.Timer < 0.25f)
                 return this;
 
             context.ExecutedSteps.Add($"[Action] Initiating ballistic reload via RequestHandInteractUsingEvent. Active hand: {actualActiveHand}");
@@ -519,7 +519,7 @@ public sealed class ActionState : ReloadStateBase
         if (context.ActionStep == 0)
         {
             context.Timer += frameTime;
-            if (context.Timer < 0.5f)
+            if (context.Timer < 0.25f)
                 return this;
 
             context.ExecutedSteps.Add($"[Action 0] Swapping magazines via RequestHandInteractUsingEvent. Active hand: {actualActiveHand}");
@@ -534,7 +534,7 @@ public sealed class ActionState : ReloadStateBase
         if (context.ActionStep == 1)
         {
             context.Timer += frameTime;
-            if (context.Timer < 0.5f)
+            if (context.Timer < 0.25f)
                 return this;
             
             context.ExecutedSteps.Add($"[Action 1] Waited for magazine swap. Active hand: {actualActiveHand}");
@@ -559,7 +559,7 @@ public sealed class WaitBallisticState : ReloadStateBase
         context.Timer += frameTime;
 
         // Give it a bit of time to start the first DoAfter (0.5s)
-        if (context.Timer < 0.5f)
+        if (context.Timer < 0.25f)
             return this;
 
         // Check for active DoAfters on the player
@@ -598,11 +598,11 @@ public sealed class WaitBallisticState : ReloadStateBase
         {
             // First time we don't see a DoAfter, start a sub-timer
             context.ActionStep = 1;
-            context.Timer = 0.5f; // Re-purpose Timer for grace period
+            context.Timer = 0.25f; // Re-purpose Timer for grace period
         }
         
         context.Timer += frameTime;
-        if (context.Timer < 0.9f) // 0.4s grace period
+        if (context.Timer < 0.45f) // 0.2s grace period
         {
             return this;
         }
@@ -673,7 +673,7 @@ public sealed class CleanupState : ReloadStateBase
                 {
                     // Proceed to drop in step 1
                     context.CleanupStep = 1;
-                    context.Timer = 0.6f; // Force drop logic immediately
+                    context.Timer = 0.35f; // Force drop logic immediately
                     return this;
                 }
             }
@@ -684,7 +684,7 @@ public sealed class CleanupState : ReloadStateBase
         if (context.CleanupStep == 1)
         {
             context.Timer += frameTime;
-            if (context.Timer < 0.5f)
+            if (context.Timer < 0.25f)
                 return this;
 
             if (context.HandsSystem.TryGetActiveItem(context.Player.Value, out var heldItem) && heldItem != null)
@@ -722,7 +722,7 @@ public sealed class CleanupState : ReloadStateBase
         if (context.CleanupStep == 2)
         {
             context.Timer += frameTime;
-            if (context.Timer < 0.2f)
+            if (context.Timer < 0.1f)
                 return this;
 
             if (context.GunHandName != null)
@@ -741,7 +741,7 @@ public sealed class CleanupState : ReloadStateBase
         if (context.CleanupStep == 3)
         {
             context.Timer += frameTime;
-            if (context.Timer < 0.5f)
+            if (context.Timer < 0.25f)
                 return this;
 
             if (context.WasWielded)
@@ -759,7 +759,7 @@ public sealed class CleanupState : ReloadStateBase
         if (context.CleanupStep == 4)
         {
             context.Timer += frameTime;
-            if (context.Timer < 0.5f)
+            if (context.Timer < 0.25f)
                 return this;
 
             if (context.Gun != null)
