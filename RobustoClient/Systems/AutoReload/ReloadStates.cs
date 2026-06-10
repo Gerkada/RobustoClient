@@ -485,6 +485,13 @@ public sealed class ActionState : ReloadStateBase
 
         var actualActiveHand = context.HandsSystem.GetActiveHand(context.Player.Value);
 
+        // Safety check to avoid used == target crash
+        if (actualActiveHand == context.GunHandName)
+        {
+            context.Logger.Warning("[AutoReload] Active hand is still the gun hand. Waiting for swap...");
+            return this;
+        }
+
         // Ballistic: Initiate interaction with delay
         if (!context.IsMagazineType)
         {
@@ -622,9 +629,24 @@ public sealed class CleanupState : ReloadStateBase
         // Step 0: Try to put item (mag/box) away in backpack
         if (context.CleanupStep == 0)
         {
+            // Safety: ensure we are in the off-hand before putting stuff away
+            if (actualActiveHand == context.GunHandName && context.EmptyHandName != null)
+            {
+                context.Logger.Warning($"[Cleanup 0] Active hand is gun hand ({actualActiveHand}), but we need off-hand ({context.EmptyHandName}). Swapping back...");
+                context.EntManager.RaisePredictiveEvent(new RequestSetHandEvent(context.EmptyHandName));
+                return this; 
+            }
+
             // Check if we still have something in hand that we retrieved
             if (context.HandsSystem.TryGetActiveItem(context.Player.Value, out var heldItem) && heldItem != null)
             {
+                if (heldItem == context.Gun)
+                {
+                    context.Logger.Warning("[Cleanup 0] Active hand holds the gun! Skipping storage logic to avoid putting weapon away.");
+                    context.CleanupStep = 2;
+                    return this;
+                }
+
                 bool shouldStore = true;
 
                 // For boxes: if empty, drop it
@@ -765,8 +787,8 @@ public sealed class CleanupState : ReloadStateBase
 
                 if (needsRack)
                 {
-                    context.ExecutedSteps.Add($"[Cleanup 4] Racking slide via RequestActivateInHandEvent. Active hand: {actualActiveHand}");
-                    context.EntManager.RaisePredictiveEvent(new RequestActivateInHandEvent(context.GunHandName ?? ""));
+                    context.ExecutedSteps.Add($"[Cleanup 4] Racking slide via RequestUseInHandEvent. Active hand: {actualActiveHand}");
+                    context.EntManager.RaisePredictiveEvent(new RequestUseInHandEvent());
                 }
             }
 
