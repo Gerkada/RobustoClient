@@ -31,9 +31,9 @@ public class RobustaAutoZoomSystem : LocalPlayerSystem
         _isEnabled = true; // If value is set manually, enable automatically
     }
 
-    public override void Update(float frameTime)
+    public override void FrameUpdate(float frameTime)
     {
-        base.Update(frameTime);
+        base.FrameUpdate(frameTime);
 
         // Do nothing if disabled or no player
         if (!_isEnabled || _player.LocalEntity == null)

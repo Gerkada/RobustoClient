@@ -32,9 +32,9 @@ public sealed class RobustaAutoReloadSystem : EntitySystem
         _context.Logger.Info("[AutoReload] Sequence aborted.");
     }
 
-    public override void Update(float frameTime)
+    public override void FrameUpdate(float frameTime)
     {
-        base.Update(frameTime);
+        base.FrameUpdate(frameTime);
         if (CurrentState == IdleState.Instance)
             return;
 

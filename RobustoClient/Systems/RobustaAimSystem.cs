@@ -30,9 +30,9 @@ public class RobustaAimSystem : EntitySystem
     private EntityUid? _lockedTarget;
     public EntityUid? LockedTarget => _lockedTarget;
 
-    public override void Update(float frameTime)
+    public override void FrameUpdate(float frameTime)
     {
-        base.Update(frameTime);
+        base.FrameUpdate(frameTime);
 
         if (!RobustaConfig.RangedAimbotEnabled && !RobustaConfig.ThrowAimbotEnabled)
         {

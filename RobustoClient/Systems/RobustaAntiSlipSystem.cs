@@ -31,8 +31,9 @@ public sealed class RobustaAntiSlipSystem : EntitySystem
         RobustaConfig.AntiSlipEnabled = enabled;
     }
 
-    public override void Update(float frameTime)
+    public override void FrameUpdate(float frameTime)
     {
+        base.FrameUpdate(frameTime);
         var player = _playerManager.LocalEntity;
 
         if (!player.HasValue || !RobustaConfig.AntiSlipEnabled)
@@ -40,10 +41,7 @@ public sealed class RobustaAntiSlipSystem : EntitySystem
         var onSoap = IsPlayerOnSoap(player.Value);
         _changed = onSoap != _forcePressWalk;
         _forcePressWalk = onSoap;
-    }
 
-    public override void FrameUpdate(float frameTime)
-    {
         if (_changed)
             PressWalk(_forcePressWalk ? BoundKeyState.Down : BoundKeyState.Up);
     }
