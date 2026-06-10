@@ -65,7 +65,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
         _context.Timer += frameTime;
         _context.ExamineSyncTimer += frameTime;
 
-        if (_context.Timer < 0.5f) return;
+        if (_context.Timer < 0.25f) return;
         _context.Timer = 0f;
 
         if (_context.Beaker == null || !EntityManager.EntityExists(_context.Beaker.Value))
@@ -129,8 +129,8 @@ public sealed class CheckNextPhaseState : ChemStateBase
 
         if (Math.Abs(currentVol - context.LastTotalAmountBefore) > 0.1f)
         {
-            context.StabilizationTimer += 0.5f;
-            if (context.StabilizationTimer < 2.0f) 
+            context.StabilizationTimer += 0.25f;
+            if (context.StabilizationTimer < 1.0f) 
             {
                 context.Logger.Info($"[WAIT] Stabilizing solution... ({context.LastTotalAmountBefore:F1}u -> {currentVol:F1}u)");
                 context.LastTotalAmountBefore = currentVol;
@@ -233,8 +233,8 @@ public sealed class WaitDispenserState : ChemStateBase
 
         if (context.Beaker == null || !context.Scanner.IsBeakerInsideMachine(context.Dispenser.Value, context.Beaker.Value)) 
         {
-            context.StabilizationTimer += 0.5f;
-            if (context.StabilizationTimer >= 2.0f)
+            context.StabilizationTimer += 0.25f;
+            if (context.StabilizationTimer >= 1.0f)
             {
                 context.Logger.Info($"[INFO] Insert beaker into {context.EntManager.GetComponent<MetaDataComponent>(context.Dispenser.Value).EntityName} for {firstR}...");
                 context.StabilizationTimer = 0f;
@@ -454,8 +454,8 @@ public sealed class WaitReactionState : ChemStateBase
         }
         else
         {
-            context.StabilizationTimer += 0.5f;
-            if (context.StabilizationTimer >= 2.0f)
+            context.StabilizationTimer += 0.25f;
+            if (context.StabilizationTimer >= 1.0f)
             {
                 context.Logger.Info($"[WAIT] Waiting for reaction {string.Join(", ", wPhase.WaitReagents)}... (Volume: {contents.Values.Sum():F1}u)");
                 context.StabilizationTimer = 0f;
