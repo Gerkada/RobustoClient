@@ -70,7 +70,7 @@ public sealed class RobustaPlayerListUpdaterSystem : LocalPlayerSystem
 
     }
 
-    public override void Update(float frameTime)
+    public override void FrameUpdate(float frameTime)
     {
         if (_nextUpdate is null)
             return;

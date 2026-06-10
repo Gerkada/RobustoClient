@@ -16,7 +16,7 @@ public sealed class RobustaVisualsSystem : EntitySystem
     private int _updateCounter = 0;
     private const int UpdateInterval = 15; // Update not every frame to save FPS
 
-    public override void Update(float frameTime)
+    public override void FrameUpdate(float frameTime)
     {
         _updateCounter++;
         if (_updateCounter < UpdateInterval)

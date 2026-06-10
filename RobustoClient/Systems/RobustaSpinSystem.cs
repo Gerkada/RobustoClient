@@ -18,7 +18,7 @@ public class RobustaSpinSystem : EntitySystem
     [Dependency] private readonly SharedTransformSystem _transform = default!;
     private float _lastDegrees;
 
-    public override void Update(float frameTime)
+    public override void FrameUpdate(float frameTime)
     {
         if (!_timing.IsFirstTimePredicted)
             return;

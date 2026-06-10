@@ -57,9 +57,9 @@ public sealed class RobustaAutoChemSystem : EntitySystem
         _context.Logger.Info("[AutoChem] Operation stopped.");
     }
 
-    public override void Update(float frameTime)
+    public override void FrameUpdate(float frameTime)
     {
-        base.Update(frameTime);
+        base.FrameUpdate(frameTime);
         if (CurrentState == IdleState.Instance || _context.CurrentPlan == null) return;
 
         _context.Timer += frameTime;
