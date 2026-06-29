@@ -12,6 +12,8 @@ using Content.Shared.Ghost;
 using Robust.Shared.Player; 
 using Content.Shared.PDA; 
 using Content.Shared.Access.Components; 
+using Content.Shared.Mind.Components;
+using Content.Shared.PAI;
 
 using Content.Shared.Hands.Components;
 using Content.Shared.Hands.EntitySystems;
@@ -56,11 +58,13 @@ public sealed class RobustaEspOverlay : Overlay
         // ==========================================
         // BLOCK 1: ALIVE PLAYERS
         // ==========================================
-        var query = _entMan.EntityQueryEnumerator<MobStateComponent, TransformComponent, MetaDataComponent>();
+        var query = _entMan.EntityQueryEnumerator<MobStateComponent, MindContainerComponent, TransformComponent, MetaDataComponent>();
         
-        while (query.MoveNext(out var uid, out var mob, out var xform, out var meta))
+        while (query.MoveNext(out var uid, out var mob, out var mind, out var xform, out var meta))
         {
             if (uid == localPlayer || xform.MapID != eyeMapId) continue;
+            if (!mind.HasMind) continue;
+            if (_entMan.HasComponent<PAIComponent>(uid)) continue;
 
             var worldPos = _xformSystem.GetWorldPosition(xform);
             var screenPos = args.ViewportControl?.WorldToScreen(worldPos);

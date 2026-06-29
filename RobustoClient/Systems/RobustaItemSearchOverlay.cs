@@ -8,6 +8,10 @@ using Robust.Shared.Enums;
 using Robust.Shared.GameObjects;
 using Robust.Shared.IoC;
 using Robust.Shared.Map;
+using Robust.Shared.Player;
+using Content.Shared.Inventory;
+using Content.Shared.PDA;
+using Content.Shared.Access.Components;
 
 namespace RobustoClient.Systems;
 
@@ -77,13 +81,23 @@ public sealed class RobustaItemSearchOverlay : Overlay
 
         // Line and text color (e.g., cyan)
         var color = Color.Cyan;
+        var offsets = new Dictionary<string, int>();
 
         foreach (var (uid, screenPos, name) in _cachedItems)
         {
+            // Group extremely close positions
+            string posKey = $"{MathF.Round(screenPos.X)},{MathF.Round(screenPos.Y)}";
+            if (!offsets.TryGetValue(posKey, out var count))
+                count = 0;
+
             // Draw line from local player to item
             args.ScreenHandle.DrawLine(localScreen.Value, screenPos, color);
-            // Draw item name
-            args.ScreenHandle.DrawString(_font, screenPos - new Vector2(0f, 10f), name, color);
+            
+            // Stack the text upwards (12 pixels per line)
+            var textPos = screenPos - new Vector2(0f, 10f + (count * 12f));
+            args.ScreenHandle.DrawString(_font, textPos, name, color);
+
+            offsets[posKey] = count + 1;
         }
     }
 
@@ -96,6 +110,7 @@ public sealed class RobustaItemSearchOverlay : Overlay
 
         try
         {
+            var invSystem = _entMan.System<InventorySystem>();
             var entities = _entityLookup.GetEntitiesIntersecting(mapId, worldViewport);
             foreach (var uid in entities)
             {
@@ -104,14 +119,54 @@ public sealed class RobustaItemSearchOverlay : Overlay
                     continue;
 
                 var name = meta.EntityName;
-                if (!name.ToLowerInvariant().Contains(queryLower))
+                string displayName = name;
+                bool match = name.ToLowerInvariant().Contains(queryLower);
+
+                // Check ckey / Actor session
+                if (!match && _entMan.TryGetComponent<ActorComponent>(uid, out var actor))
+                {
+                    match = actor.PlayerSession.Name.ToLowerInvariant().Contains(queryLower);
+                }
+
+                // Check Job Title
+                string jobTitle = "";
+                if (invSystem.TryGetSlotEntity(uid, "id", out var slotEnt) && slotEnt.HasValue)
+                {
+                    EntityUid? actualIdCard = slotEnt;
+                    if (_entMan.TryGetComponent<PdaComponent>(slotEnt.Value, out var pda))
+                        actualIdCard = pda.ContainedId;
+
+                    if (actualIdCard.HasValue && _entMan.TryGetComponent<IdCardComponent>(actualIdCard.Value, out var idCard))
+                    {
+                        jobTitle = idCard.LocalizedJobTitle ?? "";
+                        if (!match && jobTitle.ToLowerInvariant().Contains(queryLower))
+                        {
+                            match = true;
+                        }
+                    }
+                }
+
+                if (!match)
                     continue;
+
+                // Format display name for players
+                if (_entMan.HasComponent<ActorComponent>(uid) || !string.IsNullOrEmpty(jobTitle))
+                {
+                    string actorName = _entMan.TryGetComponent<ActorComponent>(uid, out var act) ? act.PlayerSession.Name : "";
+                    
+                    if (!string.IsNullOrEmpty(jobTitle) && !string.IsNullOrEmpty(actorName))
+                        displayName = $"[{jobTitle}] {name} (@{actorName})";
+                    else if (!string.IsNullOrEmpty(jobTitle))
+                        displayName = $"[{jobTitle}] {name}";
+                    else if (!string.IsNullOrEmpty(actorName))
+                        displayName = $"{name} (@{actorName})";
+                }
 
                 // Safe position retrieval even in containers
                 var worldPos = _transform.GetWorldPosition(xform);
                 var screenPos = _eyeManager.WorldToScreen(worldPos);
                 
-                _cachedItems.Add((uid, screenPos, name));
+                _cachedItems.Add((uid, screenPos, displayName));
             }
         }
         catch { /* Ignore search errors */ }
