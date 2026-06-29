@@ -18,6 +18,7 @@ public sealed class AutoChemContext
 
     public DispensePlan? CurrentPlan { get; set; }
     public EntityUid? Dispenser { get; set; }
+    public EntityUid? Heater { get; set; }
     public EntityUid? Beaker { get; set; }
 
     public float Timer { get; set; } = 0f;
@@ -63,6 +64,8 @@ public sealed class AutoChemContext
         LastReagentAmountBefore = 0f;
         LastReagentAdded = null;
         TargetProduct = null;
+        Dispenser = null;
+        Heater = null;
     }
 
     public void LogBeakerContents()
