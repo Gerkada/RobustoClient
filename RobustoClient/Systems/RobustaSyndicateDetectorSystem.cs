@@ -130,7 +130,7 @@ public sealed class RobustaSyndicateDetectorSystem : EntitySystem
         if (TryComp<ContrabandComponent>(item, out var contra) && contra.Severity == "Syndicate")
             return true;
 
-        if (_tagSystem.HasTag(item, "Syndicate") || _tagSystem.HasTag(item, "NuclearOperative"))
+        if (_tagSystem.HasTag(item, "Syndicate"))
             return true;
 
         if (TryComp<MetaDataComponent>(item, out var meta) && meta.EntityPrototype != null)
