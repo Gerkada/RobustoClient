@@ -53,6 +53,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
         CurrentState = IdleState.Instance;
         _context.CurrentPlan = null;
         _context.Dispenser = null;
+        _context.Heater = null;
         _context.Beaker = null;
         _context.Logger.Info("[AutoChem] Operation stopped.");
     }
@@ -222,7 +223,28 @@ public sealed class WaitDispenserState : ChemStateBase
     {
         if (context.CurrentPlan == null || context.DispenseQueue.Count == 0) return CheckNextPhaseState.Instance;
         var (firstR, firstAmt) = context.DispenseQueue.Peek();
-        context.Dispenser = context.Scanner.FindMachineWithReagent(firstR);
+
+        var dispensers = context.Scanner.FindMachinesWithReagent(firstR);
+        EntityUid? chosen = null;
+
+        if (context.Beaker != null)
+        {
+            foreach (var d in dispensers)
+            {
+                if (context.Scanner.IsBeakerInsideMachine(d, context.Beaker.Value))
+                {
+                    chosen = d;
+                    break;
+                }
+            }
+        }
+        
+        if (chosen == null && dispensers.Count > 0)
+        {
+            chosen = dispensers[0];
+        }
+
+        context.Dispenser = chosen;
         
         if (context.Dispenser == null) 
         { 
@@ -257,6 +279,15 @@ public sealed class DispensingState : ChemStateBase
     public override IChemState Execute(float frameTime, AutoChemContext context)
     {
         if (context.Beaker == null || context.Dispenser == null || context.CurrentPlan == null) return CheckNextPhaseState.Instance;
+
+        if (!context.EntManager.EntityExists(context.Dispenser.Value) || 
+            !context.Scanner.IsBeakerInsideMachine(context.Dispenser.Value, context.Beaker.Value))
+        {
+            context.Logger.Warning("[WARN] Beaker removed or dispenser invalid! Returning to discovery.");
+            context.Dispenser = null;
+            return WaitDispenserState.Instance;
+        }
+
         if (context.DispenseQueue.Count > 0)
         {
             var (reagentId, remaining) = context.DispenseQueue.Peek();
@@ -479,8 +510,27 @@ public sealed class WaitHeaterState : ChemStateBase
     public override IChemState Execute(float frameTime, AutoChemContext context)
     {
         if (context.Beaker == null) return this;
-        var heater = context.Scanner.FindMachine("heater");
-        if (heater != null && context.Scanner.IsBeakerInsideMachine(heater.Value, context.Beaker.Value)) 
+        
+        var heaters = context.Scanner.FindMachines("heater");
+        EntityUid? chosen = null;
+
+        foreach (var h in heaters)
+        {
+            if (context.Scanner.IsBeakerInsideMachine(h, context.Beaker.Value))
+            {
+                chosen = h;
+                break;
+            }
+        }
+
+        if (chosen == null && heaters.Count > 0)
+        {
+            chosen = heaters[0];
+        }
+
+        context.Heater = chosen;
+
+        if (context.Heater != null && context.Scanner.IsBeakerInsideMachine(context.Heater.Value, context.Beaker.Value)) 
         {
             return HeatingState.Instance;
         }
@@ -497,7 +547,7 @@ public sealed class HeatingState : ChemStateBase
 
     public override IChemState Execute(float frameTime, AutoChemContext context)
     {
-        if (context.Beaker == null || context.CurrentPlan == null || context.CurrentPlan.PhaseQueue.Count == 0) return this;
+        if (context.Beaker == null || context.CurrentPlan == null || context.CurrentPlan.PhaseQueue.Count == 0 || context.Heater == null) return this;
         var hPhase = context.CurrentPlan.PhaseQueue.Peek();
         var t = context.Scanner.GetBeakerTemperature(context.Beaker.Value) ?? context.LastNetworkTemp;
         
@@ -510,10 +560,11 @@ public sealed class HeatingState : ChemStateBase
             }
         }
 
-        var heaterNow = context.Scanner.FindMachine("heater");
-        if (heaterNow == null || !context.Scanner.IsBeakerInsideMachine(heaterNow.Value, context.Beaker.Value))
+        if (!context.EntManager.EntityExists(context.Heater.Value) || 
+            !context.Scanner.IsBeakerInsideMachine(context.Heater.Value, context.Beaker.Value))
         {
             context.Logger.Info("[DEBUG] Beaker removed from heater.");
+            context.Heater = null;
             if (context.TargetTempReached)
             {
                 context.CurrentPlan.PhaseQueue.Dequeue();

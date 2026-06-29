@@ -73,8 +73,13 @@ public sealed class RobustaWorldScanner : EntitySystem
 
     public EntityUid? FindMachine(string keyword)
     {
+        return FindMachines(keyword).FirstOrDefault();
+    }
+
+    public List<EntityUid> FindMachines(string keyword)
+    {
         var localPlayer = _player.LocalSession?.AttachedEntity;
-        if (localPlayer == null) return null;
+        if (localPlayer == null) return new List<EntityUid>();
 
         var playerPos = _transform.GetMapCoordinates(localPlayer.Value);
         var entities = _lookup.GetEntitiesInRange(playerPos, InteractionRange, LookupFlags.Uncontained);
@@ -88,6 +93,7 @@ public sealed class RobustaWorldScanner : EntitySystem
             keywords.Add("stove");
         }
 
+        var validMachines = new List<EntityUid>();
         foreach (var ent in entities)
         {
             var meta = MetaData(ent);
@@ -95,9 +101,14 @@ public sealed class RobustaWorldScanner : EntitySystem
             var name = meta.EntityName.ToLower();
 
             if (keywords.Any(k => proto.Contains(k) || name.Contains(k)))
-                return ent;
+                validMachines.Add(ent);
         }
-        return null;
+
+        return validMachines.OrderBy(m => {
+            var mPos = _transform.GetMapCoordinates(m);
+            if (mPos.MapId != playerPos.MapId) return float.MaxValue;
+            return (mPos.Position - playerPos.Position).LengthSquared();
+        }).ToList();
     }
 
     public EntityUid? GetBeakerInHand()
@@ -141,12 +152,19 @@ public sealed class RobustaWorldScanner : EntitySystem
 
     public EntityUid? FindMachineWithReagent(string reagentId)
     {
+        return FindMachinesWithReagent(reagentId).FirstOrDefault();
+    }
+
+    public List<EntityUid> FindMachinesWithReagent(string reagentId)
+    {
         var localPlayer = _player.LocalSession?.AttachedEntity;
-        if (localPlayer == null) return null;
+        if (localPlayer == null) return new List<EntityUid>();
 
         var playerPos = _transform.GetMapCoordinates(localPlayer.Value);
         // Increased radius to 15, as chem labs can be large
         var entities = _lookup.GetEntitiesInRange(playerPos, 15f, LookupFlags.Uncontained);
+        
+        var validMachines = new List<EntityUid>();
 
         foreach (var ent in entities)
         {
@@ -177,10 +195,15 @@ public sealed class RobustaWorldScanner : EntitySystem
 
             if (isDispenser && FindJugLocation(ent, reagentId) != null) 
             {
-                return ent;
+                validMachines.Add(ent);
             }
         }
-        return null;
+        
+        return validMachines.OrderBy(m => {
+            var mPos = _transform.GetMapCoordinates(m);
+            if (mPos.MapId != playerPos.MapId) return float.MaxValue;
+            return (mPos.Position - playerPos.Position).LengthSquared();
+        }).ToList();
     }
 
     private void ForEachSolution(EntityUid beakerUid, Action<object> action)
