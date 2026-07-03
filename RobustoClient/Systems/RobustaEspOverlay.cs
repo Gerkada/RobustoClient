@@ -114,7 +114,23 @@ public sealed class RobustaEspOverlay : Overlay
                 var heldItems = new List<string>();
                 foreach (var handName in hands.Hands.Keys)
                 {
-                    var held = _handsSystem.GetHeldItem((uid, hands), handName);
+                    EntityUid? held = null;
+                    var type = _handsSystem.GetType();
+                    
+                    var method3 = type.GetMethod("GetHeldItem", new[] { typeof(Entity<HandsComponent>), typeof(string), typeof(bool) });
+                    if (method3 != null)
+                    {
+                        held = (EntityUid?)method3.Invoke(_handsSystem, new object?[] { new Entity<HandsComponent>(uid, hands), handName, false });
+                    }
+                    else
+                    {
+                        var method2 = type.GetMethod("GetHeldItem", new[] { typeof(Entity<HandsComponent>), typeof(string) });
+                        if (method2 != null)
+                        {
+                            held = (EntityUid?)method2.Invoke(_handsSystem, new object?[] { new Entity<HandsComponent>(uid, hands), handName });
+                        }
+                    }
+
                     if (held != null && _entMan.TryGetComponent<MetaDataComponent>(held.Value, out var heldMeta))
                     {
                         heldItems.Add(heldMeta.EntityName);
