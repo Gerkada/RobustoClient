@@ -10,6 +10,8 @@ jobs:
   brew:
     name: Make Robusta Coffee
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Harvest coffee beans (Download sources)
@@ -17,7 +19,7 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Setup Roasting Machine (.NET 9.0)
+    - name: Setup Roasting Machine (.NET 10.0)
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '10.0.x'
@@ -33,5 +35,6 @@ jobs:
       with:
         files: ./RobustoClient/bin/Release/net10.0/RobustoClient.dll
         generate_release_notes: true
+        tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'rolling-release' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

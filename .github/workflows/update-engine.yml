@@ -10,8 +10,9 @@ jobs:
   update-submodule:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Даем боту права на пуш коммитов
-      
+      contents: write
+      actions: write 
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -20,6 +21,8 @@ jobs:
           ref: main
 
       - name: Update space-station-14 submodule
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Configure the bot's name for commits
           git config user.name "github-actions[bot]"
@@ -28,12 +31,15 @@ jobs:
           # Download the latest version
           git submodule update --remote space-station-14
           
-          # Check for changes. If there are any, commit and push.
+          # Check for changes. If there are any, commit, push, and BREW COFFEE.
           if [[ -n $(git status -s space-station-14) ]]; then
             git add space-station-14
             git commit -m "chore: update space-station-14 submodule to latest upstream"
             git push
             echo "Submodule successfully updated and pushed."
+            
+            gh workflow run release.yml --ref main 
+            
           else
             echo "Engine is already up to date. Nothing to commit."
           fi
