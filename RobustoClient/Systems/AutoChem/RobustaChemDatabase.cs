@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Content.Shared.Chemistry.Reaction;
@@ -34,11 +35,14 @@ public static class RobustaChemDatabase
 
             foreach (var product in reaction.Products.Keys)
             {
+                // Cast ProtoId to string as the dictionary expects string keys
+                string productId = (string)product;
+
                 // Saving the "best" recipe for this product
-                if (!RecipesByProduct.TryGetValue(product, out var existing) || 
+                if (!RecipesByProduct.TryGetValue(productId, out var existing) || 
                     currentScore > CalculateRecipeScore(existing))
                 {
-                    RecipesByProduct[product] = reaction;
+                    RecipesByProduct[productId] = reaction;
                     recipeCount++;
                 }
             }
@@ -58,12 +62,18 @@ public static class RobustaChemDatabase
         
         foreach (var reactant in reaction.Reactants.Keys)
         {
-            if (badReagents.Any(r => reactant.Contains(r, StringComparison.OrdinalIgnoreCase)))
+            // Cast ProtoId to string for string comparisons
+            string reactantId = (string)reactant;
+
+            if (badReagents.Any(r => reactantId.Contains(r, StringComparison.OrdinalIgnoreCase)))
                 score -= 2000; // Doubled the penalty
         }
 
+        // Cast reaction.ID to string
+        string reactionId = (string)reaction.ID;
+
         // Penalty for dirty reaction IDs
-        if (reaction.ID.Contains("Blood") || reaction.ID.Contains("Urine") || reaction.ID.Contains("Vomit"))
+        if (reactionId.Contains("Blood") || reactionId.Contains("Urine") || reactionId.Contains("Vomit"))
             score -= 2000;
 
         // Heating penalty (prefer mixing over heating)
@@ -74,7 +84,10 @@ public static class RobustaChemDatabase
         var commonReagents = new[] { "Hydrogen", "Nitrogen", "Oxygen", "Carbon", "Iron", "Iodine", "Phosphorus" };
         foreach (var reactant in reaction.Reactants.Keys)
         {
-            if (commonReagents.Any(r => reactant.Equals(r, StringComparison.OrdinalIgnoreCase)))
+            // Cast ProtoId to string for string comparisons
+            string reactantId = (string)reactant;
+
+            if (commonReagents.Any(r => reactantId.Equals(r, StringComparison.OrdinalIgnoreCase)))
                 score += 20;
         }
 
