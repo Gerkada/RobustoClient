@@ -1,4 +1,3 @@
-using RobustoClient.Components;
 using Content.Client.Administration.Systems;
 using Content.Shared.Mobs.Components;
 using Content.Shared.Verbs;
@@ -9,9 +8,13 @@ namespace RobustoClient.Systems;
 public class RobustaFriendSystem : EntitySystem
 {
     [Dependency] private readonly AdminSystem _adminSystem = default!;
+    
+    // Local cache for friends to completely avoid component serialization crashes
+    private readonly HashSet<EntityUid> _friends = new();
 
     public override void Initialize()
     {
+        base.Initialize();
         SubscribeLocalEvent<GetVerbsEvent<Verb>>(AddFriendVerb);
     }
 
@@ -19,27 +22,33 @@ public class RobustaFriendSystem : EntitySystem
     {
         if (!HasComp<MobStateComponent>(ev.Target))
             return;
+
         Verb verb;
-        if (HasComp<RobustaFriendComponent>(ev.Target))
+        if (_friends.Contains(ev.Target))
+        {
             verb = new Verb
             {
                 Text = "Unfriend",
-                Act = () => RemComp<RobustaFriendComponent>(ev.Target),
+                Act = () => _friends.Remove(ev.Target),
                 ClientExclusive = true
             };
+        }
         else
+        {
             verb = new Verb
             {
                 Text = "Friend",
-                Act = () => AddComp(ev.Target, new RobustaFriendComponent { NetSyncEnabled = false }),
+                Act = () => _friends.Add(ev.Target),
                 ClientExclusive = true
             };
+        }
         ev.Verbs.Add(verb);
     }
 
     public bool IsFriend(Entity<ActorComponent?> ent)
     {
-        if (HasComp<RobustaFriendComponent>(ent))
+        // Check local friend cache first
+        if (_friends.Contains(ent))
             return true;
             
         // Pass 'false' as the third argument to disable console error spam
