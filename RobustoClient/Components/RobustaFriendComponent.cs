@@ -1,4 +1,11 @@
+using Robust.Shared.GameObjects;
+
 namespace RobustoClient.Components;
 
 [RegisterComponent]
-public class RobustaFriendComponent : Component;
+public sealed partial class RobustaFriendComponent : Component
+{
+    public RobustaFriendComponent()
+    {
+    }
+}
