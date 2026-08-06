@@ -3,12 +3,12 @@ name: Brewing RobustoClient Release
 on:
   push:
     tags:
-      - 'v*' # We start brewing when a new version tag appears (for example, v1.0.0)
-  workflow_dispatch: # Button for manual start of the coffee machine
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   brew:
-    name: Make Robusta Coffee
+    name: Make Robusto Coffee
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -26,6 +26,9 @@ jobs:
 
     - name: Roast the beans (Restore dependencies)
       run: dotnet restore RobustoClient.sln
+
+    - name: Build Client Injectors
+      run: dotnet build space-station-14/RobustToolbox/Robust.Client.Injectors/Robust.Client.Injectors.csproj -c Release
         
     - name: Brew the strongest espresso (Build Release)
       run: dotnet build RobustoClient/RobustoClient.csproj -c Release
