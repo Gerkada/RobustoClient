@@ -9,6 +9,7 @@ using Robust.Client.Player;
 using Robust.Client.ResourceManagement;
 using Content.Shared.Inventory;
 using Content.Shared.Ghost;
+using Content.Shared.Ghost.Components;
 using Robust.Shared.Player; 
 using Content.Shared.PDA; 
 using Content.Shared.Access.Components; 
