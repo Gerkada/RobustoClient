@@ -73,7 +73,37 @@ public class RobustaAimSystem : EntitySystem
             }
         }
     }
+    // --- Utility Methods ---
+    public AimOutput? GetAimOutputFromEnt(EntityUid ent)
+    {
+        if (!Exists(ent)) return null;
+        if (!FilterEntity(ent, Transform(ent))) return null;
 
+        var transform = Transform(ent);
+        var mapCoords = _transform.GetMapCoordinates(transform);
+
+        Vector2? velocity = null;
+        if (TryComp<PhysicsComponent>(ent, out var phys))
+            velocity = phys.LinearVelocity;
+
+        return new AimOutput { Entity = ent, Position = mapCoords, Velocity = velocity };
+    }
+    public bool IsInRange(EntityUid ent, EntityUid target, float range)
+    {
+        if (!Exists(ent) || !Exists(target)) return false; // got deleted o algo
+
+        var entTransform = Transform(ent);
+        var targetTransform = Transform(target);
+        if (entTransform.MapID != targetTransform.MapID) return false; // different maps
+
+        var entMapPos = _transform.GetMapCoordinates(entTransform);
+        var targetMapPos = _transform.GetMapCoordinates(targetTransform);
+
+        var distance = (entMapPos.Position - targetMapPos.Position).Length();
+        return distance <= range;
+    }
+
+    // --- Target Methods ---
     public AimOutput? GetSilentAimTarget(ScreenCoordinates mousePos, float bulletSpeed)
     {
         if (!RobustaConfig.RangedAimbotEnabled) return null;
