@@ -77,6 +77,7 @@ public class RobustaAimSystem : EntitySystem
     public AimOutput? GetAimOutputFromEnt(EntityUid ent)
     {
         if (!Exists(ent)) return null;
+        if (!FilterEntity(ent, Transform(ent))) return null;
 
         var transform = Transform(ent);
         var mapCoords = _transform.GetMapCoordinates(transform);
@@ -274,6 +275,7 @@ public class RobustaAimSystem : EntitySystem
 
         return new AimOutput { Entity = closestEntity.Value, Position = closestCoordinates.Value, Velocity = velocity };
     }
+
     private bool FilterEntity(EntityUid uid, TransformComponent transform)
     {
         var localPlayer = _player.LocalSession?.AttachedEntity;

@@ -28,14 +28,14 @@ public class ClientHeavyAttackPatch
         _aim ??= _entMan.System<RobustaAimSystem>();
 
         AimOutput? output = null;
-        if( _aim.LockedTarget.HasValue && _aim.IsInRange(user, _aim.LockedTarget.Value, component.Range) )
+        if (_aim.LockedTarget.HasValue && _aim.IsInRange(user, _aim.LockedTarget.Value, component.Range))
         {
-           // Prioritize locked target over closest
-           output = _aim.GetAimOutputFromEnt(_aim.LockedTarget.Value);
+            output = _aim.GetAimOutputFromEnt(_aim.LockedTarget.Value);
         }
-        else
+
+        if (output == null)
         {
-           output = _aim.GetClosestToEntInRange(user, component.Range, new HashSet<EntityUid> { user }); 
+            output = _aim.GetClosestToEntInRange(user, component.Range, new HashSet<EntityUid> { user }); 
         }
 
         if (output == null)

@@ -29,14 +29,15 @@ public class ClientLightAttackPatch
         _aim ??= _entMan.System<RobustaAimSystem>();
 
         AimOutput? output = null;
-        if( _aim.LockedTarget.HasValue && _aim.IsInRange(attacker, _aim.LockedTarget.Value, meleeComponent.Range) )
+
+        if (_aim.LockedTarget.HasValue && _aim.IsInRange(attacker, _aim.LockedTarget.Value, meleeComponent.Range))
         {
-           // Prioritize locked target over closest
-           output = _aim.GetAimOutputFromEnt(_aim.LockedTarget.Value);
+            output = _aim.GetAimOutputFromEnt(_aim.LockedTarget.Value);
         }
-        else
+
+        if (output == null)
         {
-           output = _aim.GetClosestToEntInRange(attacker, meleeComponent.Range, new HashSet<EntityUid> { attacker }); 
+            output = _aim.GetClosestToEntInRange(attacker, meleeComponent.Range, new HashSet<EntityUid> { attacker }); 
         }
 
         if (output == null)
