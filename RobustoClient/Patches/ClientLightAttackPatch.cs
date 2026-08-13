@@ -28,10 +28,19 @@ public class ClientLightAttackPatch
         _entMan ??= IoCManager.Resolve<IEntityManager>();
         _aim ??= _entMan.System<RobustaAimSystem>();
 
-        // Search for target in range
-        var output = _aim.GetClosestToEntInRange(attacker, meleeComponent.Range, new HashSet<EntityUid> { attacker });
-        
-        if (output == null) return;
+        AimOutput? output = null;
+        if( _aim.LockedTarget.HasValue && _aim.IsInRange(attacker, _aim.LockedTarget.Value, meleeComponent.Range) )
+        {
+           // Prioritize locked target over closest
+           output = _aim.GetAimOutputFromEnt(_aim.LockedTarget.Value);
+        }
+        else
+        {
+           output = _aim.GetClosestToEntInRange(attacker, meleeComponent.Range, new HashSet<EntityUid> { attacker }); 
+        }
+
+        if (output == null)
+            return;
 
         // 1. Replace global mouse position with ideal enemy coordinates.
         mousePos = output.Value.Position;

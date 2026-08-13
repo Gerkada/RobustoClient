@@ -27,10 +27,19 @@ public class ClientHeavyAttackPatch
         _entMan ??= IoCManager.Resolve<IEntityManager>();
         _aim ??= _entMan.System<RobustaAimSystem>();
 
-        // Look for target strictly within weapon range
-        var output = _aim.GetClosestToEntInRange(user, component.Range, new HashSet<EntityUid> { user });
-        
-        if (output == null) return;
+        AimOutput? output = null;
+        if( _aim.LockedTarget.HasValue && _aim.IsInRange(user, _aim.LockedTarget.Value, component.Range) )
+        {
+           // Prioritize locked target over closest
+           output = _aim.GetAimOutputFromEnt(_aim.LockedTarget.Value);
+        }
+        else
+        {
+           output = _aim.GetClosestToEntInRange(user, component.Range, new HashSet<EntityUid> { user }); 
+        }
+
+        if (output == null)
+            return;
 
         // MELEE GOD MODE:
         // Completely ignore where the mouse was clicked (floor, wall, etc.).

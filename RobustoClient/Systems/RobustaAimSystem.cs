@@ -73,7 +73,36 @@ public class RobustaAimSystem : EntitySystem
             }
         }
     }
+    // --- Utility Methods ---
+    public AimOutput? GetAimOutputFromEnt(EntityUid ent)
+    {
+        if (!Exists(ent)) return null;
 
+        var transform = Transform(ent);
+        var mapCoords = _transform.GetMapCoordinates(transform);
+
+        Vector2? velocity = null;
+        if (TryComp<PhysicsComponent>(ent, out var phys))
+            velocity = phys.LinearVelocity;
+
+        return new AimOutput { Entity = ent, Position = mapCoords, Velocity = velocity };
+    }
+    public bool IsInRange(EntityUid ent, EntityUid target, float range)
+    {
+        if (!Exists(ent) || !Exists(target)) return false; // got deleted o algo
+
+        var entTransform = Transform(ent);
+        var targetTransform = Transform(target);
+        if (entTransform.MapID != targetTransform.MapID) return false; // different maps
+
+        var entMapPos = _transform.GetMapCoordinates(entTransform);
+        var targetMapPos = _transform.GetMapCoordinates(targetTransform);
+
+        var distance = (entMapPos.Position - targetMapPos.Position).Length();
+        return distance <= range;
+    }
+
+    // --- Target Methods ---
     public AimOutput? GetSilentAimTarget(ScreenCoordinates mousePos, float bulletSpeed)
     {
         if (!RobustaConfig.RangedAimbotEnabled) return null;
@@ -212,23 +241,6 @@ public class RobustaAimSystem : EntitySystem
         var mapCords = _transform.GetMapCoordinates(Transform(ent));
         var entitiesInRange = _lookup.GetEntitiesInRange(mapCords, range, LookupFlags.Uncontained);
         if (exclude != null) entitiesInRange.ExceptWith(exclude);
-
-        if (_lockedTarget.HasValue)
-        {
-            var lockTransform = Transform(_lockedTarget.Value);
-            var lockedPos = _transform.GetMapCoordinates(lockTransform);
-            var distance = (mapCords.Position - lockedPos.Position).Length();
-            if (distance <= range)
-            {
-                return new AimOutput 
-                { 
-                    Entity = _lockedTarget.Value, 
-                    Position = new MapCoordinates(lockedPos.Position, lockTransform.MapID),
-                    Velocity = null 
-                };
-            }
-        }
-
         return GetClosestTo(mapCords, entitiesInRange);
     }
 
@@ -262,7 +274,6 @@ public class RobustaAimSystem : EntitySystem
 
         return new AimOutput { Entity = closestEntity.Value, Position = closestCoordinates.Value, Velocity = velocity };
     }
-
     private bool FilterEntity(EntityUid uid, TransformComponent transform)
     {
         var localPlayer = _player.LocalSession?.AttachedEntity;
