@@ -23,6 +23,12 @@ public sealed partial class CheatMenuWindow : RobustaWindow
         
         TitleLabel.Text = "ROBUSTA CLIENT | PREMIUM";
         
+        // Manually add style classes to work around a XAML serializer crash on older versions.
+        TabCombat.AddStyleClass("ButtonSquare");
+        TabVisuals.AddStyleClass("ButtonSquare");
+        TabUtility.AddStyleClass("ButtonSquare");
+        Discord.AddStyleClass("ButtonColorRed");
+        
         // Sync with config
         Ranged.Pressed = RobustaConfig.RangedAimbotEnabled;
         Melee.Pressed = RobustaConfig.MeleeAimbotEnabled;
@@ -84,22 +90,22 @@ public sealed partial class CheatMenuWindow : RobustaWindow
 
     private void UpdatePingButtons()
     {
-        // Remove all possible color classes before adding the required one
+        // Safe style removal for cross-version compatibility
         string[] colors = { "ButtonColorGreen", "ButtonColorRed" };
         foreach (var color in colors)
         {
-            PingLocal.StyleClasses.Remove(color);
-            PingStable.StyleClasses.Remove(color);
-            PingLaggy.StyleClasses.Remove(color);
-            PingAuto.StyleClasses.Remove(color);
+            PingLocal.RemoveStyleClass(color);
+            PingStable.RemoveStyleClass(color);
+            PingLaggy.RemoveStyleClass(color);
+            PingAuto.RemoveStyleClass(color);
         }
 
         switch (RobustaConfig.CurrentPingMode)
         {
-            case RobustaConfig.PingMode.Local: PingLocal.StyleClasses.Add("ButtonColorGreen"); break;
-            case RobustaConfig.PingMode.Stable: PingStable.StyleClasses.Add("ButtonColorGreen"); break;
-            case RobustaConfig.PingMode.Laggy: PingLaggy.StyleClasses.Add("ButtonColorGreen"); break;
-            case RobustaConfig.PingMode.Auto: PingAuto.StyleClasses.Add("ButtonColorGreen"); break;
+            case RobustaConfig.PingMode.Local: PingLocal.AddStyleClass("ButtonColorGreen"); break;
+            case RobustaConfig.PingMode.Stable: PingStable.AddStyleClass("ButtonColorGreen"); break;
+            case RobustaConfig.PingMode.Laggy: PingLaggy.AddStyleClass("ButtonColorGreen"); break;
+            case RobustaConfig.PingMode.Auto: PingAuto.AddStyleClass("ButtonColorGreen"); break;
         }
     }
 
@@ -109,13 +115,14 @@ public sealed partial class CheatMenuWindow : RobustaWindow
         VisualsSection.Visible = (section == VisualsSection);
         UtilitySection.Visible = (section == UtilitySection);
         
-        // Optional: Update button styles to show active tab
-        TabCombat.StyleClasses.Remove("ButtonColorGreen");
-        TabVisuals.StyleClasses.Remove("ButtonColorGreen");
-        TabUtility.StyleClasses.Remove("ButtonColorGreen");
+        // Safe style removal
+        TabCombat.RemoveStyleClass("ButtonColorGreen");
+        TabVisuals.RemoveStyleClass("ButtonColorGreen");
+        TabUtility.RemoveStyleClass("ButtonColorGreen");
 
-        if (section == CombatSection) TabCombat.StyleClasses.Add("ButtonColorGreen");
-        if (section == VisualsSection) TabVisuals.StyleClasses.Add("ButtonColorGreen");
-        if (section == UtilitySection) TabUtility.StyleClasses.Add("ButtonColorGreen");
+        // Safe style addition
+        if (section == CombatSection) TabCombat.AddStyleClass("ButtonColorGreen");
+        if (section == VisualsSection) TabVisuals.AddStyleClass("ButtonColorGreen");
+        if (section == UtilitySection) TabUtility.AddStyleClass("ButtonColorGreen");
     }
 }

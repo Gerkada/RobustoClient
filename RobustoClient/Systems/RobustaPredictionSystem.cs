@@ -18,6 +18,10 @@ public class RobustaPredictionSystem : EntitySystem
     [Dependency] private readonly SharedPhysicsSystem _physics = default!;
     [Dependency] private readonly INetManager _net = default!;
 
+    private bool _mobStateReflected;
+    private System.Reflection.PropertyInfo? _mobStateProp;
+    private System.Reflection.FieldInfo? _mobStateField;
+
     private float GetPingSeconds()
     {
         switch (RobustaConfig.CurrentPingMode)
@@ -55,8 +59,25 @@ public class RobustaPredictionSystem : EntitySystem
         catch 
         {
             bool isLying = false;
-            if (TryComp<MobStateComponent>(target, out var state) && state.CurrentState == MobState.Critical) 
-                isLying = true;
+            if (TryComp<MobStateComponent>(target, out var state))
+            {
+                if (!_mobStateReflected)
+                {
+                    var type = state.GetType();
+                    _mobStateProp = type.GetProperty("CurrentState");
+                    _mobStateField = type.GetField("CurrentState");
+                    _mobStateReflected = true;
+                }
+
+                object? stateVal = null;
+                if (_mobStateProp != null)
+                    stateVal = _mobStateProp.GetValue(state);
+                else if (_mobStateField != null)
+                    stateVal = _mobStateField.GetValue(state);
+
+                if (stateVal != null && stateVal.ToString() == "Critical")
+                    isLying = true;
+            }
 
             if (isLying) 
             {

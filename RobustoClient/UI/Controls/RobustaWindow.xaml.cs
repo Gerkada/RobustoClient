@@ -15,6 +15,9 @@ public partial class RobustaWindow : BaseWindow
     public RobustaWindow()
     {
         RobustXamlLoader.Load(this);
+        
+        CloseButton.AddStyleClass("windowCloseButton");
+        
         CloseButton.OnPressed += CloseButtonPressed;
         XamlChildren = ContentsContainer.Children;
     }
