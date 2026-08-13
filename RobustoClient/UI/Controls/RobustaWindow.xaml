@@ -17,7 +17,7 @@
                 <Label HorizontalExpand="true" Name="TitleLabel" 
                        Text="ROBUSTA CLIENT | PREMIUM" VAlign="Center" 
                        FontColorOverride="#CDD6F4" />
-                <TextureButton Name="CloseButton" StyleClasses="windowCloseButton" VerticalAlignment="Center" Margin="0 0 5 0"/>
+                <TextureButton Name="CloseButton" VerticalAlignment="Center" Margin="0 0 5 0"/>
             </BoxContainer>
         </PanelContainer>
         <Control Access="Public" Name="ContentsContainer" VerticalExpand="true" />

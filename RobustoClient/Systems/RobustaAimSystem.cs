@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Numerics;
+using System.Reflection;
 using Content.Shared.Hands.Components;
 using Content.Shared.Mobs;
 using Content.Shared.Mobs.Components;
@@ -28,6 +29,11 @@ public class RobustaAimSystem : EntitySystem
 
     private EntityUid? _lockedTarget;
     public EntityUid? LockedTarget => _lockedTarget;
+
+    // --- Cache for mob state reflection ---
+    private PropertyInfo? _mobStateProp;
+    private FieldInfo? _mobStateField;
+    private bool _mobStateReflected;
 
     public override void FrameUpdate(float frameTime)
     {
@@ -263,7 +269,30 @@ public class RobustaAimSystem : EntitySystem
         if (localPlayer == null) return false;
         if (transform.MapID != Transform(localPlayer.Value).MapID) return false;
         if (!TryComp<MobStateComponent>(uid, out var state)) return false;
-        if (state.CurrentState == MobState.Dead || state.CurrentState == MobState.Invalid) return false;
+
+        // Dynamic mob state lookup for cross-version compatibility
+        if (!_mobStateReflected)
+        {
+            var type = state.GetType();
+            _mobStateProp = type.GetProperty("CurrentState");
+            _mobStateField = type.GetField("CurrentState");
+            _mobStateReflected = true;
+        }
+
+        object? stateVal = null;
+        if (_mobStateProp != null)
+            stateVal = _mobStateProp.GetValue(state);
+        else if (_mobStateField != null)
+            stateVal = _mobStateField.GetValue(state);
+
+        if (stateVal != null)
+        {
+            var stateStr = stateVal.ToString();
+            // We cut off dead and invalid entities by the string name of the enum
+            if (stateStr == "Dead" || stateStr == "Invalid") 
+                return false;
+        }
+
         if (_friend != null && _friend.IsFriend(uid)) return false;
         return true;
     }

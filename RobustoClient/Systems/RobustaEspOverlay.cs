@@ -8,8 +8,6 @@ using Content.Shared.Mobs.Components;
 using Robust.Client.Player;
 using Robust.Client.ResourceManagement;
 using Content.Shared.Inventory;
-using Content.Shared.Ghost;
-using Content.Shared.Ghost.Components;
 using Robust.Shared.Player; 
 using Content.Shared.PDA; 
 using Content.Shared.Access.Components; 
@@ -20,6 +18,7 @@ using Content.Shared.Hands.Components;
 using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Mobs.Systems;
 using Content.Shared.Mobs;
+using System.Collections.Generic; // Added for List
 
 namespace RobustoClient.Systems;
 
@@ -31,6 +30,11 @@ public sealed class RobustaEspOverlay : Overlay
     private readonly SharedTransformSystem _xformSystem;
     private readonly InventorySystem _invSystem;
     private readonly SharedHandsSystem _handsSystem;
+    private readonly IComponentFactory _compFactory;
+
+    private bool _mindReflected;
+    private System.Reflection.PropertyInfo? _mindProp;
+    private System.Reflection.FieldInfo? _mindField;
 
     public override OverlaySpace Space => OverlaySpace.ScreenSpace;
 
@@ -38,6 +42,7 @@ public sealed class RobustaEspOverlay : Overlay
     {
         _entMan = IoCManager.Resolve<IEntityManager>();
         _player = IoCManager.Resolve<IPlayerManager>();
+        _compFactory = IoCManager.Resolve<IComponentFactory>();
         _xformSystem = _entMan.System<SharedTransformSystem>();
         _invSystem = _entMan.System<InventorySystem>();
         _handsSystem = _entMan.System<SharedHandsSystem>();
@@ -64,7 +69,23 @@ public sealed class RobustaEspOverlay : Overlay
         while (query.MoveNext(out var uid, out var mob, out var mind, out var xform, out var meta))
         {
             if (uid == localPlayer || xform.MapID != eyeMapId) continue;
-            if (!mind.HasMind) continue;
+            
+            if (!_mindReflected)
+            {
+                var type = mind.GetType();
+                _mindProp = type.GetProperty("HasMind");
+                _mindField = type.GetField("HasMind");
+                _mindReflected = true;
+            }
+
+            bool hasMind = false;
+            if (_mindProp != null)
+                hasMind = (bool)(_mindProp.GetValue(mind) ?? false);
+            else if (_mindField != null)
+                hasMind = (bool)(_mindField.GetValue(mind) ?? false);
+
+            if (!hasMind) continue;
+            
             if (_entMan.HasComponent<PAIComponent>(uid)) continue;
 
             var worldPos = _xformSystem.GetWorldPosition(xform);
@@ -174,12 +195,22 @@ public sealed class RobustaEspOverlay : Overlay
         }
 
         // ==========================================
-        // BLOCK 2: ADMINS AND GHOSTS
+        // BLOCK 2: ADMINS AND GHOSTS (DYNAMIC LOOKUP)
         // ==========================================
-        var ghostQuery = _entMan.EntityQueryEnumerator<GhostComponent, TransformComponent, MetaDataComponent>();
-        while (ghostQuery.MoveNext(out var uid, out var ghost, out var xform, out var meta))
+        
+        // Dynamically get the Ghost component type to avoid TypeLoadException on older game versions
+        if (!_compFactory.TryGetRegistration("Ghost", out var ghostRegistration))
+            return;
+            
+        var ghostType = ghostRegistration.Type;
+        
+        var allEntities = _entMan.EntityQueryEnumerator<TransformComponent, MetaDataComponent>();
+        while (allEntities.MoveNext(out var uid, out var xform, out var meta))
         {
             if (uid == localPlayer || xform.MapID != eyeMapId) continue;
+            
+            // Check if entity has the dynamically resolved Ghost component
+            if (!_entMan.HasComponent(uid, ghostType)) continue;
 
             var worldPos = _xformSystem.GetWorldPosition(xform);
             var screenPos = args.ViewportControl?.WorldToScreen(worldPos);

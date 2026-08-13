@@ -10,9 +10,9 @@
                 <graphics:StyleBoxFlat BackgroundColor="#12141C" BorderThickness="0 0 1 0" BorderColor="#1E212B"/>
             </PanelContainer.PanelOverride>
             <BoxContainer Orientation="Vertical" Margin="10 20" SeparationOverride="10">
-                <Button Text="COMBAT" Name="TabCombat" StyleClasses="ButtonSquare" HorizontalAlignment="Stretch" />
-                <Button Text="VISUALS" Name="TabVisuals" StyleClasses="ButtonSquare" HorizontalAlignment="Stretch" />
-                <Button Text="UTILITY" Name="TabUtility" StyleClasses="ButtonSquare" HorizontalAlignment="Stretch" />
+                <Button Text="COMBAT" Name="TabCombat" HorizontalAlignment="Stretch" />
+                <Button Text="VISUALS" Name="TabVisuals" HorizontalAlignment="Stretch" />
+                <Button Text="UTILITY" Name="TabUtility" HorizontalAlignment="Stretch" />
                 
                 <Control VerticalExpand="True" />
                 
@@ -29,7 +29,7 @@
                     <Label Text="Version: 2.1.0" FontColorOverride="#4E555F" />
                 </BoxContainer>
                 
-                <Button Text="DISCORD" StyleClasses="ButtonColorRed" Name="Discord" HorizontalAlignment="Stretch" Margin="0 5 0 0" />
+                <Button Text="DISCORD" Name="Discord" HorizontalAlignment="Stretch" Margin="0 5 0 0" />
             </BoxContainer>
         </PanelContainer>
 

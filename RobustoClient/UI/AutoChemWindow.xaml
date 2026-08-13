@@ -6,7 +6,7 @@
         <BoxContainer Orientation="Horizontal" HorizontalExpand="True" SeparationOverride="4">
             <LineEdit Name="SearchBar" PlaceHolder="Search chemical..." HorizontalExpand="True" />
             <LineEdit Name="AmountInput" PlaceHolder="Amount (e.g. 30)" Text="30" MinWidth="100" />
-            <Button Name="StartStopButton" Text="Start" StyleClasses="ButtonColorGreen" />
+            <Button Name="StartStopButton" Text="Start" />
         </BoxContainer>
         
         <Label Name="StatusLabel" Text="Select a chemical" HorizontalAlignment="Center" FontColorOverride="Yellow" />

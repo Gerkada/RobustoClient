@@ -16,9 +16,9 @@ internal static class AutoChemUIPatch
     {
         var autoChemBtn = new Button
         {
-            Text = "AutoChem",
-            StyleClasses = { "ButtonColorGreen" }
+            Text = "AutoChem"
         };
+        autoChemBtn.AddStyleClass("ButtonColorGreen");
 
         autoChemBtn.OnPressed += _ =>
         {

@@ -26,6 +26,7 @@ public sealed partial class AutoChemWindow : DefaultWindow
     {
         RobustXamlLoader.Load(this);
         IoCManager.InjectDependencies(this);
+        StartStopButton.AddStyleClass("ButtonColorGreen");
 
         _autoChem = _entMan.System<RobustaAutoChemSystem>();
 
@@ -73,7 +74,8 @@ public sealed partial class AutoChemWindow : DefaultWindow
             };
 
             var recipeButton = new Button { Text = "Recipe" };
-            var selectButton = new Button { Text = "Select", StyleClasses = { "ButtonColorGreen" } };
+            var selectButton = new Button { Text = "Select" };
+            selectButton.AddStyleClass("ButtonColorGreen");
 
             topRow.Children.Add(nameLabel);
             topRow.Children.Add(recipeButton);
@@ -119,8 +121,8 @@ public sealed partial class AutoChemWindow : DefaultWindow
         {
             _autoChem.StopJob();
             StartStopButton.Text = "Start";
-            StartStopButton.StyleClasses.Remove("ButtonColorRed");
-            StartStopButton.StyleClasses.Add("ButtonColorGreen");
+            StartStopButton.RemoveStyleClass("ButtonColorRed");
+            StartStopButton.AddStyleClass("ButtonColorGreen");
             StatusLabel.Text = "Job stopped.";
             StatusLabel.FontColorOverride = Robust.Shared.Maths.Color.Yellow;
             return;
@@ -143,8 +145,8 @@ public sealed partial class AutoChemWindow : DefaultWindow
         _autoChem.StartJob(_selectedChem, FixedPoint2.New(amountInt));
 
         StartStopButton.Text = "Stop";
-        StartStopButton.StyleClasses.Remove("ButtonColorGreen");
-        StartStopButton.StyleClasses.Add("ButtonColorRed");
+        StartStopButton.RemoveStyleClass("ButtonColorGreen");
+        StartStopButton.AddStyleClass("ButtonColorRed");
         StatusLabel.Text = $"Brewing {_selectedChem} ({amountInt}u)...";
         StatusLabel.FontColorOverride = Robust.Shared.Maths.Color.Cyan;
     }
@@ -160,8 +162,8 @@ public sealed partial class AutoChemWindow : DefaultWindow
         else if (StartStopButton.Text == "Stop")
         {
             StartStopButton.Text = "Start";
-            StartStopButton.StyleClasses.Remove("ButtonColorRed");
-            StartStopButton.StyleClasses.Add("ButtonColorGreen");
+            StartStopButton.RemoveStyleClass("ButtonColorRed");
+            StartStopButton.AddStyleClass("ButtonColorGreen");
             StatusLabel.Text = $"Selected: {_selectedChem}";
             StatusLabel.FontColorOverride = Robust.Shared.Maths.Color.LightGreen;
         }
