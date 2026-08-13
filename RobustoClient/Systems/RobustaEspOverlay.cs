@@ -32,6 +32,10 @@ public sealed class RobustaEspOverlay : Overlay
     private readonly SharedHandsSystem _handsSystem;
     private readonly IComponentFactory _compFactory;
 
+    private bool _mindReflected;
+    private System.Reflection.PropertyInfo? _mindProp;
+    private System.Reflection.FieldInfo? _mindField;
+
     public override OverlaySpace Space => OverlaySpace.ScreenSpace;
 
     public RobustaEspOverlay()
@@ -65,7 +69,23 @@ public sealed class RobustaEspOverlay : Overlay
         while (query.MoveNext(out var uid, out var mob, out var mind, out var xform, out var meta))
         {
             if (uid == localPlayer || xform.MapID != eyeMapId) continue;
-            if (!mind.HasMind) continue;
+            
+            if (!_mindReflected)
+            {
+                var type = mind.GetType();
+                _mindProp = type.GetProperty("HasMind");
+                _mindField = type.GetField("HasMind");
+                _mindReflected = true;
+            }
+
+            bool hasMind = false;
+            if (_mindProp != null)
+                hasMind = (bool)(_mindProp.GetValue(mind) ?? false);
+            else if (_mindField != null)
+                hasMind = (bool)(_mindField.GetValue(mind) ?? false);
+
+            if (!hasMind) continue;
+            
             if (_entMan.HasComponent<PAIComponent>(uid)) continue;
 
             var worldPos = _xformSystem.GetWorldPosition(xform);

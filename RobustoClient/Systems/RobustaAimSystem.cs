@@ -30,7 +30,7 @@ public class RobustaAimSystem : EntitySystem
     private EntityUid? _lockedTarget;
     public EntityUid? LockedTarget => _lockedTarget;
 
-    // --- Кэш для рефлексии состояния моба ---
+    // --- Cache for mob state reflection ---
     private PropertyInfo? _mobStateProp;
     private FieldInfo? _mobStateField;
     private bool _mobStateReflected;
