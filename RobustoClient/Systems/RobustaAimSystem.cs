@@ -206,6 +206,23 @@ public class RobustaAimSystem : EntitySystem
         var mapCords = _transform.GetMapCoordinates(Transform(ent));
         var entitiesInRange = _lookup.GetEntitiesInRange(mapCords, range, LookupFlags.Uncontained);
         if (exclude != null) entitiesInRange.ExceptWith(exclude);
+
+        if (_lockedTarget.HasValue)
+        {
+            var lockTransform = Transform(_lockedTarget.Value);
+            var lockedPos = _transform.GetMapCoordinates(lockTransform);
+            var distance = (mapCords.Position - lockedPos.Position).Length();
+            if (distance <= range)
+            {
+                return new AimOutput 
+                { 
+                    Entity = _lockedTarget.Value, 
+                    Position = new MapCoordinates(lockedPos.Position, lockTransform.MapID),
+                    Velocity = null 
+                };
+            }
+        }
+
         return GetClosestTo(mapCords, entitiesInRange);
     }
 
