@@ -61,6 +61,12 @@ public sealed partial class CheatMenuWindow : RobustaWindow
         ItemSearchBtn.OnToggled += args => RobustaConfig.ItemSearchEnabled = args.Pressed;
         PredictionToggle.OnToggled += args => RobustaConfig.UsePrediction = args.Pressed;
         
+        ReloadEspBtn.OnPressed += _ => {
+            var esp = _entMan.System<RobustoClient.Systems.ESP.EspEvaluator>();
+            esp.Registry.LoadConfigs();
+            esp.ClearCache();
+        };
+
         Discord.OnPressed += _ => _robustaDiscord?.OpenDiscord();
         OpenMapBtn.OnPressed += _ => RobustaMapOpener.Show();
         OpenTacticalRadarBtn.OnPressed += _ => RobustaRadarOpener.Show();
