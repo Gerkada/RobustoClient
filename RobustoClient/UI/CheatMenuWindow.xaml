@@ -60,6 +60,9 @@
                         <Label Text="VISUALS" FontColorOverride="#6E7681" Margin="0 10 0 5"/>
                         <BoxContainer Orientation="Horizontal" SeparationOverride="10">
                             <Button ToggleMode="True" Text="ESP (Name Tags)" Name="EspBtn" HorizontalExpand="True" />
+                            <Button Text="Reload ESP Config" Name="ReloadEspBtn" HorizontalExpand="True" />
+                        </BoxContainer>
+                        <BoxContainer Orientation="Horizontal" SeparationOverride="10">
                             <Button ToggleMode="True" Text="Fullbright" Name="FullbrightBtn" HorizontalExpand="True" />
                         </BoxContainer>
                         <BoxContainer Orientation="Horizontal" SeparationOverride="10">
