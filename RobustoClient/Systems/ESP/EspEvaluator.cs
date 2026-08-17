@@ -112,6 +112,39 @@ public sealed class EspEvaluator : EntitySystem
             }
         }
 
+        // Deduplicate results by Group (only keep highest priority per group, ignore empty groups)
+        var groupedResults = new Dictionary<string, List<EspEvaluationResult>>();
+        foreach (var r in results)
+        {
+            if (!string.IsNullOrEmpty(r.Category.Group))
+            {
+                if (!groupedResults.ContainsKey(r.Category.Group))
+                    groupedResults[r.Category.Group] = new List<EspEvaluationResult>();
+                groupedResults[r.Category.Group].Add(r);
+            }
+        }
+        
+        foreach (var kvp in groupedResults)
+        {
+            if (kvp.Value.Count > 1)
+            {
+                EspEvaluationResult best = kvp.Value[0];
+                foreach (var r in kvp.Value)
+                {
+                    if (r.Category.Priority > best.Category.Priority)
+                        best = r;
+                }
+                
+                for (int i = results.Count - 1; i >= 0; i--)
+                {
+                    if (results[i].Category.Group == kvp.Key && results[i] != best)
+                    {
+                        results.RemoveAt(i);
+                    }
+                }
+            }
+        }
+
         _cache[uid] = results;
         return results;
     }

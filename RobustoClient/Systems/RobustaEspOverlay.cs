@@ -56,7 +56,30 @@ public sealed class RobustaEspOverlay : Overlay
 
     private void RegisterHooks()
     {
-        _esp.RegisterVariable("PlayerName", uid => _entMan.TryGetComponent<ActorComponent>(uid, out var actor) ? $"@{actor.PlayerSession.Name}" : "");
+        _esp.RegisterVariable("PlayerName", uid => {
+            foreach (var session in _player.SessionsDict.Values)
+            {
+                if (session.AttachedEntity == uid)
+                    return $"@{session.Name}";
+            }
+            
+            var netUid = _entMan.GetNetEntity(uid);
+            var type = _player.GetType();
+            var field = type.GetField("_pendingStates", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (field != null)
+            {
+                var pending = field.GetValue(_player) as Dictionary<Robust.Shared.Network.NetUserId, Robust.Shared.GameStates.SessionState>;
+                if (pending != null)
+                {
+                    foreach (var state in pending.Values)
+                    {
+                        if (state.ControlledEntity == netUid)
+                            return $"@{state.Name}";
+                    }
+                }
+            }
+            return "";
+        });
         
         _esp.RegisterVariable("JobTitle", uid => {
             if (_inv.TryGetSlotEntity(uid, "id", out var slotEnt) && slotEnt.HasValue) {

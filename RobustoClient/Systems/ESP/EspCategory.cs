@@ -18,6 +18,7 @@ public sealed class EspCategoryDefinition
     public Color Color { get; set; } = Color.White;
     public string TextFormat { get; set; } = string.Empty;
     public EspDock Dock { get; set; } = EspDock.Top;
+    public string Group { get; set; } = string.Empty;
     
     public EspConditions Conditions { get; set; } = new();
 }

@@ -16,10 +16,20 @@ public sealed class EspRegistry
     public IReadOnlyCollection<EspCategoryDefinition> Categories => _categories.Values;
 
     private const string DefaultConfig = @"
+- id: OocName
+  priority: 5
+  color: ""#FFFFFF""
+  textFormat: ""{PlayerName}""
+  dock: Top
+  conditions:
+    customRule: [ ""IsAlive"" ]
+    hasNotComponent: [ ""PAI"" ]
+
 - id: AdminESP
   priority: 100
   color: ""#FF0000""
-  textFormat: ""[!!! ADMIN !!!] {PlayerName}""
+  textFormat: ""[!!! ADMIN !!!]""
+  group: ""ICName""
   dock: Top
   conditions:
     prototypeContains: [ ""Admin"" ]
@@ -27,7 +37,8 @@ public sealed class EspRegistry
 - id: GhostESP
   priority: 10
   color: ""#808080""
-  textFormat: ""[GHOST] {PlayerName}""
+  textFormat: ""[GHOST] {EntityName}""
+  group: ""ICName""
   dock: Top
   conditions:
     hasComponent: [ ""Ghost"" ]
@@ -35,7 +46,8 @@ public sealed class EspRegistry
 - id: JobSecurity
   priority: 80
   color: ""#7070FF""
-  textFormat: ""[{JobTitle}] {EntityName} {PlayerName}""
+  textFormat: ""[{JobTitle}] {EntityName}""
+  group: ""ICName""
   dock: Top
   conditions:
     jobContains: [ ""Security"", ""Officer"", ""Warden"", ""Captain"" ]
@@ -44,7 +56,8 @@ public sealed class EspRegistry
 - id: JobMedical
   priority: 70
   color: ""#70FF70""
-  textFormat: ""[{JobTitle}] {EntityName} {PlayerName}""
+  textFormat: ""[{JobTitle}] {EntityName}""
+  group: ""ICName""
   dock: Top
   conditions:
     jobContains: [ ""Medical"", ""Doctor"" ]
@@ -53,7 +66,8 @@ public sealed class EspRegistry
 - id: JobEngineer
   priority: 60
   color: ""#FFFF70""
-  textFormat: ""[{JobTitle}] {EntityName} {PlayerName}""
+  textFormat: ""[{JobTitle}] {EntityName}""
+  group: ""ICName""
   dock: Top
   conditions:
     jobContains: [ ""Engineer"" ]
@@ -62,7 +76,8 @@ public sealed class EspRegistry
 - id: DefaultAlive
   priority: 10
   color: ""#FFFFFF""
-  textFormat: ""{EntityName} {PlayerName}""
+  textFormat: ""{EntityName}""
+  group: ""ICName""
   dock: Top
   conditions:
     customRule: [ ""IsAlive"" ]
@@ -184,6 +199,9 @@ public sealed class EspRegistry
             if (Enum.TryParse<EspDock>(dockNode.Value, true, out var dock))
                 def.Dock = dock;
         }
+
+        if (mapping.TryGet("group", out ValueDataNode? groupNode))
+            def.Group = groupNode.Value;
 
         if (mapping.TryGet("conditions", out MappingDataNode? condMapping))
         {
