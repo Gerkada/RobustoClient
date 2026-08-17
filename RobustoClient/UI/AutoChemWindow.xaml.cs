@@ -89,13 +89,13 @@ public sealed partial class AutoChemWindow : DefaultWindow
                 Margin = new Robust.Shared.Maths.Thickness(10, 2, 0, 0)
             };
 
-            foreach (var (reactant, info) in recipe.Reactants)
+            foreach (var (reactantId, amount) in RobustaChemDatabase.GetReactantsAndAmounts(recipe))
             {
-                recipeDetails.Children.Add(new Label { Text = $"- {reactant}: {info.Amount}u", FontColorOverride = Robust.Shared.Maths.Color.LightGray });
+                recipeDetails.Children.Add(new Label { Text = $"- {reactantId}: {amount}u", FontColorOverride = Robust.Shared.Maths.Color.LightGray });
             }
-            if (recipe.MinimumTemperature > 295f)
+            if (RobustaChemDatabase.RequiresHeating(recipe))
             {
-                recipeDetails.Children.Add(new Label { Text = $"- Requires Heating ({recipe.MinimumTemperature}K)", FontColorOverride = Robust.Shared.Maths.Color.Orange });
+                recipeDetails.Children.Add(new Label { Text = $"- Requires Heating", FontColorOverride = Robust.Shared.Maths.Color.Orange });
             }
 
             recipeButton.OnPressed += _ => recipeDetails.Visible = !recipeDetails.Visible;

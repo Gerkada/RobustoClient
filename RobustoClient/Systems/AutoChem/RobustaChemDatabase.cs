@@ -9,15 +9,123 @@ namespace RobustoClient.Systems.AutoChem;
 
 public static class RobustaChemDatabase
 {
-    // Dictionary: "Target reagent ID" -> "Reaction prototype that creates it"
     public static Dictionary<string, ReactionPrototype> RecipesByProduct = new(StringComparer.OrdinalIgnoreCase);
     
     public static bool IsInitialized = false;
+
+    private static System.Reflection.FieldInfo? _productsField;
+    private static System.Reflection.PropertyInfo? _productsProperty;
+    private static System.Reflection.FieldInfo? _reactantsField;
+    private static System.Reflection.PropertyInfo? _reactantsProperty;
+    private static System.Reflection.FieldInfo? _priorityField;
+    private static System.Reflection.PropertyInfo? _priorityProperty;
+    private static System.Reflection.FieldInfo? _minTempField;
+    private static System.Reflection.PropertyInfo? _minTempProperty;
+
+    private static void InitReflection()
+    {
+        if (_productsField != null || _productsProperty != null) return;
+        var type = typeof(ReactionPrototype);
+        
+        _productsField = type.GetField("Products");
+        _productsProperty = type.GetProperty("Products");
+        
+        _reactantsField = type.GetField("Reactants");
+        _reactantsProperty = type.GetProperty("Reactants");
+        
+        _priorityField = type.GetField("Priority");
+        _priorityProperty = type.GetProperty("Priority");
+        
+        _minTempField = type.GetField("MinimumTemperature");
+        _minTempProperty = type.GetProperty("MinimumTemperature");
+    }
+
+    public static IEnumerable<string> GetProductIds(ReactionPrototype reaction)
+    {
+        object? obj = _productsField?.GetValue(reaction) ?? _productsProperty?.GetValue(reaction);
+        if (obj is System.Collections.IDictionary dict)
+            foreach (var key in dict.Keys) yield return key.ToString() ?? string.Empty;
+    }
+
+    public static IEnumerable<string> GetReactantIds(ReactionPrototype reaction)
+    {
+        object? obj = _reactantsField?.GetValue(reaction) ?? _reactantsProperty?.GetValue(reaction);
+        if (obj is System.Collections.IDictionary dict)
+            foreach (var key in dict.Keys) yield return key.ToString() ?? string.Empty;
+    }
+
+    public static IEnumerable<(string Id, string Amount)> GetReactantsAndAmounts(ReactionPrototype reaction)
+    {
+        foreach (var r in GetReactants(reaction))
+            yield return (r.Id, r.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    public static IEnumerable<(string Id, float Amount, bool Catalyst)> GetReactants(ReactionPrototype reaction)
+    {
+        object? obj = _reactantsField?.GetValue(reaction) ?? _reactantsProperty?.GetValue(reaction);
+        if (obj is System.Collections.IDictionary dict)
+        {
+            foreach (System.Collections.DictionaryEntry entry in dict)
+            {
+                string id = entry.Key?.ToString() ?? "Unknown";
+                float amount = 1f;
+                bool catalyst = false;
+                
+                if (entry.Value != null)
+                {
+                    var valType = entry.Value.GetType();
+                    var amtObj = valType.GetField("Amount")?.GetValue(entry.Value) ?? valType.GetProperty("Amount")?.GetValue(entry.Value);
+                    if (amtObj != null)
+                    {
+                        var floatMethod = amtObj.GetType().GetMethod("Float", Type.EmptyTypes);
+                        if (floatMethod != null) amount = (float)(floatMethod.Invoke(amtObj, null) ?? 1f);
+                    }
+                    var catObj = valType.GetField("Catalyst")?.GetValue(entry.Value) ?? valType.GetProperty("Catalyst")?.GetValue(entry.Value);
+                    if (catObj is bool b) catalyst = b;
+                }
+                yield return (id, amount, catalyst);
+            }
+        }
+    }
+
+    public static float GetProductYield(ReactionPrototype reaction, string targetProductId)
+    {
+        object? obj = _productsField?.GetValue(reaction) ?? _productsProperty?.GetValue(reaction);
+        if (obj is System.Collections.IDictionary dict)
+        {
+            foreach (System.Collections.DictionaryEntry entry in dict)
+            {
+                if (entry.Key?.ToString()?.Equals(targetProductId, StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    if (entry.Value != null)
+                    {
+                        var floatMethod = entry.Value.GetType().GetMethod("Float", Type.EmptyTypes);
+                        if (floatMethod != null) return (float)(floatMethod.Invoke(entry.Value, null) ?? 1f);
+                    }
+                }
+            }
+        }
+        return 1f;
+    }
+
+    private static int SafeGetPriority(ReactionPrototype reaction)
+    {
+        object? val = _priorityField?.GetValue(reaction) ?? _priorityProperty?.GetValue(reaction);
+        return val is int i ? i : 0;
+    }
+
+    private static float SafeGetMinTemp(ReactionPrototype reaction)
+    {
+        object? val = _minTempField?.GetValue(reaction) ?? _minTempProperty?.GetValue(reaction);
+        return val is float f ? f : 0f;
+    }
 
     // This method should be called once (e.g., during client load or first bot activation)
     public static void Initialize()
     {
         if (IsInitialized) return;
+
+        InitReflection();
 
         // Attempting to get the prototype manager directly via IoC
         var protoMan = IoCManager.Resolve<IPrototypeManager>();
@@ -27,17 +135,14 @@ public static class RobustaChemDatabase
         // Iterating through reaction prototypes
         foreach (var reaction in protoMan.EnumeratePrototypes<ReactionPrototype>())
         {
-            // Checking if the reaction has products
-            if (reaction.Products == null || reaction.Products.Count == 0)
+            var productIds = GetProductIds(reaction).ToList();
+            if (productIds.Count == 0)
                 continue;
 
             int currentScore = CalculateRecipeScore(reaction);
 
-            foreach (var product in reaction.Products.Keys)
+            foreach (var productId in productIds)
             {
-                // Cast ProtoId to string as the dictionary expects string keys
-                string productId = (string)product;
-
                 // Saving the "best" recipe for this product
                 if (!RecipesByProduct.TryGetValue(productId, out var existing) || 
                     currentScore > CalculateRecipeScore(existing))
@@ -55,16 +160,13 @@ public static class RobustaChemDatabase
     private static int CalculateRecipeScore(ReactionPrototype reaction)
     {
         // Base weight based on game priority
-        int score = reaction.Priority * 100;
+        int score = SafeGetPriority(reaction) * 100;
 
         // Large penalty for using biological fluids or "dirty" components
         var badReagents = new[] { "Blood", "Urine", "Vomit", "AmmoniaBlood", "SpaceCleaner", "Slime", "Facum" };
         
-        foreach (var reactant in reaction.Reactants.Keys)
+        foreach (var reactantId in GetReactantIds(reaction))
         {
-            // Cast ProtoId to string for string comparisons
-            string reactantId = (string)reactant;
-
             if (badReagents.Any(r => reactantId.Contains(r, StringComparison.OrdinalIgnoreCase)))
                 score -= 2000; // Doubled the penalty
         }
@@ -77,16 +179,13 @@ public static class RobustaChemDatabase
             score -= 2000;
 
         // Heating penalty (prefer mixing over heating)
-        if (reaction.MinimumTemperature > 295f)
+        if (SafeGetMinTemp(reaction) > 295f)
             score -= 50;
 
         // Bonus for simple gases and base metals (common dispenser items)
         var commonReagents = new[] { "Hydrogen", "Nitrogen", "Oxygen", "Carbon", "Iron", "Iodine", "Phosphorus" };
-        foreach (var reactant in reaction.Reactants.Keys)
+        foreach (var reactantId in GetReactantIds(reaction))
         {
-            // Cast ProtoId to string for string comparisons
-            string reactantId = (string)reactant;
-
             if (commonReagents.Any(r => reactantId.Equals(r, StringComparison.OrdinalIgnoreCase)))
                 score += 20;
         }
@@ -115,7 +214,7 @@ public static class RobustaChemDatabase
     {
         // In SS14, base room temperature is ~293.15 Kelvin (20°C)
         // If the reaction requires more (e.g., 300+), a heater is needed
-        return recipe.MinimumTemperature > 295f; 
+        return SafeGetMinTemp(recipe) > 295f; 
     }
 
     /// <summary>

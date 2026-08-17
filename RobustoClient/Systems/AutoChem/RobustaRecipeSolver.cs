@@ -85,7 +85,7 @@ public static class RobustaRecipeSolver
         float globalLCM = CalculateRecursiveLCM(targetReagent);
         
         var reaction = RobustaChemDatabase.GetRecipe(targetReagent);
-        float yieldPerCycle = (reaction != null && reaction.Products.TryGetValue(targetReagent, out var yr)) ? yr.Float() : 1f;
+        float yieldPerCycle = reaction != null ? RobustaChemDatabase.GetProductYield(reaction, targetReagent) : 1f;
 
         float safeAmount = capacity * 0.95f;
         float targetAmount = amount.Float();
@@ -120,17 +120,17 @@ public static class RobustaRecipeSolver
         if (recipe == null) return 0f;
 
         float globalLCM = CalculateRecursiveLCM(reagentId);
-        float yieldPerCycle = recipe.Products.TryGetValue(reagentId, out var yAmt) ? yAmt.Float() : 1f;
+        float yieldPerCycle = RobustaChemDatabase.GetProductYield(recipe, reagentId);
         
         float consumingVolumePerCycle = 0f;
         float catalystVolume = 0f;
 
-        foreach (var reactant in recipe.Reactants.Values)
+        foreach (var r in RobustaChemDatabase.GetReactants(recipe))
         {
-            if (reactant.Catalyst)
-                catalystVolume += reactant.Amount.Float();
+            if (r.Catalyst)
+                catalystVolume += r.Amount;
             else
-                consumingVolumePerCycle += reactant.Amount.Float();
+                consumingVolumePerCycle += r.Amount;
         }
 
         if (consumingVolumePerCycle <= 0) return capacity;
@@ -158,21 +158,21 @@ public static class RobustaRecipeSolver
         var recipe = RobustaChemDatabase.GetRecipe(reagentId);
         if (recipe == null) return 1f;
 
-        float yield = recipe.Products.TryGetValue(reagentId, out var yAmt) ? yAmt.Float() : 1f;
+        float yield = RobustaChemDatabase.GetProductYield(recipe, reagentId);
         long currentLCM = 1;
 
         if (Math.Abs(yield % 1.0f) > 0.001f) currentLCM = LCM(currentLCM, 10);
 
-        foreach (var (rId, reactant) in recipe.Reactants)
+        foreach (var r in RobustaChemDatabase.GetReactants(recipe))
         {
-            if (reactant.Catalyst) continue;
+            if (r.Catalyst) continue;
 
-            if (Math.Abs(reactant.Amount.Float() % 1.0f) > 0.001f)
+            if (Math.Abs(r.Amount % 1.0f) > 0.001f)
                 currentLCM = LCM(currentLCM, 10);
 
-            if (!DispenserReagents.Contains(rId))
+            if (!DispenserReagents.Contains(r.Id))
             {
-                float preLCM = CalculateRecursiveLCM(rId);
+                float preLCM = CalculateRecursiveLCM(r.Id);
                 currentLCM = LCM(currentLCM, (long)Math.Ceiling(preLCM));
             }
         }
@@ -196,17 +196,17 @@ public static class RobustaRecipeSolver
         if (recipe == null) return true;
 
         // 1. First, satisfy all sub-reactions
-        foreach (var (reactantId, reactantData) in recipe.Reactants)
+        foreach (var r in RobustaChemDatabase.GetReactants(recipe))
         {
-            if (reactantData.Catalyst) continue;
+            if (r.Catalyst) continue;
 
-            if (!DispenserReagents.Contains(reactantId))
+            if (!DispenserReagents.Contains(r.Id))
             {
-                var preRecipe = RobustaChemDatabase.GetRecipe(reactantId);
-                float preYield = (preRecipe != null && preRecipe.Products.TryGetValue(reactantId, out var yr)) ? yr.Float() : 1f;
-                float neededPreAmount = cycles * reactantData.Amount.Float();
+                var preRecipe = RobustaChemDatabase.GetRecipe(r.Id);
+                float preYield = preRecipe != null ? RobustaChemDatabase.GetProductYield(preRecipe, r.Id) : 1f;
+                float neededPreAmount = cycles * r.Amount;
                 float neededPreCycles = neededPreAmount / preYield;
-                if (!ResolveRecursive(reactantId, neededPreCycles, plan)) return false;
+                if (!ResolveRecursive(r.Id, neededPreCycles, plan)) return false;
             }
         }
 
@@ -218,14 +218,14 @@ public static class RobustaRecipeSolver
             TargetProduct = reagentId
         };
 
-        foreach (var (reactantId, reactantData) in recipe.Reactants)
+        foreach (var r in RobustaChemDatabase.GetReactants(recipe))
         {
-            if (DispenserReagents.Contains(reactantId) || reactantData.Catalyst)
+            if (DispenserReagents.Contains(r.Id) || r.Catalyst)
             {
-                float amount = reactantData.Amount.Float();
-                if (!reactantData.Catalyst) amount *= cycles;
+                float amount = r.Amount;
+                if (!r.Catalyst) amount *= cycles;
                 
-                synthesisPhase.Ingredients[reactantId] = FixedPoint2.New(amount);
+                synthesisPhase.Ingredients[r.Id] = FixedPoint2.New(amount);
             }
         }
         

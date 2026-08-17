@@ -315,8 +315,15 @@ public sealed class DispensingState : ChemStateBase
                             var recipe = RobustaChemDatabase.GetRecipe(context.TargetProduct);
                             if (recipe != null)
                             {
-                                if (recipe.Products.TryGetValue(context.TargetProduct, out var yAmt)) yield = yAmt.Float();
-                                if (recipe.Reactants.TryGetValue(context.LastReagentAdded!, out var rData)) reactantRatio = rData.Amount.Float();
+                                yield = RobustaChemDatabase.GetProductYield(recipe, context.TargetProduct);
+                                foreach (var r in RobustaChemDatabase.GetReactants(recipe))
+                                {
+                                    if (r.Id == context.LastReagentAdded)
+                                    {
+                                        reactantRatio = r.Amount;
+                                        break;
+                                    }
+                                }
                             }
                         }
                         delta = reagentIncrease + (productIncrease * (reactantRatio / yield));
