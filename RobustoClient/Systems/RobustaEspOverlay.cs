@@ -82,7 +82,15 @@ public sealed class RobustaEspOverlay : Overlay
                     var method2 = type.GetMethod("GetHeldItem", new[] { typeof(Entity<HandsComponent>), typeof(string) });
                     if (method2 != null) held = (EntityUid?)method2.Invoke(_hands, new object?[] { new Entity<HandsComponent>(uid, h), handName });
                 }
-                if (held != null && _entMan.TryGetComponent<MetaDataComponent>(held.Value, out var heldMeta)) heldItems.Add(heldMeta.EntityName);
+                if (held != null && _entMan.TryGetComponent<MetaDataComponent>(held.Value, out var heldMeta)) 
+                {
+                    if (heldMeta.EntityPrototype?.ID == "VirtualItem" || 
+                        heldMeta.EntityPrototype?.ID == "ActionDummy" ||
+                        heldMeta.EntityName == "VIRTUAL ITEM YOU SHOULD NOT SEE THIS")
+                        continue;
+
+                    heldItems.Add(heldMeta.EntityName);
+                }
             }
             return string.Join(" | ", heldItems);
         });

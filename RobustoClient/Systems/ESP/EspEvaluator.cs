@@ -89,6 +89,17 @@ public sealed class EspEvaluator : EntitySystem
 
         var results = new List<EspEvaluationResult>();
 
+        if (TryComp<MetaDataComponent>(uid, out var meta))
+        {
+            if (meta.EntityPrototype?.ID == "VirtualItem" || 
+                meta.EntityPrototype?.ID == "ActionDummy" ||
+                meta.EntityName == "VIRTUAL ITEM YOU SHOULD NOT SEE THIS")
+            {
+                _cache[uid] = results;
+                return results;
+            }
+        }
+
         foreach (var category in _registry.Categories)
         {
             if (Matches(uid, category.Conditions))
