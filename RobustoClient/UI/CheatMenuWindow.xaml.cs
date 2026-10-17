@@ -13,13 +13,10 @@ public sealed partial class CheatMenuWindow : RobustaWindow
 {
     [Dependency] private readonly IEntityManager _entMan = default!;
     
-    private readonly RobustaDiscordSystem? _robustaDiscord;
-
     public CheatMenuWindow()
     {
         RobustXamlLoader.Load(this);
         IoCManager.InjectDependencies(this);
-        _robustaDiscord ??= _entMan.System<RobustaDiscordSystem>();
         
         TitleLabel.Text = "ROBUSTA CLIENT | PREMIUM";
         
@@ -27,7 +24,7 @@ public sealed partial class CheatMenuWindow : RobustaWindow
         TabCombat.AddStyleClass("ButtonSquare");
         TabVisuals.AddStyleClass("ButtonSquare");
         TabUtility.AddStyleClass("ButtonSquare");
-        Discord.AddStyleClass("ButtonColorRed");
+        Discord.Visible = false;
         
         // Sync with config
         Ranged.Pressed = RobustaConfig.RangedAimbotEnabled;
@@ -67,7 +64,6 @@ public sealed partial class CheatMenuWindow : RobustaWindow
             esp.ClearCache();
         };
 
-        Discord.OnPressed += _ => _robustaDiscord?.OpenDiscord();
         OpenMapBtn.OnPressed += _ => RobustaMapOpener.Show();
         OpenTacticalRadarBtn.OnPressed += _ => RobustaRadarOpener.Show();
 
