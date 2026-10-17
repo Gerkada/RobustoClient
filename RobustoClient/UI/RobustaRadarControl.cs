@@ -11,6 +11,7 @@ using Robust.Shared.IoC;
 using Robust.Shared.Maths;
 using Robust.Shared.Map;
 using Content.Shared.Mobs.Components;
+using RobustoClient.Systems;
 
 namespace RobustoClient.UI;
 
@@ -24,6 +25,7 @@ public sealed class RobustaRadarControl : Control
     [Dependency] private readonly IEyeManager _eye = default!;
 
     private readonly SharedTransformSystem _transform;
+    private readonly RobustaSyndicateDetectorSystem _syndi;
     private readonly Font _font;
 
     // Radar settings
@@ -37,6 +39,7 @@ public sealed class RobustaRadarControl : Control
     {
         IoCManager.InjectDependencies(this);
         _transform = _entMan.System<SharedTransformSystem>();
+        _syndi = _entMan.System<RobustaSyndicateDetectorSystem>();
         _font = new VectorFont(_cache.GetResource<FontResource>("/Fonts/NotoSans/NotoSans-Regular.ttf"), 10);
         MinSize = new Vector2(250, 250);
     }
@@ -137,9 +140,10 @@ public sealed class RobustaRadarControl : Control
                 Color color = Color.LimeGreen;
                 var type = RadarMarkerType.Player;
 
-                // HEURISTICS INSTEAD OF COMPONENTS: Searching for Syndicate keywords in the name
                 var nameLower = name.ToLowerInvariant();
-                if (nameLower.Contains("syndicate") || nameLower.Contains("operative") || nameLower.Contains("nuke"))
+                if ((RobustaConfig.SyndicateDetector && _syndi.CheckPlayerStatus(uid).Uplink) ||
+                    nameLower.Contains("syndicate") || nameLower.Contains("operative") || nameLower.Contains("nuke") ||
+                    nameLower.Contains("clf") || nameLower.Contains("biomorph") || nameLower.Contains("abomination"))
                 {
                     color = Color.Red;
                     type = RadarMarkerType.Syndicate;

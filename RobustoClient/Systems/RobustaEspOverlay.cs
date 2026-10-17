@@ -136,8 +136,8 @@ public sealed class RobustaEspOverlay : Overlay
             return false;
         });
 
-        _esp.RegisterCondition("IsAntag", uid => _syndi.CheckPlayerStatus(uid).Uplink);
-        _esp.RegisterCondition("IsSus", uid => _syndi.CheckPlayerStatus(uid).Contra);
+        _esp.RegisterCondition("IsAntag", uid => RobustaConfig.SyndicateDetector && _syndi.CheckPlayerStatus(uid).Uplink);
+        _esp.RegisterCondition("IsSus", uid => RobustaConfig.ContrabandDetector && _syndi.CheckPlayerStatus(uid).Contra);
         _esp.RegisterCondition("HasHeldItems", uid => !string.IsNullOrEmpty(_esp.ResolveVariable(uid, "HeldItems")));
         _esp.RegisterCondition("HasImplants", uid => _syndi.CheckPlayerStatus(uid).Implants.Count > 0);
     }
