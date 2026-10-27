@@ -51,6 +51,8 @@ public static class RobustaConfig
 
     public static Keyboard.Key AutoDeconstructKey = Keyboard.Key.N;
 
+    public static Keyboard.Key HackingKey = Keyboard.Key.H;
+
     public static bool ThrowAimbotEnabled = true;
 
     public static float AimFovPixels { get; set; } = 100f; // Aimbot capture radius in pixels (Screen FOV)
@@ -104,6 +106,7 @@ public static class RobustaConfig
         public float MaxLockDistance { get; set; } = 15f;
         public Keyboard.Key AutoConstructKey { get; set; } = Keyboard.Key.V;
         public Keyboard.Key AutoDeconstructKey { get; set; } = Keyboard.Key.N;
+        public Keyboard.Key HackingKey { get; set; } = Keyboard.Key.H;
         public bool ThrowAimbotEnabled { get; set; } = true;
         public float AimFovPixels { get; set; } = 100f;
         public float DefaultThrowSpeed { get; set; } = 11f;
@@ -142,6 +145,7 @@ public static class RobustaConfig
                 MaxLockDistance = MaxLockDistance,
                 AutoConstructKey = AutoConstructKey,
                 AutoDeconstructKey = AutoDeconstructKey,
+                HackingKey = HackingKey,
                 ThrowAimbotEnabled = ThrowAimbotEnabled,
                 AimFovPixels = AimFovPixels,
                 DefaultThrowSpeed = DefaultThrowSpeed,
@@ -191,6 +195,8 @@ public static class RobustaConfig
                 AutoConstructKey = data.AutoConstructKey;
             if (data.AutoDeconstructKey != Keyboard.Key.Unknown)
                 AutoDeconstructKey = data.AutoDeconstructKey;
+            if (data.HackingKey != Keyboard.Key.Unknown)
+                HackingKey = data.HackingKey;
             ThrowAimbotEnabled = data.ThrowAimbotEnabled;
             AimFovPixels = data.AimFovPixels;
             DefaultThrowSpeed = data.DefaultThrowSpeed;
