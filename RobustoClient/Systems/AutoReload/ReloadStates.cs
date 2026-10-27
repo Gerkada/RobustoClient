@@ -26,7 +26,7 @@ using Robust.Client.GameObjects;
 
 namespace RobustoClient.Systems.AutoReload;
 
-// Idle: Waiting for trigger
+// Idle: Waiting for trigger poop
 public sealed class IdleState : ReloadStateBase
 {
     public static readonly IdleState Instance = new();
