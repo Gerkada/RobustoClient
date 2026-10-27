@@ -569,6 +569,49 @@ public sealed class RobustaConstructionSolver : EntitySystem
             Steps: steps);
     }
 
+    /// <summary>
+    /// Solves the construction graph from the entity's current node to an explicit target node.
+    /// </summary>
+    /// <param name="target">The entity whose construction graph should be traversed.</param>
+    /// <param name="targetNodeName">The graph node to reach.</param>
+    /// <returns>An ordered construction plan, or <see langword="null"/> when no path exists.</returns>
+    public SolvedConstructionPlan? SolvePlanToNode(EntityUid target, string targetNodeName)
+    {
+        if (!_entMan.EntityExists(target) || string.IsNullOrWhiteSpace(targetNodeName))
+            return null;
+
+        EnsureCacheInitialized();
+        if (!TryResolveGraphAndNode(target, out var graph, out var currentNode, out _) ||
+            graph == null || currentNode == null)
+            return null;
+
+        var currentNodeName = GetNodeName(currentNode);
+        if (string.Equals(currentNodeName, targetNodeName, StringComparison.OrdinalIgnoreCase))
+            return new SolvedConstructionPlan(graph.ID, currentNodeName, targetNodeName, false, []);
+
+        var edgePath = FindShortestEdgePath(graph, currentNodeName, targetNodeName);
+        if (edgePath == null || edgePath.Count == 0)
+            return null;
+
+        var steps = new List<ConstructionActionStep>();
+        for (var i = 0; i < edgePath.Count; i++)
+        {
+            var (fromNode, edge, toNode) = edgePath[i];
+            AppendAnchorTransitionStepIfNeeded(
+                target,
+                i == 0,
+                graph,
+                fromNode,
+                edge,
+                toNode,
+                isDeconstruct: false,
+                steps);
+            ConvertEdgeSteps(edge, GetNodeName(toNode), steps);
+        }
+
+        return new SolvedConstructionPlan(graph.ID, currentNodeName, targetNodeName, false, steps);
+    }
+
     public SolvedConstructionPlan? SolveBuildPlan(ConstructionPrototype constructionProto, bool includeGhostStart = true)
     {
         EnsureCacheInitialized();
