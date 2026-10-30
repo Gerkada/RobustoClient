@@ -1,25 +1,65 @@
+using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Robust.Client.Input;
 
 namespace RobustoClient;
 
 /// <summary>
-/// Holds all configuration settings for the RobustoClient
-/// Uses new "RobustaKeybind" to support multi bounded keys
+/// Metadata attribute used for dynamic keybind discovery and UI generation.
+/// </summary>
+[AttributeUsage(AttributeTargets.Field)]
+public sealed class KeybindConfigAttribute : Attribute
+{
+    public string DisplayName { get; }
+    public string? Command { get; }
+    public Keyboard.Key DefaultKey { get; }
+    public Keyboard.Key DefaultMod1 { get; }
+
+    public KeybindConfigAttribute(
+        string displayName,
+        string? command = null,
+        Keyboard.Key defaultKey = Keyboard.Key.Unknown,
+        Keyboard.Key defaultMod1 = Keyboard.Key.Unknown)
+    {
+        DisplayName = displayName;
+        Command = command;
+        DefaultKey = defaultKey;
+        DefaultMod1 = defaultMod1;
+    }
+}
+
+/// <summary>
+/// Holds all configuration settings for the RobustoClient.
+/// Uses "RobustaKeybind" to support multi-bounded keys.
 /// </summary>
 public static partial class RobustaConfig
 {
     #region Keybinds
 
+    [KeybindConfig("Toggle Cheat Menu", command: "robusta.toggle_menu", defaultKey: Keyboard.Key.F4)]
     public static RobustaKeybind ToggleMenuKey = new(Keyboard.Key.F4);
 
+    [KeybindConfig("Target Lock (Aim/Throw)", defaultKey: Keyboard.Key.Space)]
     public static RobustaKeybind TargetLockKey = new(Keyboard.Key.Space);
 
+    [KeybindConfig("Auto-Construct (Build)", command: "robusta.auto_construct", defaultKey: Keyboard.Key.V)]
     public static RobustaKeybind AutoConstructKey = new(Keyboard.Key.V);
 
+    [KeybindConfig("Auto-Deconstruct", command: "robusta.auto_deconstruct", defaultKey: Keyboard.Key.N)]
     public static RobustaKeybind AutoDeconstructKey = new(Keyboard.Key.N);
 
+    [KeybindConfig("Auto-Hack Wire Panel", command: "robusta.hack", defaultKey: Keyboard.Key.H, defaultMod1: Keyboard.Key.Shift)]
     public static RobustaKeybind HackingKey = new(Keyboard.Key.H, Keyboard.Key.Shift);
+
+    [KeybindConfig("Smart Auto-Reload", command: "robusta.autoreload")]
+    public static RobustaKeybind AutoReloadKey = new(Keyboard.Key.Unknown);
+
+    [KeybindConfig("View Target Inventory", command: "robusta.view_inv")]
+    public static RobustaKeybind ViewInvKey = new(Keyboard.Key.Unknown);
+
+    [KeybindConfig("Toggle Forced Zoom", command: "robusta.auto_zoom.toggle")]
+    public static RobustaKeybind ToggleZoomKey = new(Keyboard.Key.Unknown);
 
     #endregion
 

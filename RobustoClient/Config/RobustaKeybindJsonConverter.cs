@@ -63,13 +63,16 @@ public sealed class RobustaKeybindJsonConverter : JsonConverter<RobustaKeybind>
     }
 
     /// <summary>
-    /// The only place a key bind is checked, so no read path can install an unusable one.
-    /// An invalid value throws, and the config loader then keeps that field's compiled-in default.
+    /// Validates the key combination. Allows Keyboard.Key.Unknown to represent unbound keys,
+    /// while rejecting repeated modifier keys.
     /// </summary>
     private static RobustaKeybind Validate(RobustaKeybind bind)
     {
+        if (bind.BaseKey == Keyboard.Key.Unknown)
+            return bind;
+
         if (!bind.IsValid)
-            throw new JsonException($"Invalid key bind '{bind}': the base key is missing or a key is repeated.");
+            throw new JsonException($"Invalid key bind '{bind}': repeated modifier keys detected.");
 
         return bind;
     }
