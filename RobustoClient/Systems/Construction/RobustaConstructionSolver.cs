@@ -759,9 +759,9 @@ public sealed class RobustaConstructionSolver : EntitySystem
         {
             // Layer this edge actually builds. Node names no longer carry an Alt1/Alt2 suffix (upstream
             // variantized them), so read the layer from the node's resolved entity prototype.
-            int builtLayer = GetDeclaredPipeLayer(GetNodeEntityId(finalBuiltNode, target));
-            if (builtLayer == 0 && DetectEntityPipeLayer(target, out _) is var liveLayer && liveLayer > 0)
-                builtLayer = liveLayer;
+            int builtLayer = (edgePath == null || edgePath.Count == 0)
+                ? DetectEntityPipeLayer(target, out _)
+                : GetDeclaredPipeLayer(GetNodeEntityId(finalBuiltNode, target));
 
             if (desiredPipeLayer != builtLayer)
             {
