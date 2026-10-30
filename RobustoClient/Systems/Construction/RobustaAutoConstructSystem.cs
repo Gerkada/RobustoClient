@@ -3545,11 +3545,17 @@ public sealed class RobustaAutoConstructSystem : EntitySystem
     private static bool TryGetStepTargetPipeLayer(ConstructionActionStep step, out int targetPipeLayer)
     {
         targetPipeLayer = 0;
-        if (step.Kind != ConstructionActionKind.UseTool ||
-            !step.Description.StartsWith("Set pipe layer", StringComparison.OrdinalIgnoreCase))
-        {
+        if (step.Kind != ConstructionActionKind.UseTool)
             return false;
+
+        if (step.TargetPipeLayer is { } layer)
+        {
+            targetPipeLayer = layer;
+            return true;
         }
+
+        if (!step.Description.StartsWith("Set pipe layer", StringComparison.OrdinalIgnoreCase))
+            return false;
 
         if (step.Description.Contains("Alt1", StringComparison.OrdinalIgnoreCase) ||
             step.Description.Contains("Secondary", StringComparison.OrdinalIgnoreCase))
@@ -3565,7 +3571,6 @@ public sealed class RobustaAutoConstructSystem : EntitySystem
             return true;
         }
 
-        targetPipeLayer = 0;
         return true;
     }
 

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Content.Shared.Atmos.Components;
 using Content.Shared.Construction;
 using Content.Shared.Construction.Components;
 using Content.Shared.Construction.Prototypes;
@@ -32,7 +33,8 @@ public sealed record ConstructionActionStep(
     string? PrototypeOrQualityOrTag = null,
     int Amount = 1,
     float DoAfterDelay = 0f,
-    string? ExpectedNextNode = null
+    string? ExpectedNextNode = null,
+    int? TargetPipeLayer = null
 );
 
 public sealed record SolvedConstructionPlan(
@@ -755,9 +757,12 @@ public sealed class RobustaConstructionSolver : EntitySystem
         if (ShouldUseScrewdriverForPipeLayer(graph, finalBuiltNode, desiredEntityProtoId) &&
             !string.IsNullOrEmpty(desiredEntityProtoId))
         {
-            int builtLayer = edgePath != null && edgePath.Count > 0
-                ? GetPipeLayerForIdOrNode(GetNodeName(finalBuiltNode))
-                : DetectEntityPipeLayer(target, out _);
+            // Layer this edge actually builds. Node names no longer carry an Alt1/Alt2 suffix (upstream
+            // variantized them), so read the layer from the node's resolved entity prototype.
+            int builtLayer = (edgePath == null || edgePath.Count == 0)
+                ? DetectEntityPipeLayer(target, out _)
+                : GetDeclaredPipeLayer(GetNodeEntityId(finalBuiltNode, target));
+
             if (desiredPipeLayer != builtLayer)
             {
                 AppendPipeLayerScrewdriverSteps(builtLayer, desiredPipeLayer, steps);
@@ -2341,6 +2346,60 @@ public sealed class RobustaConstructionSolver : EntitySystem
         exportedConstructionProtoId = ResolveConstructionPrototypeForEntity(exportedEntityProtoId);
     }
 
+    /// <summary>
+    /// Reads the live pipe layer of an entity, or null when it has no adjustable pipe layer.
+    /// </summary>
+    private int? GetLivePipeLayer(EntityUid uid)
+    {
+        if (!_entMan.TryGetComponent<AtmosPipeLayersComponent>(uid, out var layers))
+            return null;
+
+        // Locked layers (e.g. manifolds) and single-layer entities never report a layered position.
+        if (layers.PipeLayersLocked || layers.NumberOfPipeLayers <= 1)
+            return null;
+
+        return (int)layers.CurrentPipeLayer;
+    }
+
+    private string ResolveAltLayerProtoId(string protoId, int pipeLayer)
+    {
+        if (string.IsNullOrEmpty(protoId))
+            return string.Empty;
+
+        if (TryExtractPipeLayerSuffix(protoId, out _, out int existingLayer) && existingLayer == pipeLayer)
+            return protoId;
+
+        var cleanBase = TryExtractPipeLayerSuffix(protoId, out var stripped, out _) ? stripped : protoId;
+        if (_entityAltLayerProtos.TryGetValue((cleanBase, pipeLayer), out var mappedAlt))
+            return mappedAlt;
+
+        return pipeLayer == 0 ? cleanBase : cleanBase + (pipeLayer == 1 ? "Alt1" : "Alt2");
+    }
+
+    /// <summary>
+    /// Pipe layer an entity prototype is declared to spawn on, or 0 when it is not layer-specific.
+    /// Upstream variantized pipe layers, so the layer lives on <c>AtmosPipeLayers.pipeLayer</c> rather
+    /// than in the prototype id suffix.
+    /// </summary>
+    private int GetDeclaredPipeLayer(string? entityProtoId)
+    {
+        if (string.IsNullOrEmpty(entityProtoId))
+            return 0;
+
+        int suffixLayer = GetPipeLayerForIdOrNode(entityProtoId);
+        if (suffixLayer > 0)
+            return suffixLayer;
+
+        if (_protoMan.TryIndex<EntityPrototype>(entityProtoId, out var proto) &&
+            _itemUtil.TryGetPrototypeComponent<AtmosPipeLayersComponent>(proto, "AtmosPipeLayers", out var layers) &&
+            layers != null)
+        {
+            return (int)layers.CurrentPipeLayer;
+        }
+
+        return 0;
+    }
+
     public int DetectEntityPipeLayer(EntityUid uid, out string? altEntityProtoId)
     {
         altEntityProtoId = null;
@@ -2350,6 +2409,15 @@ public sealed class RobustaConstructionSolver : EntitySystem
         EnsureCacheInitialized();
 
         var protoId = _entMan.GetComponent<MetaDataComponent>(uid).EntityPrototype?.ID ?? string.Empty;
+
+        // The prototype id is only the *initial* layer. Upstream pipe layers are variant prototypes that are
+        // cycled in place via AtmosPipeLayersComponent.CurrentPipeLayer, so a live component value always wins.
+        if (GetLivePipeLayer(uid) is { } liveLayer)
+        {
+            altEntityProtoId = ResolveAltLayerProtoId(protoId, liveLayer);
+            return liveLayer;
+        }
+
         if (!string.IsNullOrEmpty(protoId))
         {
             // Manifolds bridge all 3 pipe layers simultaneously and never have a single Alt1/Alt2 pipe layer
@@ -2890,7 +2958,8 @@ public sealed class RobustaConstructionSolver : EntitySystem
                 PrototypeOrQualityOrTag: "Screwing",
                 Amount: 1,
                 DoAfterDelay: 0.25f,
-                ExpectedNextNode: null));
+                ExpectedNextNode: null,
+                TargetPipeLayer: stepTargetLayer));
         }
     }
 
