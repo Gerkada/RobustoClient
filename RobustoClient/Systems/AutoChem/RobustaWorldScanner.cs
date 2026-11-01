@@ -80,7 +80,7 @@ public sealed class RobustaWorldScanner : EntitySystem
     public List<EntityUid> FindMachines(string keyword)
     {
         var localPlayer = _player.LocalSession?.AttachedEntity;
-        if (localPlayer == null) return new List<EntityUid>();
+        if (localPlayer == null) return [];
 
         var playerPos = _transform.GetMapCoordinates(localPlayer.Value);
         var entities = _lookup.GetEntitiesInRange(playerPos, SharedInteractionSystem.InteractionRange, LookupFlags.Uncontained);
@@ -105,11 +105,11 @@ public sealed class RobustaWorldScanner : EntitySystem
                 validMachines.Add(ent);
         }
 
-        return validMachines.OrderBy(m => {
+        return [.. validMachines.OrderBy(m => {
             var mPos = _transform.GetMapCoordinates(m);
             if (mPos.MapId != playerPos.MapId) return float.MaxValue;
             return (mPos.Position - playerPos.Position).LengthSquared();
-        }).ToList();
+        })];
     }
 
     public EntityUid? GetBeakerInHand()
@@ -143,8 +143,7 @@ public sealed class RobustaWorldScanner : EntitySystem
         {
             if (comp.GetType().Name == "ItemPlacerComponent")
             {
-                var placed = GetMemberValue(comp, "PlacedEntities") as IEnumerable;
-                if (placed != null)
+                if (GetMemberValue(comp, "PlacedEntities") is IEnumerable placed)
                 {
                     foreach (var entObj in placed)
                     {
@@ -164,7 +163,7 @@ public sealed class RobustaWorldScanner : EntitySystem
     public List<EntityUid> FindMachinesWithReagent(string reagentId)
     {
         var localPlayer = _player.LocalSession?.AttachedEntity;
-        if (localPlayer == null) return new List<EntityUid>();
+        if (localPlayer == null) return [];
 
         var playerPos = _transform.GetMapCoordinates(localPlayer.Value);
         // Increased radius to 15, as chem labs can be large
@@ -205,11 +204,11 @@ public sealed class RobustaWorldScanner : EntitySystem
             }
         }
         
-        return validMachines.OrderBy(m => {
+        return [.. validMachines.OrderBy(m => {
             var mPos = _transform.GetMapCoordinates(m);
             if (mPos.MapId != playerPos.MapId) return float.MaxValue;
             return (mPos.Position - playerPos.Position).LengthSquared();
-        }).ToList();
+        })];
     }
 
     private void ForEachSolution(EntityUid beakerUid, Action<object> action)
@@ -221,13 +220,12 @@ public sealed class RobustaWorldScanner : EntitySystem
             var compName = comp.GetType().Name;
             if (compName == "SolutionContainerManagerComponent" || compName == "SolutionManagerComponent")
             {
-                var containers = GetMemberValue(comp, "Containers") as IEnumerable;
-                if (containers != null)
+                if (GetMemberValue(comp, "Containers") is IEnumerable containers)
                 {
                     foreach (var solObj in containers)
                     {
-                        if (solObj is string solName && 
-                            _containerSystem.TryGetContainer(beakerUid, $"solution@{solName}", out var container) && 
+                        if (solObj is string solName &&
+                            _containerSystem.TryGetContainer(beakerUid, $"solution@{solName}", out var container) &&
                             container is ContainerSlot slot && slot.ContainedEntity.HasValue)
                         {
                             entitiesToScan.Add(slot.ContainedEntity.Value);
@@ -260,8 +258,7 @@ public sealed class RobustaWorldScanner : EntitySystem
                 
                 if (name == "SolutionContainerManagerComponent" || name == "SolutionManagerComponent")
                 {
-                    var dict = GetMemberValue(comp, "Solutions") as IDictionary;
-                    if (dict != null)
+                    if (GetMemberValue(comp, "Solutions") is IDictionary dict)
                     {
                         foreach (var value in dict.Values)
                         {
@@ -284,8 +281,7 @@ public sealed class RobustaWorldScanner : EntitySystem
         float totalAmount = 0f;
 
         ForEachSolution(beakerUid, solution => {
-            var contents = GetMemberValue(solution, "Contents") as IEnumerable;
-            if (contents == null) return;
+            if (GetMemberValue(solution, "Contents") is not IEnumerable contents) return;
 
             foreach (var quantity in contents)
             {
@@ -306,8 +302,7 @@ public sealed class RobustaWorldScanner : EntitySystem
         if (!beakerUid.IsValid()) return result;
 
         ForEachSolution(beakerUid, solution => {
-            var contents = GetMemberValue(solution, "Contents") as IEnumerable;
-            if (contents == null) return;
+            if (GetMemberValue(solution, "Contents") is not IEnumerable contents) return;
 
             foreach (var quantity in contents)
             {
@@ -376,17 +371,15 @@ public sealed class RobustaWorldScanner : EntitySystem
     {
         var doses = new List<ReagentDispenserDispenseAmount>();
         if (!TryComp<UserInterfaceComponent>(dispenser, out var uiComp)) return doses;
-
-        foreach (var (key, ui) in uiComp.ClientOpenInterfaces)
+        foreach (var (_, ui) in uiComp.ClientOpenInterfaces)
         {
-            var state = GetMemberValue(ui, "State") as ReagentDispenserBoundUserInterfaceState;
-            if (state == null) continue;
+            if (GetMemberValue(ui, "State") is not ReagentDispenserBoundUserInterfaceState) continue;
 
             // In some versions, the enum itself defines the buttons. 
             // In others, we might need to check the UI definition.
             // For now, we'll return all standard enums as a base, 
             // but the system will fallback if the click fails.
-            return Enum.GetValues<ReagentDispenserDispenseAmount>().ToList();
+            return [.. Enum.GetValues<ReagentDispenserDispenseAmount>()];
         }
         return doses;
     }
@@ -414,16 +407,14 @@ public sealed class RobustaWorldScanner : EntitySystem
             if (compName.Contains("ReagentDispenser") || compName.Contains("SharedReagentDispenser"))
             {
                 // Try to get the inventory (list of ReagentInventoryItem or similar)
-                var inventory = GetMemberValue(comp, "Inventory") as IEnumerable;
-                if (inventory != null)
+                if (GetMemberValue(comp, "Inventory") is IEnumerable inventory)
                 {
                     foreach (var item in inventory)
                     {
-                        var label = GetMemberValue(item, "ReagentLabel") as string;
                         var location = GetMemberValue(item, "StorageLocation");
-                        
+
                         // Robust label matching: check if requested ID is part of the label or vice versa
-                        if (label != null && (label.Contains(reagentId, StringComparison.OrdinalIgnoreCase) || reagentId.Contains(label, StringComparison.OrdinalIgnoreCase)))
+                        if (GetMemberValue(item, "ReagentLabel") is string label && (label.Contains(reagentId, StringComparison.OrdinalIgnoreCase) || reagentId.Contains(label, StringComparison.OrdinalIgnoreCase)))
                         {
                             if (location is ItemStorageLocation loc) return loc;
                         }
