@@ -349,6 +349,12 @@ public sealed class DispensingState : ChemStateBase
                     context.LogBeakerContents();
                     return this; 
                 }
+                context.StabilizationTimer += 0.25f;
+                if (context.StabilizationTimer >= 3f)
+                {
+                    context.StabilizationTimer = 0f;
+                    context.Logger.Warning($"[WAIT] No volume change after dispensing {context.LastReagentAdded} (beaker {snapTotal:F1}u). Server ignored the request?");
+                }
                 return this; 
             }
 

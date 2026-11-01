@@ -291,7 +291,7 @@ public sealed class RobustaWorldScanner : EntitySystem
             {
                 var reagent = GetMemberValue(quantity, "Reagent");
                 var qAmount = GetMemberValue(quantity, "Quantity");
-                var proto = GetMemberValue(reagent!, "Prototype") as string;
+                var proto = GetMemberValue(reagent!, "Prototype")?.ToString(); // string or ProtoId<ReagentPrototype> depending on version
                 if (proto != null && proto.Equals(reagentId, StringComparison.OrdinalIgnoreCase))
                     totalAmount += GetFloatValue(qAmount);
             }
@@ -313,7 +313,7 @@ public sealed class RobustaWorldScanner : EntitySystem
             {
                 var reagent = GetMemberValue(quantity, "Reagent");
                 var qAmount = GetMemberValue(quantity, "Quantity");
-                var proto = GetMemberValue(reagent!, "Prototype") as string;
+                var proto = GetMemberValue(reagent!, "Prototype")?.ToString(); // string or ProtoId<ReagentPrototype> depending on version
                 
                 if (proto != null)
                 {
@@ -393,7 +393,21 @@ public sealed class RobustaWorldScanner : EntitySystem
 
     public ItemStorageLocation? FindJugLocation(EntityUid dispenserUid, string reagentId)
     {
-        // 1. Primary check: ReagentDispenserComponent's specialized inventory
+        // 0. Server-sent BUI state: exactly the locations the vanilla dispense buttons use.
+        if (TryComp<UserInterfaceComponent>(dispenserUid, out var uiComp))
+        {
+            foreach (var ui in uiComp.ClientOpenInterfaces.Values)
+            {
+                if (GetMemberValue(ui, "State") is not ReagentDispenserBoundUserInterfaceState state) continue;
+                foreach (var item in state.Inventory)
+                {
+                    if (item.ReagentLabel.Contains(reagentId, StringComparison.OrdinalIgnoreCase))
+                        return item.StorageLocation;
+                }
+            }
+        }
+
+        // 1. ReagentDispenserComponent's specialized inventory (server-only component, kept for forks)
         foreach (var comp in _entMan.GetComponents(dispenserUid))
         {
             var compName = comp.GetType().Name;
