@@ -601,7 +601,9 @@ public sealed partial class RobustaWiresSolver : EntitySystem
             solve.Elapsed = 0f;
         }
 
-        TrySyncOpenWiresState(solve.Target);
+        if (!TrySyncOpenWiresState(solve.Target))
+            _states.Remove(solve.Target);
+
         if (!_states.ContainsKey(solve.Target))
         {
             if (!solve.ToolRequested)
@@ -643,7 +645,9 @@ public sealed partial class RobustaWiresSolver : EntitySystem
 
     private void AdvanceWireUiWait(ActiveSolve solve)
     {
-        TrySyncOpenWiresState(solve.Target);
+        if (!TrySyncOpenWiresState(solve.Target))
+            _states.Remove(solve.Target);
+
         if (!_states.ContainsKey(solve.Target))
         {
             if (_phaseRetryTimer >= PhaseRetryIntervalSeconds)
@@ -790,7 +794,10 @@ public sealed partial class RobustaWiresSolver : EntitySystem
         var currentRevision = _stateRevisions.GetValueOrDefault(solve.Target);
         if (!TryPerformWireAction(solve.Target, action.WireId, action.Action))
         {
-            FailSolve("wire UI is no longer open");
+            _states.Remove(solve.Target);
+            solve.ToolRequested = false;
+            solve.Phase = SolvePhase.OpenWireUi;
+            solve.Timer = 0.15f;
             return;
         }
 
@@ -1010,12 +1017,20 @@ public sealed partial class RobustaWiresSolver : EntitySystem
         if (!TryComp<UserInterfaceComponent>(target, out var uiComp))
             return false;
 
+        bool isWiresUiOpen = false;
         foreach (var (key, bUi) in uiComp.ClientOpenInterfaces)
         {
             var keyTypeName = key.GetType().Name;
+            if (bUi is not WiresBoundUserInterface &&
+                key is not WiresUiKey &&
+                !keyTypeName.Contains("WiresUiKey", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            isWiresUiOpen = true;
             var stateObj = GetMemberValue(bUi, "State");
-            if (stateObj is WiresBoundUserInterfaceState wiresState &&
-                (key is WiresUiKey || keyTypeName.Contains("WiresUiKey", StringComparison.OrdinalIgnoreCase) || true))
+            if (stateObj is WiresBoundUserInterfaceState wiresState)
             {
                 if (!_states.TryGetValue(target, out var existing) || !ReferenceEquals(existing, wiresState))
                     ObserveState(target, wiresState);
@@ -1023,7 +1038,7 @@ public sealed partial class RobustaWiresSolver : EntitySystem
             }
         }
 
-        return _states.ContainsKey(target);
+        return isWiresUiOpen && _states.ContainsKey(target);
     }
 
     private bool TryPerformWireAction(EntityUid target, int wireId, WiresAction action)
