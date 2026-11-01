@@ -13,7 +13,7 @@ public sealed partial class RobustaAutoConstructSystem
         if (!Exists(uid) || string.IsNullOrWhiteSpace(quality))
             return false;
 
-        if (!TryComp<ToolComponent>(uid, out var tool) || !tool.Qualities.Contains(quality))
+        if (!TryComp<ToolComponent>(uid, out var tool) || !EntryProvidesQuality(tool, quality))
             return false;
 
         if (FindComponentByName(uid, "MultipleToolComponent") is { } multiComp &&

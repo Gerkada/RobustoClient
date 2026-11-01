@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Reflection;
-using Content.Shared.Atmos.Components;
 using Robust.Shared.Prototypes;
 
 namespace RobustoClient.Systems.Construction;
@@ -12,14 +11,17 @@ public sealed partial class RobustaConstructionSolver
     /// </summary>
     private int? GetLivePipeLayer(EntityUid uid)
     {
-        if (!_entMan.TryGetComponent<AtmosPipeLayersComponent>(uid, out var layers))
+        var layers = FindComponentByName(uid, "AtmosPipeLayersComponent");
+        if (layers == null)
             return null;
 
         // Locked layers (e.g. manifolds) and single-layer entities never report a layered position.
-        if (layers.PipeLayersLocked || layers.NumberOfPipeLayers <= 1)
+        if (GetMemberValue(layers, "PipeLayersLocked") is true ||
+            GetMemberValue(layers, "NumberOfPipeLayers") is byte numLayers && numLayers <= 1 ||
+            GetMemberValue(layers, "NumberOfPipeLayers") is int intLayers && intLayers <= 1)
             return null;
 
-        return (int)layers.CurrentPipeLayer;
+        return TryParsePipeLayerValue(GetMemberValue(layers, "CurrentPipeLayer"), out int layer) ? layer : null;
     }
 
     /// <summary>
@@ -37,10 +39,11 @@ public sealed partial class RobustaConstructionSolver
             return suffixLayer;
 
         if (_protoMan.TryIndex<EntityPrototype>(entityProtoId, out var proto) &&
-            _itemUtil.TryGetPrototypeComponent<AtmosPipeLayersComponent>(proto, "AtmosPipeLayers", out var layers) &&
-            layers != null)
+            _itemUtil.TryGetPrototypeComponent<object>(proto, "AtmosPipeLayers", out var layers) &&
+            layers != null &&
+            TryParsePipeLayerValue(GetMemberValue(layers, "CurrentPipeLayer"), out int declaredLayer))
         {
-            return (int)layers.CurrentPipeLayer;
+            return declaredLayer;
         }
 
         return 0;
