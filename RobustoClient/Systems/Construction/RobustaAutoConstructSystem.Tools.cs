@@ -1,5 +1,6 @@
 using System.Collections;
 using Content.Shared.Hands;
+using Content.Shared.Tools.Components;
 using Content.Shared.Tools.Systems;
 using Robust.Shared.Prototypes;
 
@@ -12,7 +13,7 @@ public sealed partial class RobustaAutoConstructSystem
         if (!Exists(uid) || string.IsNullOrWhiteSpace(quality))
             return false;
 
-        if (!_toolSystem.HasQuality(uid, quality))
+        if (!TryComp<ToolComponent>(uid, out var tool) || !tool.Qualities.Contains(quality))
             return false;
 
         if (FindComponentByName(uid, "MultipleToolComponent") is { } multiComp &&

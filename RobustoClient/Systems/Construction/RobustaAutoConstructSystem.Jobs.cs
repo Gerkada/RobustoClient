@@ -194,16 +194,6 @@ public sealed partial class RobustaAutoConstructSystem
     {
         try
         {
-            _clientConstruction.TryStartConstruction(ghostUid);
-            return;
-        }
-        catch
-        {
-            // Fallback reflection if signature differs on older fork
-        }
-
-        try
-        {
             var method = _clientConstruction.GetType().GetMethod(
                 "TryStartConstruction",
                 BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
@@ -219,7 +209,7 @@ public sealed partial class RobustaAutoConstructSystem
         }
         catch (Exception ex)
         {
-            _log.Warning($"Reflection fallback for TryStartConstruction failed: {ex.Message}");
+            _log.Warning($"Reflection invocation for TryStartConstruction failed: {ex.Message}");
         }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Content.Shared.Store.Components;
 using Content.Shared.StoreDiscount.Components;
 using Content.Shared.Tag;
@@ -23,6 +24,8 @@ public sealed class RobustaSyndicateDetectorSystem : EntitySystem
 
     private readonly Dictionary<EntityUid, (bool Uplink, bool Contra, List<ImplantInfo> Implants, TimeSpan LastCheck)> _cache = new();
     private readonly TimeSpan _cacheLifetime = TimeSpan.FromSeconds(1);
+    private static readonly FieldInfo? StoreBalanceField = typeof(StoreComponent).GetField("Balance");
+    private static MethodInfo? _fixedPointFloatMethod;
 
     // Set of currencies that 100% belong to antagonists
     private readonly HashSet<string> _antagCurrencies = new()
@@ -99,12 +102,22 @@ public sealed class RobustaSyndicateDetectorSystem : EntitySystem
 
     private bool CheckUplink(EntityUid target)
     {
-        // 1. Check for the presence of a store and its balance
-        if (TryComp<StoreComponent>(target, out var store))
+        // 1. Check for the presence of a store and its balance (via IDictionary reflection to avoid FixedPoint2 assembly binding differences across Wizden/GoobStation)
+        if (TryComp<StoreComponent>(target, out var store) &&
+            StoreBalanceField?.GetValue(store) is System.Collections.IDictionary balance)
         {
-            foreach (var currencyPair in store.Balance)
+            foreach (System.Collections.DictionaryEntry entry in balance)
             {
-                if ((float)currencyPair.Value > 0 && _antagCurrencies.Contains(currencyPair.Key.Id))
+                var keyId = entry.Key?.ToString();
+                if (keyId == null || !_antagCurrencies.Contains(keyId))
+                    continue;
+
+                var valObj = entry.Value;
+                if (valObj == null)
+                    continue;
+
+                _fixedPointFloatMethod ??= valObj.GetType().GetMethod("Float", Type.EmptyTypes);
+                if (_fixedPointFloatMethod?.Invoke(valObj, null) is float amount && amount > 0f)
                 {
                     return true;
                 }

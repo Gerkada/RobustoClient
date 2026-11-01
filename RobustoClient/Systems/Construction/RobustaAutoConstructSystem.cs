@@ -2,7 +2,6 @@ using Content.Client.Construction;
 using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Inventory;
 using Content.Shared.Tag;
-using Content.Shared.Tools.Systems;
 using Robust.Client.Graphics;
 using Robust.Client.Input;
 using Robust.Client.Player;
@@ -27,7 +26,6 @@ public sealed partial class RobustaAutoConstructSystem : EntitySystem
     [Dependency] private readonly SharedHandsSystem _hands = default!;
     [Dependency] private readonly InventorySystem _inventory = default!;
     [Dependency] private readonly SharedContainerSystem _container = default!;
-    [Dependency] private readonly SharedToolSystem _toolSystem = default!;
     [Dependency] private readonly TagSystem _tagSystem = default!;
     [Dependency] private readonly IOverlayManager _overlay = default!;
     [Dependency] private readonly ItemUtilitySystem _itemUtil = default!;
