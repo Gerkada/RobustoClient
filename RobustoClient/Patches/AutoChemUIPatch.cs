@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Reflection;
 using Content.Client.Chemistry.UI;
 using HarmonyLib;
 using Robust.Client.UserInterface.Controls;
@@ -5,14 +7,26 @@ using RobustoClient.UI;
 
 namespace RobustoClient.Patches;
 
-[HarmonyPatch(typeof(ReagentDispenserWindow))]
+[HarmonyPatch]
 internal static class AutoChemUIPatch
 {
     private static AutoChemWindow? _autoChemWindow;
 
-    [HarmonyPatch(MethodType.Constructor)]
+    [HarmonyTargetMethods]
+    private static IEnumerable<MethodBase> TargetMethods()
+    {
+        var stdCtor = AccessTools.Constructor(typeof(ReagentDispenserWindow));
+        if (stdCtor != null)
+            yield return stdCtor;
+
+        var energyWindowType = AccessTools.TypeByName("Content.Goobstation.Client.Chemistry.UI.EnergyReagentDispenserWindow");
+        var energyCtor = energyWindowType != null ? AccessTools.Constructor(energyWindowType) : null;
+        if (energyCtor != null)
+            yield return energyCtor;
+    }
+
     [HarmonyPostfix]
-    private static void ConstructorPostfix(ReagentDispenserWindow __instance)
+    private static void ConstructorPostfix(object __instance)
     {
         var autoChemBtn = new Button
         {
@@ -30,6 +44,8 @@ internal static class AutoChemUIPatch
             _autoChemWindow.OpenCentered();
         };
 
-        __instance.ClearButton.Parent?.AddChild(autoChemBtn);
+        var clearBtn = (__instance as ReagentDispenserWindow)?.ClearButton
+            ?? __instance.GetType().GetProperty("ClearButton", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(__instance) as Button;
+        clearBtn?.Parent?.AddChild(autoChemBtn);
     }
 }

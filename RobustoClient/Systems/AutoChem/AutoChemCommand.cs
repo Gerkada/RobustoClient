@@ -1,5 +1,4 @@
 using Content.Shared.Administration;
-using Content.Shared.FixedPoint;
 using Robust.Shared.Console;
 using Robust.Shared.GameObjects;
 using Robust.Shared.IoC;
@@ -81,7 +80,7 @@ public sealed class AutoChemCommand : IConsoleCommand
             return;
         }
 
-        autoChem.StartJob(reagent, FixedPoint2.New(amountInt));
+        autoChem.StartJob(reagent, amountInt);
         shell.WriteLine($"[AutoChem] Plan accepted: {reagent} ({amountInt}u). Waiting for beaker...");
     }
 }
