@@ -198,7 +198,7 @@ public sealed class RobustaWorldScanner : EntitySystem
                 }
             }
 
-            if (isDispenser && FindJugLocation(ent, reagentId) != null) 
+            if (isDispenser && (FindJugLocation(ent, reagentId) != null || FindEnergyReagentId(ent, reagentId) != null)) 
             {
                 validMachines.Add(ent);
             }
@@ -373,15 +373,66 @@ public sealed class RobustaWorldScanner : EntitySystem
         if (!TryComp<UserInterfaceComponent>(dispenser, out var uiComp)) return doses;
         foreach (var (_, ui) in uiComp.ClientOpenInterfaces)
         {
-            if (GetMemberValue(ui, "State") is not ReagentDispenserBoundUserInterfaceState) continue;
+            var state = GetMemberValue(ui, "State");
+            if (state == null) continue;
+            var stateTypeName = state.GetType().Name;
+            if (state is not ReagentDispenserBoundUserInterfaceState &&
+                stateTypeName != "EnergyReagentDispenserBoundUserInterfaceState")
+                continue;
 
-            // In some versions, the enum itself defines the buttons. 
-            // In others, we might need to check the UI definition.
-            // For now, we'll return all standard enums as a base, 
-            // but the system will fallback if the click fails.
+            var selectedAmt = GetMemberValue(state, "SelectedDispenseAmount");
+            if (selectedAmt != null && selectedAmt.GetType().IsEnum)
+            {
+                foreach (var val in Enum.GetValues(selectedAmt.GetType()))
+                    doses.Add((ReagentDispenserDispenseAmount)(int)val);
+                return doses;
+            }
+
             return [.. Enum.GetValues<ReagentDispenserDispenseAmount>()];
         }
         return doses;
+    }
+
+    public string? FindEnergyReagentId(EntityUid dispenserUid, string reagentId)
+    {
+        if (TryComp<UserInterfaceComponent>(dispenserUid, out var uiComp))
+        {
+            foreach (var ui in uiComp.ClientOpenInterfaces.Values)
+            {
+                var state = GetMemberValue(ui, "State");
+                if (state == null || state.GetType().Name != "EnergyReagentDispenserBoundUserInterfaceState")
+                    continue;
+
+                if (GetMemberValue(state, "Inventory") is IEnumerable inventory)
+                {
+                    foreach (var item in inventory)
+                    {
+                        var rId = GetMemberValue(item, "ReagentId") as string;
+                        var label = GetMemberValue(item, "ReagentLabel") as string;
+                        if ((rId != null && rId.Equals(reagentId, StringComparison.OrdinalIgnoreCase)) ||
+                            (label != null && label.Contains(reagentId, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            return rId ?? reagentId;
+                        }
+                    }
+                }
+            }
+        }
+
+        foreach (var comp in _entMan.GetComponents(dispenserUid))
+        {
+            if (comp.GetType().Name.Contains("EnergyReagentDispenser", StringComparison.OrdinalIgnoreCase) &&
+                GetMemberValue(comp, "Reagents") is IDictionary dict)
+            {
+                foreach (var key in dict.Keys)
+                {
+                    if (key is string k && k.Equals(reagentId, StringComparison.OrdinalIgnoreCase))
+                        return k;
+                }
+            }
+        }
+
+        return null;
     }
 
     public ItemStorageLocation? FindJugLocation(EntityUid dispenserUid, string reagentId)

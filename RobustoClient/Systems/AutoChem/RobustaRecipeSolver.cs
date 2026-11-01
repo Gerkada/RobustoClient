@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using Content.Shared.Chemistry.Reaction;
-using Content.Shared.FixedPoint;
 using Robust.Shared.Log;
 
 namespace RobustoClient.Systems.AutoChem;
@@ -17,7 +16,7 @@ public enum PhaseType
 public class ChemPhase
 {
     public PhaseType Type { get; set; }
-    public Dictionary<string, FixedPoint2> Ingredients { get; set; } = new();
+    public Dictionary<string, float> Ingredients { get; set; } = new();
     public float TargetTemperature { get; set; }
     public List<string> WaitReagents { get; set; } = new(); 
     public string Description { get; set; } = string.Empty;
@@ -27,7 +26,7 @@ public class ChemPhase
 public class DispensePlan
 {
     public string TargetReagent { get; set; } = string.Empty;
-    public FixedPoint2 TargetAmount { get; set; }
+    public float TargetAmount { get; set; }
     public List<ChemPhase> RawPhases { get; set; } = new();
     public Queue<ChemPhase> PhaseQueue { get; set; } = new();
     public int TotalPhases { get; set; } = 0;
@@ -77,7 +76,7 @@ public static class RobustaRecipeSolver
     private static long LCM(long a, long b) => (a == 0 || b == 0) ? Math.Max(a, b) : (Abs(a * b) / GCD(a, b));
     private static long Abs(long v) => v < 0 ? -v : v;
 
-    public static DispensePlan? CreatePlan(string targetReagent, FixedPoint2 amount, float capacity = 50f)
+    public static DispensePlan? CreatePlan(string targetReagent, float amount, float capacity = 50f)
     {
         var plan = new DispensePlan { TargetReagent = targetReagent, TargetAmount = amount };
         var sawmill = Logger.GetSawmill("autochem");
@@ -88,7 +87,7 @@ public static class RobustaRecipeSolver
         float yieldPerCycle = reaction != null ? RobustaChemDatabase.GetProductYield(reaction, targetReagent) : 1f;
 
         float safeAmount = capacity * 0.95f;
-        float targetAmount = amount.Float();
+        float targetAmount = amount;
         if (targetAmount > safeAmount) targetAmount = safeAmount;
 
         float rawNeededCycles = targetAmount / yieldPerCycle;
@@ -202,7 +201,7 @@ public static class RobustaRecipeSolver
         if (DispenserReagents.Contains(reagentId))
         {
             var phase = new ChemPhase { Type = PhaseType.Dispense, Description = $"Add {reagentId}" };
-            phase.Ingredients[reagentId] = FixedPoint2.New(cycles);
+            phase.Ingredients[reagentId] = cycles;
             plan.RawPhases.Add(phase);
             return true;
         }
@@ -271,9 +270,9 @@ public static class RobustaRecipeSolver
                     }
 
                     if (synthesisPhase.Ingredients.ContainsKey(r.Id))
-                        synthesisPhase.Ingredients[r.Id] += FixedPoint2.New(amount);
+                        synthesisPhase.Ingredients[r.Id] += amount;
                     else
-                        synthesisPhase.Ingredients[r.Id] = FixedPoint2.New(amount);
+                        synthesisPhase.Ingredients[r.Id] = amount;
                 }
             }
             

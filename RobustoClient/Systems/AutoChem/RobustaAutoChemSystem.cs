@@ -6,7 +6,6 @@ using Robust.Shared.GameObjects;
 using Robust.Shared.IoC;
 using Robust.Shared.Log;
 using Content.Shared.Chemistry;
-using Content.Shared.FixedPoint;
 
 namespace RobustoClient.Systems.AutoChem;
 
@@ -27,7 +26,7 @@ public sealed class RobustaAutoChemSystem : EntitySystem
         _context = new AutoChemContext(_scanner, _networkHands, EntityManager, sawmill);
     }
 
-    public void StartJob(string reagent, FixedPoint2 amount)
+    public void StartJob(string reagent, float amount)
     {
         _context.Beaker = _scanner.GetBeakerInHand();
         float capacity = 50f;
@@ -170,19 +169,19 @@ public sealed class CheckNextPhaseState : ChemStateBase
         {
             if (context.DispenseQueue.Count == 0)
             {
-                float totalToDispense = nextPhase.Ingredients.Values.Sum(v => v.Float());
+                float totalToDispense = nextPhase.Ingredients.Values.Sum();
 
                 if (currentVol + totalToDispense > capacity + 0.1f)
                 {
                     float available = capacity - currentVol;
                     float scale = available / totalToDispense;
                     foreach (var (rId, amt) in nextPhase.Ingredients)
-                        context.DispenseQueue.Enqueue((rId, (int)Math.Floor(amt.Float() * Math.Max(0, scale))));
+                        context.DispenseQueue.Enqueue((rId, (int)Math.Floor(amt * Math.Max(0, scale))));
                 }
                 else
                 {
                     foreach (var (rId, amt) in nextPhase.Ingredients)
-                        context.DispenseQueue.Enqueue((rId, (int)Math.Round(amt.Float())));
+                        context.DispenseQueue.Enqueue((rId, (int)Math.Round(amt)));
                 }
             }
 
@@ -359,26 +358,20 @@ public sealed class DispensingState : ChemStateBase
             }
 
             var jugLoc = context.Scanner.FindJugLocation(context.Dispenser.Value, reagentId);
-            if (jugLoc == null) { context.Dispenser = null; return WaitDispenserState.Instance; }
+            var energyReagentId = jugLoc == null ? context.Scanner.FindEnergyReagentId(context.Dispenser.Value, reagentId) : null;
+            if (jugLoc == null && energyReagentId == null) { context.Dispenser = null; return WaitDispenserState.Instance; }
 
-            // Determine best dose based on what's actually available on this machine
+            // Determine best dose based on what's actually available on this machine (supports both Wizden and GoobStation dose enums)
             var availableDoses = context.Scanner.GetAvailableDoses(context.Dispenser.Value);
-            ReagentDispenserDispenseAmount dose;
-            
-            if (remaining >= 120 && availableDoses.Contains(ReagentDispenserDispenseAmount.U120)) dose = ReagentDispenserDispenseAmount.U120;
-            else if (remaining >= 60 && availableDoses.Contains(ReagentDispenserDispenseAmount.U60)) dose = ReagentDispenserDispenseAmount.U60;
-            else if (remaining >= 40 && availableDoses.Contains(ReagentDispenserDispenseAmount.U40)) dose = ReagentDispenserDispenseAmount.U40;
-            else if (remaining >= 30 && availableDoses.Contains(ReagentDispenserDispenseAmount.U30)) dose = ReagentDispenserDispenseAmount.U30;
-            else if (remaining >= 20 && availableDoses.Contains(ReagentDispenserDispenseAmount.U20)) dose = ReagentDispenserDispenseAmount.U20;
-            else if (remaining >= 15 && availableDoses.Contains(ReagentDispenserDispenseAmount.U15)) dose = ReagentDispenserDispenseAmount.U15;
-            else if (remaining >= 10 && availableDoses.Contains(ReagentDispenserDispenseAmount.U10)) dose = ReagentDispenserDispenseAmount.U10;
-            else if (remaining >= 5 && availableDoses.Contains(ReagentDispenserDispenseAmount.U5)) dose = ReagentDispenserDispenseAmount.U5;
-            else dose = ReagentDispenserDispenseAmount.U1; // Guaranteed fallback
+            var dose = availableDoses
+                .Where(d => (int)d > 0 && (int)d <= remaining)
+                .OrderByDescending(d => (int)d)
+                .FirstOrDefault(ReagentDispenserDispenseAmount.U1);
 
             if (context.LastActiveDose != dose)
             {
-                context.Logger.Info($"[SYNC] Setting dose {dose}...");
-                context.NetworkHands.SendBuiMessage(context.Dispenser.Value, new ReagentDispenserSetDispenseAmountMessage(dose));
+                context.Logger.Info($"[SYNC] Setting dose {(int)dose}u...");
+                context.NetworkHands.SetDispenserDose(context.Dispenser.Value, dose);
                 context.LastActiveDose = dose;
                 return this;
             }
@@ -391,8 +384,8 @@ public sealed class DispensingState : ChemStateBase
             context.LastProductAmountBefore = (context.TargetProduct != null && snapBefore.TryGetValue(context.TargetProduct, out var pOld)) ? pOld : 0f;
             context.WaitingForDispenseConfirm = true;
 
-            context.Logger.Info($"[ACTION] Dispensing {reagentId} (using {dose}u). Remaining: {remaining}u");
-            context.NetworkHands.SendBuiMessage(context.Dispenser.Value, new ReagentDispenserDispenseReagentMessage(jugLoc.Value));
+            context.Logger.Info($"[ACTION] Dispensing {reagentId} (using {(int)dose}u). Remaining: {remaining}u");
+            context.NetworkHands.DispenseReagent(context.Dispenser.Value, jugLoc, energyReagentId);
             return this;
         }
         else

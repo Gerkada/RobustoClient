@@ -4,7 +4,6 @@ using System.Linq;
 using Robust.Shared.GameObjects;
 using Robust.Shared.Log;
 using Content.Shared.Chemistry;
-using Content.Shared.FixedPoint;
 using RobustoClient.Systems.AutoChem;
 
 namespace RobustoClient.Systems.AutoChem;
