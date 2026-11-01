@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Content.Shared.Store.Components;
-using Content.Shared.StoreDiscount.Components;
 using Content.Shared.Tag;
 using Content.Shared.Contraband;
 using Content.Shared.PDA;
@@ -25,6 +24,10 @@ public sealed class RobustaSyndicateDetectorSystem : EntitySystem
     private readonly Dictionary<EntityUid, (bool Uplink, bool Contra, List<ImplantInfo> Implants, TimeSpan LastCheck)> _cache = new();
     private readonly TimeSpan _cacheLifetime = TimeSpan.FromSeconds(1);
     private static readonly FieldInfo? StoreBalanceField = typeof(StoreComponent).GetField("Balance");
+    private static readonly Type? StoreDiscountType =
+        Type.GetType("Content.Shared.StoreDiscount.Components.StoreDiscountComponent, Content.Shared", false);
+    private static readonly FieldInfo? StoreDiscountsField = StoreDiscountType?.GetField("Discounts");
+    private static FieldInfo? _discountCategoryField;
     private static MethodInfo? _fixedPointFloatMethod;
 
     // Set of currencies that 100% belong to antagonists
@@ -124,13 +127,21 @@ public sealed class RobustaSyndicateDetectorSystem : EntitySystem
             }
         }
 
-        // 2. Check for hidden discounts
-        if (TryComp<StoreDiscountComponent>(target, out var discountComponent))
+        // 2. Check for hidden discounts (via reflection as older GoobStation downstreams lack StoreDiscountComponent)
+        if (StoreDiscountType != null &&
+            EntityManager.TryGetComponent(target, StoreDiscountType, out var discountComponent) &&
+            StoreDiscountsField?.GetValue(discountComponent) is System.Collections.IEnumerable discounts)
         {
-            foreach (var discount in discountComponent.Discounts)
+            foreach (var discount in discounts)
             {
-                var categoryId = discount.DiscountCategory.Id.ToLower();
-                if (categoryId.Contains("syndicate") || categoryId.Contains("traitor"))
+                if (discount == null)
+                    continue;
+
+                _discountCategoryField ??= discount.GetType().GetField("DiscountCategory");
+                var categoryId = _discountCategoryField?.GetValue(discount)?.ToString();
+                if (categoryId != null &&
+                    (categoryId.Contains("syndicate", StringComparison.OrdinalIgnoreCase) ||
+                     categoryId.Contains("traitor", StringComparison.OrdinalIgnoreCase)))
                     return true;
             }
         }

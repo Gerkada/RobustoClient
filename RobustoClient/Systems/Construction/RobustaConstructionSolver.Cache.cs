@@ -1,6 +1,5 @@
 using System.Collections;
 using Content.Shared.Construction;
-using Content.Shared.Construction.Components;
 using Content.Shared.Construction.Prototypes;
 using Robust.Shared.Prototypes;
 
@@ -152,7 +151,7 @@ public sealed partial class RobustaConstructionSolver
 
             if (compGraph != null && compNode != null)
             {
-                if (_itemUtil.TryGetPrototypeComponent<ComputerBoardComponent>(entityProto, "ComputerBoard", out var compBoard) &&
+                if (_itemUtil.TryGetPrototypeComponent<object>(entityProto, "ComputerBoard", out var compBoard) &&
                     compBoard != null)
                 {
                     var compProtoId = GetStringMember(compBoard, "Prototype");
@@ -178,7 +177,7 @@ public sealed partial class RobustaConstructionSolver
                 RegisterEntityNodeMapping(entityProto.ID, airlockGraph, airlockNode);
             }
 
-            if (_itemUtil.TryGetPrototypeComponent<ElectronicsBoardComponent>(entityProto, "ElectronicsBoard", out var elecBoard) &&
+            if (_itemUtil.TryGetPrototypeComponent<object>(entityProto, "ElectronicsBoard", out var elecBoard) &&
                 elecBoard != null)
             {
                 var elecProtoId = GetStringMember(elecBoard, "Prototype");
