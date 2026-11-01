@@ -1,13 +1,10 @@
 # RobustoClient
 
-![GitHub release](https://flat.badgen.net/github/release/Gerkada/RobustoClient)
-![.NET](https://img.shields.io/badge/.NET-10.0-blue?style=flat-square)
-![License](https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square)
-[![Discord](https://img.shields.io/badge/Discord-Join_Community-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/XkujzBJSkz)
+[](https://discord.gg/XkujzBJSkz)
 
 Based on the original [ArabicaClient](https://github.com/noverd/ArabicaCliento) by noverd. Massive thanks for the foundational framework.
 
-RobustoClient is a heavily modified, advanced open-source cheat client for Space Station 14. It features a completely rewritten architecture for critical systems, including a flawless mathematical AutoChem solver, precise combat prediction, and advanced entity detection.
+RobustoClient is a heavily modified, advanced open-source cheat client for Space Station 14. It features a completely rewritten architecture for critical systems, including a mathematical AutoChem solver, an automated construction and wire-hacking engine, precise combat prediction, and advanced entity detection.
 
 ## Disclaimer
 This project is created strictly for educational purposes. The author is not responsible for how this client is used by others.
@@ -27,9 +24,8 @@ To run this, you need [MarseyLoader](https://github.com/ValidHunters/Marseyloade
 If you want to build the client from source for development purposes:
 
 1. Clone the repository:
-
 ```bash
-git clone --recurse-submodules -j4 [https://github.com/Gerkada/RobustoClient.git](https://github.com/Gerkada/RobustoClient.git)
+git clone --recurse-submodules -j4 https://github.com/Gerkada/RobustoClient.git
 ```
 2. Enter the directory:
 ```bash
@@ -43,15 +39,19 @@ dotnet build RobustoClient/RobustoClient.csproj -c Release
 
 ## Key Features
 
+- **Smart Auto-Hacking & Wire Panel Solver (NEW)** – An intent-driven wire discovery and hacking state machine (`RobustaWiresSolver` & `RobustaHackingSystem`).
+  - **One-Key Airlock & Vending Machine Hacking (`Shift + H`)**: Point at any door or vending machine and press `Shift + H` to automatically open the maintenance panel, probe unknown wires by analyzing status light deltas, unbolt locked airlocks (`Mend` + `Pulse`), cut `Log`, `AI Interact`, and `Power` wires, and pry the door open—or cut `Access`, `Manager`, and `Log` wires on vending machines.
+  - **High-Security Shielding Removal**: Automatically detects reinforced and high-security airlock shielding (`WiresPanelSecurityComponent`) and delegates multi-step construction graph traversal (`maxSecurity` -> `highSecurity` -> `airlock`) to `RobustaAutoConstructSystem` before hacking the internal wires.
+  - **Station-Wide Wire Layout Caching**: Memorizes discovered wire layouts (`Color` + `Letter` -> `WireFunction`) per prototype Group ID so subsequent airlocks and machines of the same type are hacked immediately without exploratory probing.
 - **Smart AutoConstruct & Blueprint System (NEW)** – A BFS construction graph solver (`RobustaConstructionSolver`) and state-machine builder/deconstructor (`RobustaAutoConstructSystem`).
-  - **Context-Aware Build & Deconstruct (`V` / `N`)**: Short-tap `V` to automatically build any construction ghost or unfinished frame under your cursor; double-tap `V`, hold `V`, press `Shift + V`, or press `N` to deconstruct structures step-by-step. Automatically fetches required materials, boards, parts, and tools from hands, utility belt, backpack, or nearby tiles, ignites/extinguishes welders, handles anchoring transitions, and returns tools to their original storage slot.
-  - **Multi-Tile Blueprints & Z-Layer Phased Building**: Export any grid area into a reusable JSON blueprint via a 2-click selection right from the native Construction Menu (`G`), preview and rotate (`R`) multi-tile ghost overlays, and automatically construct complex rooms in Z-layer order (`Subfloor` -> `Structure` -> `Fixtures`).
-- **Smart AutoChem System (NEW)** – A flawless, state-machine-driven chemistry AI. Uses a Top-Down Float solver (Recursive LCM) and Yield-Skewed Verification to brew complex multi-stage recipes without overflowing beakers or wasting reagents.
-- **Smart AutoReload System (NEW)** – A state-machine-driven weapon reload AI. Features automatic ammunition detection (magazines, loose shells, and boxes), support for two-handed wielding mechanics, and intelligent chamber monitoring to prevent unnecessary bolt racking.
-- **Upgraded Aimbot (Melee & Ranged)** – Now features advanced relative velocity (`relVel`) prediction and optimized O(1) weapon resolution via `SharedHandsSystem` for perfect tracking.
+  - **Context-Aware Build & Deconstruct (`V` / `N`)**: Short-tap `V` to automatically build any construction ghost or unfinished frame under your cursor; double-tap `V`, hold `V`, or press `N` to deconstruct structures step-by-step (automatically invoking the wire solver on airlocks to unbolt and cut all internal wires safely). Fetches required materials, boards, parts, and tools from hands, utility belt, backpack, or nearby tiles, ignites/extinguishes welders, pauses during player movement to prevent interrupted `DoAfter` drops, and returns tools to their original storage slot.
+  - **Multi-Tile Blueprints & Multi-Layer Piping**: Export any grid area into a reusable JSON blueprint via a 2-click selection right from the native Construction Menu (`G`), preview and rotate (`R`) multi-tile ghost overlays, and automatically construct complex setups in Z-layer order (`Subfloor` -> `Structure` -> `Fixtures`) with full support for `Primary`, `Secondary`, and `Tertiary` atmospheric pipe layers.
+- **Smart AutoChem System** – A state-machine-driven chemistry AI. Uses a Top-Down Float solver (Recursive LCM) and Yield-Skewed Verification to brew complex multi-stage recipes without overflowing beakers or wasting reagents.
+- **Smart AutoReload System** – A state-machine-driven weapon reload AI. Features automatic ammunition detection (magazines, loose shells, and boxes), support for two-handed wielding mechanics, and intelligent chamber monitoring to prevent unnecessary bolt racking.
+- **Upgraded Aimbot (Melee & Ranged)** – Features advanced relative velocity (`relVel`) prediction, Throw Aimbot support, and optimized O(1) weapon resolution via `SharedHandsSystem` for accurate tracking.
 - **Advanced Syndicate Detector** – Bypasses basic PVS restrictions. Analyzes `ContrabandComponent.Severity` to identify actual threats while ignoring sponsor items or civilian contraband.
 - **Friend-or-Foe System (Robusta Friend)** – Aimbot recognizes friends and enemies, focusing only on opponents. Add your friends by username.
-- **ClickGui** – A sleek user interface for toggling cheat functions, activated by F4.
+- **ClickGui & Dynamic Multi-Key Keybinds (`F4`)** – A sleek interface for toggling cheat functions and customizing keybinds on the fly, with full support for modifier combinations (`Shift`/`Ctrl`/`Alt` + Key) and persistent `config.json` storage.
 - **Anti-Slip** – Protection from slipping on soap, water, and other surfaces.
 - **Auto-Spin & Auto-Zoom** – Continuous spinning effect and optimal FOV/Zoom adjustments.
 
@@ -72,4 +72,4 @@ Need help with installation, want to report a bug, or just chat with other users
 I welcome any contributions to the client. If you have ideas for improvements, new features, or find a bug, please open a ticket in the Issues section on GitHub or discuss it in our Discord.
 
 ## License
-This project is licensed under the [GPL-3.0 License](LICENSE).
+This project is licensed under the [GPL-3.0 License](https://www.google.com/search?q=LICENSE).
