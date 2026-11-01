@@ -1,4 +1,3 @@
-using System;
 using System.Numerics;
 using System.Reflection;
 using Robust.Client.Graphics;
@@ -6,10 +5,7 @@ using Robust.Client.Input;
 using Robust.Client.Placement;
 using Robust.Client.ResourceManagement;
 using Robust.Shared.Enums;
-using Robust.Shared.GameObjects;
-using Robust.Shared.IoC;
 using Robust.Shared.Map.Components;
-using Robust.Shared.Maths;
 
 namespace RobustoClient.Systems.Construction.Blueprints;
 
