@@ -11,6 +11,7 @@ public static class MarseyEntry
         Harmony.DEBUG = true;
 #endif
         MarseyLogger.Info("Entry for patching started.");
+        RobustoClient.ImGui.ImGuiNativeLoader.Initialize();
         if (!TryGetAssembly("Content.Client"))
             return;
 

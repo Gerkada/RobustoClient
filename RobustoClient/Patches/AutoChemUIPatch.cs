@@ -3,15 +3,13 @@ using System.Reflection;
 using Content.Client.Chemistry.UI;
 using HarmonyLib;
 using Robust.Client.UserInterface.Controls;
-using RobustoClient.UI;
+using RobustoClient.UI.ImGui;
 
 namespace RobustoClient.Patches;
 
 [HarmonyPatch]
 internal static class AutoChemUIPatch
 {
-    private static AutoChemWindow? _autoChemWindow;
-
     [HarmonyTargetMethods]
     private static IEnumerable<MethodBase> TargetMethods()
     {
@@ -36,12 +34,7 @@ internal static class AutoChemUIPatch
 
         autoChemBtn.OnPressed += _ =>
         {
-            if (_autoChemWindow == null || _autoChemWindow.Disposed)
-            {
-                _autoChemWindow = new AutoChemWindow();
-            }
-            
-            _autoChemWindow.OpenCentered();
+            RobustaImGuiManager.AutoChem.IsOpen = true;
         };
 
         var clearBtn = (__instance as ReagentDispenserWindow)?.ClearButton

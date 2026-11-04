@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Content.Shared.Inventory;
@@ -18,6 +18,7 @@ using Robust.Shared.Map;
 using Robust.Shared.Player;
 using Robust.Shared.Utility;
 using RobustoClient.UI;
+using RobustoClient.UI.ImGui;
 
 namespace RobustoClient.Systems;
 
@@ -39,9 +40,6 @@ public sealed class RobustaInventoryViewerSystem : EntitySystem
     [Dependency] private readonly InventorySystem _inventory = default!;
     [Dependency] private readonly SharedContainerSystem _containers = default!;
     [Dependency] private readonly RobustaSyndicateDetectorSystem _syndi = default!;
-    [Dependency] private readonly IUserInterfaceManager _ui = default!;
-
-    private InventoryViewerWindow? _window;
 
     public override void Initialize()
     {
@@ -127,16 +125,10 @@ public sealed class RobustaInventoryViewerSystem : EntitySystem
 
     public void OpenInventoryWindow(EntityUid target)
     {
-        if (_window == null || _window.Disposed)
-        {
-            _window = new InventoryViewerWindow();
-        }
-
         var entries = GetFullInventory(target);
         var name = MetaData(target).EntityName;
 
-        _window.SetData(target, name, entries);
-        _window.OpenCentered();
+        RobustaImGuiManager.InventoryViewer.SetData(target, name, entries);
     }
 
     public List<InventoryEntry> GetFullInventory(EntityUid target)
