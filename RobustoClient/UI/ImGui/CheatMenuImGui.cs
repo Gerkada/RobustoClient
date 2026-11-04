@@ -460,28 +460,27 @@ public sealed class CheatMenuImGui
                 Hexa.NET.ImGui.ImGui.TextUnformatted(item.Attribute.DisplayName);
 
                 Hexa.NET.ImGui.ImGui.TableNextColumn();
-                if (!Hexa.NET.ImGui.ImGui.IsItemActive())
-                    item.EditBuffer = currentVal.IsValid ? currentVal.ToString() : "";
-
                 var hint = item.Attribute.DefaultKey != Keyboard.Key.Unknown
                     ? $"Default: {new RobustaKeybind(item.Attribute.DefaultKey, item.Attribute.DefaultMod1)}"
                     : "Unassigned";
 
                 Hexa.NET.ImGui.ImGui.SetNextItemWidth(-1f);
-                if (Hexa.NET.ImGui.ImGui.InputTextWithHint(
-                        $"##bind_in_{item.Field.Name}",
-                        hint,
-                        ref item.EditBuffer,
-                        64,
-                        ImGuiInputTextFlags.EnterReturnsTrue))
+                Hexa.NET.ImGui.ImGui.InputTextWithHint(
+                    $"##bind_in_{item.Field.Name}",
+                    hint,
+                    ref item.EditBuffer,
+                    64);
+
+                if (Hexa.NET.ImGui.ImGui.IsItemDeactivatedAfterEdit())
                 {
                     if (TryParseKeybind(item.EditBuffer, out var parsed))
                         ApplyBind(item, parsed);
+                    else
+                        item.EditBuffer = currentVal.IsValid ? currentVal.ToString() : "";
                 }
-                else if (Hexa.NET.ImGui.ImGui.IsItemDeactivatedAfterEdit())
+                else if (!Hexa.NET.ImGui.ImGui.IsItemActive())
                 {
-                    if (TryParseKeybind(item.EditBuffer, out var parsed))
-                        ApplyBind(item, parsed);
+                    item.EditBuffer = currentVal.IsValid ? currentVal.ToString() : "";
                 }
 
                 Hexa.NET.ImGui.ImGui.TableNextColumn();
@@ -496,15 +495,12 @@ public sealed class CheatMenuImGui
                         _activeListeningTarget = item;
                 }
 
-            Hexa.NET.ImGui.ImGui.TableNextColumn();
-            Hexa.NET.ImGui.ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(4f, 4f));
-            bool resetPressed = RobustaImGuiWidgets.AccentButton($"Reset##reset_btn_{item.Field.Name}", new Vector2(-1f, 0f));
-            Hexa.NET.ImGui.ImGui.PopStyleVar();
-            if (resetPressed)
-            {
-                var defaultBind = new RobustaKeybind(item.Attribute.DefaultKey, item.Attribute.DefaultMod1);
-                ApplyBind(item, defaultBind);
-            }
+                Hexa.NET.ImGui.ImGui.TableNextColumn();
+                if (RobustaImGuiWidgets.AccentButton($"Reset##reset_btn_{item.Field.Name}", new Vector2(-1f, 0f)))
+                {
+                    var defaultBind = new RobustaKeybind(item.Attribute.DefaultKey, item.Attribute.DefaultMod1);
+                    ApplyBind(item, defaultBind);
+                }
             }
 
             Hexa.NET.ImGui.ImGui.EndTable();
