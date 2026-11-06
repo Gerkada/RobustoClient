@@ -95,6 +95,18 @@ public sealed class ItemUtilitySystem : EntitySystem
     private static FieldInfo? _entryComponentField;
     private static bool _entryReflected;
 
+    // --- Cross-version StackComponent.StackTypeId reflection (handles string vs ProtoId<StackPrototype>) ---
+    private static readonly PropertyInfo? StackTypeIdProp =
+        typeof(StackComponent).GetProperty("StackTypeId", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+    private static readonly FieldInfo? StackTypeIdField =
+        typeof(StackComponent).GetField("StackTypeId", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+    private static string? GetStackTypeIdString(StackComponent stack)
+    {
+        var raw = StackTypeIdProp?.GetValue(stack) ?? StackTypeIdField?.GetValue(stack);
+        return raw?.ToString();
+    }
+
     // --- Cross-version SharedHandsSystem.GetHeldItem reflection ---
     private MethodInfo? _getHeldItemMethod3;
     private MethodInfo? _getHeldItemMethod2;
@@ -257,7 +269,7 @@ public sealed class ItemUtilitySystem : EntitySystem
             {
                 if (!TryComp<StackComponent>(uid, out var stack))
                     return false;
-                if (!string.Equals(stack.StackTypeId, requiredStackType, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(GetStackTypeIdString(stack), requiredStackType, StringComparison.OrdinalIgnoreCase))
                     return false;
                 if (allowedProtos != null && string.IsNullOrEmpty(query.StackType))
                     return true;
@@ -285,10 +297,11 @@ public sealed class ItemUtilitySystem : EntitySystem
         if (!TryGetPrototypeComponent<StackComponent>(proto, "Stack", out var stackComp) || stackComp == null)
             return false;
 
-        if (string.IsNullOrEmpty(stackComp.StackTypeId))
+        var resolvedId = GetStackTypeIdString(stackComp);
+        if (string.IsNullOrEmpty(resolvedId))
             return false;
 
-        stackTypeId = stackComp.StackTypeId;
+        stackTypeId = resolvedId;
         if (_proto.TryIndex<StackPrototype>(stackTypeId, out var stackProto))
             maxCount = stackProto.MaxCount ?? 30;
         else

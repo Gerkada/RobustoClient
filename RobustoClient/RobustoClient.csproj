@@ -31,7 +31,7 @@
                               Condition="Exists('$(PkgHexa_NET_ImGui)/runtimes/osx-x64/native/cimgui.dylib')" />
             <EmbeddedResource Include="$(PkgHexa_NET_ImGui)/runtimes/osx-arm64/native/cimgui.dylib"
                               LogicalName="RobustoClient.Embedded.osx-arm64.cimgui.dylib"
-                              Condition="Exists('$(PkgHexa_NET_ImGui)/runtimes/osx-arm64/native/cimgui.dylib')" />
+                              Condition="Exists('$(PkgHexa_NET_ImGui)/runtimes/osx-arm64.cimgui.dylib')" />
         </ItemGroup>
     </Target>
 
@@ -71,7 +71,8 @@
             <Private>False</Private>
             <PrivateAssets>all</PrivateAssets>
         </ProjectReference>
-        <ProjectReference Include="..\space-station-14\RobustToolbox\NetSerializer\NetSerializer\NetSerializer.csproj">
+        <ProjectReference Include="..\space-station-14\RobustToolbox\NetSerializer\NetSerializer\NetSerializer.csproj"
+                          Condition="Exists('..\space-station-14\RobustToolbox\NetSerializer\NetSerializer\NetSerializer.csproj')">
             <Name>Robust.NetSerializer</Name>
             <Private>False</Private>
             <PrivateAssets>all</PrivateAssets>
@@ -81,7 +82,8 @@
             <Private>False</Private>
             <PrivateAssets>all</PrivateAssets>
         </ProjectReference>
-        <ProjectReference Include="..\space-station-14\RobustToolbox\Avalonia.Base\Avalonia.Base.csproj">
+        <ProjectReference Include="..\space-station-14\RobustToolbox\Avalonia.Base\Avalonia.Base.csproj"
+                          Condition="Exists('..\space-station-14\RobustToolbox\Avalonia.Base\Avalonia.Base.csproj')">
             <Name>Avalonia.Base</Name>
             <Private>False</Private>
             <PrivateAssets>all</PrivateAssets>

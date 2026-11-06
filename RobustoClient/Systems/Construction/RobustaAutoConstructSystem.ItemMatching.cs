@@ -57,9 +57,7 @@ public sealed partial class RobustaAutoConstructSystem
         string? liveStackType = null;
         if (TryComp<StackComponent>(uid, out var stack))
         {
-            liveStackType = stack.StackTypeId.Id;
-            if (string.IsNullOrEmpty(liveStackType))
-                liveStackType = GetStringMember(stack, "StackTypeId") ?? GetStringMember(stack, "StackType");
+            liveStackType = GetStringMember(stack, "StackTypeId") ?? GetStringMember(stack, "StackType");
         }
 
         if (string.IsNullOrEmpty(liveStackType) && FindComponentByName(uid, "StackComponent") is { } rawStack)
