@@ -47,6 +47,7 @@ public static unsafe class RobustaImGuiManager
         var io = Hexa.NET.ImGui.ImGui.GetIO();
         io.IniFilename = null;
         io.LogFilename = null;
+        io.ConfigInputTrickleEventQueue = false;
 
         _renderer = new ImGuiGl3Renderer();
         _renderer.Initialize(clyde);
@@ -55,6 +56,12 @@ public static unsafe class RobustaImGuiManager
         CheatMenu.Initialize();
 
         IsInitialized = true;
+    }
+
+    internal static void EnsureCurrentContext()
+    {
+        if (_context != 0)
+            Hexa.NET.ImGui.ImGui.SetCurrentContext(new ImGuiContextPtr((ImGuiContext*)_context));
     }
 
     public static void RenderFrame()
@@ -84,7 +91,11 @@ public static unsafe class RobustaImGuiManager
         if (!anyVisible && !_wasAnyWindowVisible)
             return;
 
-        _wasAnyWindowVisible = anyVisible;
+        if (anyVisible != _wasAnyWindowVisible)
+        {
+            _wasAnyWindowVisible = anyVisible;
+            ImGuiInputBridge.OnWindowVisibilityChanged(anyVisible);
+        }
 
         ImGuiInputBridge.UpdateBeforeNewFrame(clyde, timing, inputMan, uiMan);
         Hexa.NET.ImGui.ImGui.NewFrame();
