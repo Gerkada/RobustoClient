@@ -1,10 +1,12 @@
 using System.Numerics;
+using System.Reflection;
 using FluentAssertions;
 using Robust.Shared.GameObjects;
 using Robust.Shared.Map;
 using Robust.Shared.Maths;
 using RobustoClient.Patches;
 using RobustoClient.Systems.AutoChem;
+using RobustoClient.Systems.Construction;
 using RobustoClient.Systems.Hacking;
 using Xunit;
 
@@ -48,5 +50,20 @@ public class HeadlessSanityTests
         var patchType = typeof(DrawOcclusionDepthPatch);
         patchType.Should().NotBeNull();
         patchType.IsClass.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(typeof(RobustaRecipeSolver))]
+    [InlineData(typeof(RobustaWiresSolver))]
+    [InlineData(typeof(RobustaConstructionSolver))]
+    public void SolverFields_DoNotReferenceClientOnlyAssemblies(Type solverType)
+    {
+        var fields = solverType.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+        foreach (var field in fields)
+        {
+            var asmName = field.FieldType.Assembly.GetName().Name ?? string.Empty;
+            asmName.Should().NotStartWith("Robust.Client", $"field {solverType.Name}.{field.Name} prevents headless instantiation");
+            asmName.Should().NotStartWith("Content.Client", $"field {solverType.Name}.{field.Name} prevents headless instantiation");
+        }
     }
 }
