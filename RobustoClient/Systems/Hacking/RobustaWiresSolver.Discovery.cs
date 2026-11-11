@@ -84,10 +84,12 @@ public sealed partial class RobustaWiresSolver
 
         if (!discovery.Restoring)
         {
-            discovery.Name = IdentifyProbedWire(discovery.Baseline, state);
-            if (TryComp<DoorBoltComponent>(solve.Target, out var boltState) &&
-                boltState.BoltWireCut && !discovery.BoltWireWasCut)
-                discovery.Name = BoltWireName;
+            bool boltCutNow = TryComp<DoorBoltComponent>(solve.Target, out var boltState) && boltState.BoltWireCut;
+            discovery.Name = IdentifyProbedWire(
+                discovery.Baseline,
+                state,
+                new WiresTargetSnapshot(BoltWireCut: discovery.BoltWireWasCut),
+                new WiresTargetSnapshot(BoltWireCut: boltCutNow));
 
             if (discovery.Name == PowerWireName &&
                 (!TryComp<DoorBoltComponent>(solve.Target, out var bolts) || !bolts.BoltsDown))
@@ -183,24 +185,40 @@ public sealed partial class RobustaWiresSolver
 
     private bool TryFinishUnpoweredIntent(ActiveSolve solve, WiresBoundUserInterfaceState state)
     {
-        if (!CanFinishUnpoweredIntent(state,
-                TryComp<DoorBoltComponent>(solve.Target, out var bolts) && bolts.BoltsDown) ||
-            !_intents.TryGetValue(solve.IntentName, out var intent))
+        if (!TryBuildUnpoweredDoorPlan(solve.Target, solve.IntentName, state, out var plan))
             return false;
+
+        solve.Discovery = null;
+        solve.Plan = plan;
+        solve.ActionIndex = 0;
+        solve.ToolRequested = false;
+        solve.Phase = SolvePhase.ExecuteAction;
+        solve.Timer = 0f;
+        solve.Elapsed = 0f;
+        return true;
+    }
+
+    private bool TryBuildUnpoweredDoorPlan(
+        EntityUid target,
+        string intentName,
+        WiresBoundUserInterfaceState state,
+        out SolvedWiresPlan plan)
+    {
+        plan = default!;
+        if (!IsTargetDoor(target) ||
+            !CanFinishUnpoweredIntent(state, IsDoorBolted(target)) ||
+            !_intents.TryGetValue(intentName, out var intent))
+        {
+            return false;
+        }
 
         var finish = intent.Steps.OfType<UseToolOnTargetStep>()
             .FirstOrDefault(step => step.ExpectedState == DoorState.Open);
         if (finish == null)
             return false;
 
-        solve.Discovery = null;
-        solve.Plan = new SolvedWiresPlan(solve.Target, solve.IntentName,
+        plan = new SolvedWiresPlan(target, intentName,
             [new SolvedTargetToolAction(finish.ToolQuality, finish.ExpectedState)]);
-        solve.ActionIndex = 0;
-        solve.ToolRequested = false;
-        solve.Phase = SolvePhase.ExecuteAction;
-        solve.Timer = 0f;
-        solve.Elapsed = 0f;
         return true;
     }
 
@@ -230,13 +248,20 @@ public sealed partial class RobustaWiresSolver
         return key == null || state.Statuses.Any(status => Equals(status.Key, key));
     }
 
-    private static bool StatusesRestored(WiresBoundUserInterfaceState before, WiresBoundUserInterfaceState after)
+    internal static bool StatusesRestored(WiresBoundUserInterfaceState before, WiresBoundUserInterfaceState after)
     {
         return before.Statuses.All(status => GetLight(before, status.Key) == GetLight(after, status.Key));
     }
 
-    private static string? IdentifyProbedWire(WiresBoundUserInterfaceState before, WiresBoundUserInterfaceState after)
+    internal static string? IdentifyProbedWire(
+        WiresBoundUserInterfaceState before,
+        WiresBoundUserInterfaceState after,
+        WiresTargetSnapshot? beforeSnapshot = null,
+        WiresTargetSnapshot? afterSnapshot = null)
     {
+        if (beforeSnapshot is { BoltWireCut: false } && afterSnapshot is { BoltWireCut: true })
+            return BoltWireName;
+
         var changed = before.Statuses.Where(status =>
             GetLight(before, status.Key) != GetLight(after, status.Key)).ToArray();
         if (GetLight(before, PowerWireActionKey.Status) != GetLight(after, PowerWireActionKey.Status) &&

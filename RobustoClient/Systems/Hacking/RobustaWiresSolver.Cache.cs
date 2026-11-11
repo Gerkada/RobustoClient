@@ -11,6 +11,7 @@ public sealed partial class RobustaWiresSolver
 {
     private readonly Dictionary<string, List<Dictionary<WiresWireAppearance, string>>> _solutions = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<EntityUid, WiresBoundUserInterfaceState> _states = new();
+    private readonly Dictionary<EntityUid, WiresTargetSnapshot> _snapshots = new();
     private readonly Dictionary<EntityUid, int> _stateRevisions = new();
     private readonly HashSet<Dictionary<WiresWireAppearance, string>> _confirmedPowerSolutions = new();
 
@@ -61,7 +62,7 @@ public sealed partial class RobustaWiresSolver
         }
 
         foreach (var (appearance, wireName) in wireNames)
-            solution[appearance] = wireName;
+            LearnWireMapping(target, state, appearance, wireName);
 
         return true;
     }
@@ -83,9 +84,13 @@ public sealed partial class RobustaWiresSolver
     }
 
     /// <summary>Supplies the latest state received from the upstream wire BUI.</summary>
-    public void ObserveState(EntityUid target, WiresBoundUserInterfaceState state)
+    public void ObserveState(EntityUid target, WiresBoundUserInterfaceState state, WiresTargetSnapshot? snapshot = null)
     {
         _states[target] = state;
+        if (snapshot != null)
+            _snapshots[target] = snapshot;
+        else
+            _snapshots.Remove(target);
         _stateRevisions[target] = _stateRevisions.GetValueOrDefault(target) + 1;
     }
 
@@ -139,6 +144,11 @@ public sealed partial class RobustaWiresSolver
             return string.Equals(existingName, wireName, StringComparison.OrdinalIgnoreCase);
 
         solution[appearance] = wireName;
+        if (_activeSolve?.Discovery == null &&
+            string.Equals(wireName, PowerWireName, StringComparison.OrdinalIgnoreCase))
+        {
+            _confirmedPowerSolutions.Add(solution);
+        }
         return true;
     }
 
@@ -158,6 +168,12 @@ public sealed partial class RobustaWiresSolver
 
     private string GetPanelProfile(EntityUid target)
     {
+        if (_snapshots.TryGetValue(target, out var snapshot))
+            return snapshot.ProfileName;
+
+        if (EntityManager == null)
+            return "Airlock";
+
         if (IsVendingMachine(target))
             return "VendingMachine";
 
