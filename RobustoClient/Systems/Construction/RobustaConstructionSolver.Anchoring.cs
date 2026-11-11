@@ -1,25 +1,19 @@
-using Content.Shared.Construction;
-using Content.Shared.Construction.Components;
-using Content.Shared.Construction.Prototypes;
-using Robust.Shared.Prototypes;
-
 namespace RobustoClient.Systems.Construction;
 
 public sealed partial class RobustaConstructionSolver
 {
     private void AppendAnchorTransitionStepIfNeeded(
-        EntityUid? target,
+        in ConstructionTargetSnapshot snapshot,
         bool isFirstEdge,
-        ConstructionGraphPrototype graph,
-        ConstructionGraphNode fromNode,
-        ConstructionGraphEdge edge,
-        ConstructionGraphNode toNode,
+        IndexedConstructionGraph graph,
+        IndexedGraphNode fromNode,
+        IndexedGraphEdge edge,
+        IndexedGraphNode toNode,
         bool isDeconstruct,
         List<ConstructionActionStep> steps)
     {
-        var fromName = GetNodeName(fromNode);
+        var fromName = fromNode.Name;
 
-        // Avoid adding a duplicate anchoring step if the edge's own steps already use Anchoring
         if (EdgeContainsToolStep(edge, "Anchoring"))
             return;
 
@@ -30,12 +24,10 @@ public sealed partial class RobustaConstructionSolver
             return;
         }
 
-        // Never attempt to anchor the "start" ghost node before the structure is even spawned
         if (!isDeconstruct && string.Equals(fromName, "start", StringComparison.OrdinalIgnoreCase))
             return;
 
-        // 1. Check explicit EntityAnchored condition on the edge if present on the client
-        if (TryGetEdgeAnchoredCondition(edge, out bool requiredAnchored))
+        if (edge.RequiredAnchored is { } requiredAnchored)
         {
             if (!requiredAnchored)
             {
@@ -60,11 +52,10 @@ public sealed partial class RobustaConstructionSolver
             return;
         }
 
-        // 2. Fallback when edge conditions are serverOnly (stripped on client)
         if (isDeconstruct)
         {
             if (IsTerminalDeconstructNode(graph, toNode) &&
-                NeedsUnanchorBeforeDeconstruct(target, isFirstEdge, graph, fromNode, edge))
+                NeedsUnanchorBeforeDeconstruct(snapshot, isFirstEdge, graph, fromNode, edge))
             {
                 steps.Add(new ConstructionActionStep(
                     ConstructionActionKind.UseTool,
@@ -75,29 +66,25 @@ public sealed partial class RobustaConstructionSolver
                     ExpectedNextNode: null));
             }
         }
-        else
+        else if (KnownAnchorableFrameNodes.Contains(fromName))
         {
-            // Anchoring intermediate frames/assemblies that spawn unanchored (skipped automatically at runtime if already anchored)
-            if (KnownAnchorableFrameNodes.Contains(fromName))
-            {
-                steps.Add(new ConstructionActionStep(
-                    ConstructionActionKind.UseTool,
-                    "Anchor frame (Anchoring)",
-                    PrototypeOrQualityOrTag: "Anchoring",
-                    Amount: 1,
-                    DoAfterDelay: 1f,
-                    ExpectedNextNode: null));
-            }
+            steps.Add(new ConstructionActionStep(
+                ConstructionActionKind.UseTool,
+                "Anchor frame (Anchoring)",
+                PrototypeOrQualityOrTag: "Anchoring",
+                Amount: 1,
+                DoAfterDelay: 1f,
+                ExpectedNextNode: null));
         }
     }
 
     private void AppendPostBuildPipeAnchorStepIfNeeded(
-        EntityUid? target,
-        ConstructionGraphPrototype graph,
-        ConstructionGraphNode finalNode,
+        in ConstructionTargetSnapshot snapshot,
+        IndexedConstructionGraph graph,
+        IndexedGraphNode finalNode,
         List<ConstructionActionStep> steps)
     {
-        if (!IsPipeOrAtmosGraphOrNode(graph, finalNode, target))
+        if (!IsPipeOrAtmosGraphOrNode(graph, finalNode, snapshot.PrototypeId))
             return;
 
         if (steps.Count > 0 &&
@@ -117,37 +104,35 @@ public sealed partial class RobustaConstructionSolver
     }
 
     private bool NeedsUnanchorBeforeDeconstruct(
-        EntityUid? target,
+        in ConstructionTargetSnapshot snapshot,
         bool isFirstEdge,
-        ConstructionGraphPrototype graph,
-        ConstructionGraphNode fromNode,
-        ConstructionGraphEdge edge)
+        IndexedConstructionGraph graph,
+        IndexedGraphNode fromNode,
+        IndexedGraphEdge edge)
     {
-        var fromName = GetNodeName(fromNode);
+        var fromName = fromNode.Name;
 
-        if (KnownAnchorableFrameNodes.Contains(fromName))
-            return true;
-
-        if (IsPipeOrAtmosGraphOrNode(graph, fromNode, target))
-            return true;
-
-        // Machine frames at missingWires and Computer frames at frameUnsecured dismantle directly via Screwing
-        if ((string.Equals(graph.ID, "Machine", StringComparison.OrdinalIgnoreCase) &&
+        if ((string.Equals(graph.Id, "Machine", StringComparison.OrdinalIgnoreCase) &&
              string.Equals(fromName, "missingWires", StringComparison.OrdinalIgnoreCase)) ||
-            (string.Equals(graph.ID, "Computer", StringComparison.OrdinalIgnoreCase) &&
+            (string.Equals(graph.Id, "Computer", StringComparison.OrdinalIgnoreCase) &&
              string.Equals(fromName, "frameUnsecured", StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }
 
-        // Grilles deconstruct directly via Cutting without unanchoring
-        if (string.Equals(graph.ID, "Grille", StringComparison.OrdinalIgnoreCase) ||
+        if (string.Equals(graph.Id, "Grille", StringComparison.OrdinalIgnoreCase) ||
             fromName.Contains("grille", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        if (HasAnchorableComponent(target, isFirstEdge, graph, fromNode) &&
+        if (KnownAnchorableFrameNodes.Contains(fromName))
+            return true;
+
+        if (IsPipeOrAtmosGraphOrNode(graph, fromNode, snapshot.PrototypeId))
+            return true;
+
+        if (fromNode.IsAnchorable &&
             (EdgeContainsToolStep(edge, "Welding") ||
              EdgeContainsToolStep(edge, "Screwing") ||
              EdgeContainsToolStep(edge, "Prying")))
@@ -158,54 +143,25 @@ public sealed partial class RobustaConstructionSolver
         return false;
     }
 
-    private bool IsPipeOrAtmosGraphOrNode(
-        ConstructionGraphPrototype graph,
-        ConstructionGraphNode node,
-        EntityUid? target)
+    private static bool IsPipeOrAtmosGraphOrNode(
+        IndexedConstructionGraph graph,
+        IndexedGraphNode node,
+        string? targetProtoId)
     {
-        var graphId = graph.ID ?? string.Empty;
-        var nodeName = GetNodeName(node);
-        var nodeEntId = GetNodeEntityId(node, target) ?? string.Empty;
-        var targetProtoId = target.HasValue && _entMan.EntityExists(target.Value)
-            ? _entMan.GetComponent<MetaDataComponent>(target.Value).EntityPrototype?.ID ?? string.Empty
-            : string.Empty;
+        var graphId = graph.Id ?? string.Empty;
+        var nodeName = node.Name;
+        var nodeEntId = node.EntityId ?? string.Empty;
+        var protoId = targetProtoId ?? string.Empty;
 
         foreach (var kw in PipeAndAtmosKeywords)
         {
             if (graphId.Contains(kw, StringComparison.OrdinalIgnoreCase) ||
                 nodeName.Contains(kw, StringComparison.OrdinalIgnoreCase) ||
                 nodeEntId.Contains(kw, StringComparison.OrdinalIgnoreCase) ||
-                targetProtoId.Contains(kw, StringComparison.OrdinalIgnoreCase))
+                protoId.Contains(kw, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
-        }
-
-        return false;
-    }
-
-    private bool HasAnchorableComponent(
-        EntityUid? target,
-        bool isFirstEdge,
-        ConstructionGraphPrototype graph,
-        ConstructionGraphNode fromNode)
-    {
-        if (isFirstEdge && target.HasValue && _entMan.EntityExists(target.Value))
-        {
-            if (_entMan.HasComponent<AnchorableComponent>(target.Value) ||
-                FindComponentByName(target.Value, "AnchorableComponent") != null)
-            {
-                return true;
-            }
-        }
-
-        var protoId = GetNodeEntityId(fromNode, target)
-                      ?? GetInferredFramePrototypeForNode(graph, fromNode);
-        if (!string.IsNullOrEmpty(protoId) &&
-            _protoMan.TryIndex<EntityPrototype>(protoId, out var eProto))
-        {
-            if (_itemUtil.HasPrototypeComponent(eProto, "Anchorable"))
-                return true;
         }
 
         return false;

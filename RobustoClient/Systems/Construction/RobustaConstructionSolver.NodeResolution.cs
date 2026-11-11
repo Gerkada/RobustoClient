@@ -1,4 +1,3 @@
-using Content.Shared.Construction;
 using Content.Shared.Construction.Prototypes;
 using Robust.Shared.Prototypes;
 
@@ -6,20 +5,16 @@ namespace RobustoClient.Systems.Construction;
 
 public sealed partial class RobustaConstructionSolver
 {
-    public string? ResolveConstructionPrototypeForEntity(string entityProtoId)
+    public string? ResolveConstructionPrototypeForEntity(string? entityProtoId)
     {
         if (string.IsNullOrEmpty(entityProtoId))
             return null;
 
         EnsureCacheInitialized();
 
-        if (_entityToConstructionProto.TryGetValue(entityProtoId, out var directProtoId))
+        if (TryLookupDirectRecipeId(entityProtoId, out var directProtoId))
             return directProtoId;
 
-        if (_protoMan.TryIndex<ConstructionPrototype>(entityProtoId, out var sameIdProto))
-            return sameIdProto.ID;
-
-        // Check if this is an Alt1 / Alt2 / Secondary / Tertiary pipe-layer entity prototype
         int desiredLayer = GetDesiredPipeLayer(entityProtoId, null);
         string? baseProtoId = null;
         if (_altEntityToBaseAndLayer.TryGetValue(entityProtoId, out var baseAndLayer))
@@ -41,29 +36,28 @@ public sealed partial class RobustaConstructionSolver
             if (!string.IsNullOrEmpty(baseRecipeId))
             {
                 if (_constructionAltLayerProtos.TryGetValue((baseRecipeId, desiredLayer), out var altRecipeId) &&
-                    _protoMan.HasIndex<ConstructionPrototype>(altRecipeId))
+                    (_recipesById.ContainsKey(altRecipeId) || (_protoMan != null && _protoMan.HasIndex<ConstructionPrototype>(altRecipeId))))
                 {
                     return altRecipeId;
                 }
 
                 var suffix = desiredLayer == 1 ? "Alt1" : "Alt2";
-                if (_protoMan.TryIndex<ConstructionPrototype>(baseRecipeId + suffix, out var suffixedCProto))
+                if (_recipesById.TryGetValue(baseRecipeId + suffix, out var suffixedRecipe))
+                    return suffixedRecipe.Id;
+
+                if (_protoMan != null && _protoMan.TryIndex<ConstructionPrototype>(baseRecipeId + suffix, out var suffixedCProto))
                     return suffixedCProto.ID;
 
-                if (_protoMan.TryIndex<ConstructionPrototype>(baseRecipeId, out var baseCProto))
+                if (_recipesById.TryGetValue(baseRecipeId, out var baseRecipe) &&
+                    !string.IsNullOrEmpty(baseRecipe.GraphId) &&
+                    !string.IsNullOrEmpty(baseRecipe.TargetNode) &&
+                    _graphToConstructionProtos.TryGetValue(baseRecipe.GraphId, out var graphRecipes))
                 {
-                    var baseGraphId = GetStringMember(baseCProto, "Graph");
-                    var baseTargetNode = GetStringMember(baseCProto, "TargetNode");
-                    if (!string.IsNullOrEmpty(baseGraphId) &&
-                        !string.IsNullOrEmpty(baseTargetNode) &&
-                        _graphToConstructionProtos.TryGetValue(baseGraphId, out var graphCProtos))
+                    var desiredNodeName = baseRecipe.TargetNode + suffix;
+                    foreach (var cp in graphRecipes)
                     {
-                        var desiredNodeName = baseTargetNode + suffix;
-                        foreach (var cp in graphCProtos)
-                        {
-                            if (string.Equals(GetStringMember(cp, "TargetNode"), desiredNodeName, StringComparison.OrdinalIgnoreCase))
-                                return cp.ID;
-                        }
+                        if (string.Equals(cp.TargetNode, desiredNodeName, StringComparison.OrdinalIgnoreCase))
+                            return cp.Id;
                     }
                 }
 
@@ -79,11 +73,8 @@ public sealed partial class RobustaConstructionSolver
         if (string.IsNullOrEmpty(entityProtoId))
             return null;
 
-        if (_entityToConstructionProto.TryGetValue(entityProtoId, out var directProtoId))
+        if (TryLookupDirectRecipeId(entityProtoId, out var directProtoId))
             return directProtoId;
-
-        if (_protoMan.TryIndex<ConstructionPrototype>(entityProtoId, out var sameIdProto))
-            return sameIdProto.ID;
 
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var queue = new Queue<string>();
@@ -95,24 +86,21 @@ public sealed partial class RobustaConstructionSolver
         while (queue.Count > 0)
         {
             var curId = queue.Dequeue();
-            if (_entityToConstructionProto.TryGetValue(curId, out var mappedId))
+            if (TryLookupDirectRecipeId(curId, out var mappedId))
                 return mappedId;
-
-            if (_protoMan.TryIndex<ConstructionPrototype>(curId, out var curSameIdProto))
-                return curSameIdProto.ID;
 
             if (_entityToGraphNodes.TryGetValue(curId, out var graphNodes))
             {
                 foreach (var (g, n) in graphNodes)
                 {
-                    if (!_graphToConstructionProtos.TryGetValue(g.ID, out var cProtos) || cProtos.Count == 0)
+                    if (!_graphToConstructionProtos.TryGetValue(g.Id, out var cProtos) || cProtos.Count == 0)
                         continue;
 
-                    var nodeName = GetNodeName(n);
+                    var nodeName = n.Name;
                     foreach (var cp in cProtos)
                     {
-                        if (string.Equals(GetStringMember(cp, "TargetNode"), nodeName, StringComparison.OrdinalIgnoreCase))
-                            return cp.ID;
+                        if (string.Equals(cp.TargetNode, nodeName, StringComparison.OrdinalIgnoreCase))
+                            return cp.Id;
                     }
 
                     if (TryExtractPipeLayerSuffix(nodeName, out var baseNodeName, out _) &&
@@ -120,12 +108,12 @@ public sealed partial class RobustaConstructionSolver
                     {
                         foreach (var cp in cProtos)
                         {
-                            if (string.Equals(GetStringMember(cp, "TargetNode"), baseNodeName, StringComparison.OrdinalIgnoreCase))
-                                return cp.ID;
+                            if (string.Equals(cp.TargetNode, baseNodeName, StringComparison.OrdinalIgnoreCase))
+                                return cp.Id;
                         }
                     }
 
-                    firstGraphFallback ??= cProtos[0].ID;
+                    firstGraphFallback ??= cProtos[0].Id;
                 }
             }
 
@@ -136,7 +124,7 @@ public sealed partial class RobustaConstructionSolver
                 queue.Enqueue(strippedId);
             }
 
-            if (_protoMan.TryIndex<EntityPrototype>(curId, out var eProto) && eProto.Parents != null)
+            if (_protoMan != null && _protoMan.TryIndex<EntityPrototype>(curId, out var eProto) && eProto.Parents != null)
             {
                 foreach (var parentId in eProto.Parents)
                 {
@@ -150,21 +138,65 @@ public sealed partial class RobustaConstructionSolver
     }
 
     public bool TryResolveGraphAndNode(
+        in ConstructionTargetSnapshot snapshot,
+        out IndexedConstructionGraph? graph,
+        out IndexedGraphNode? node,
+        out string? explicitTargetNode)
+    {
+        graph = null;
+        node = null;
+        explicitTargetNode = snapshot.ExplicitTargetNode;
+
+        EnsureCacheInitialized();
+
+        if (!string.IsNullOrEmpty(snapshot.GraphId) &&
+            TryGetGraph(snapshot.GraphId, out graph) &&
+            !string.IsNullOrEmpty(snapshot.CurrentNode) &&
+            TryGetNodeByName(graph, snapshot.CurrentNode, out node))
+        {
+            ApplyAirlockSecurityNodeOverride(snapshot, graph, ref node);
+            return true;
+        }
+
+        if (!string.IsNullOrEmpty(snapshot.PrototypeId) &&
+            _entityToGraphNodes.TryGetValue(snapshot.PrototypeId, out var candidates) &&
+            candidates.Count > 0)
+        {
+            var chosen = SelectBestSnapshotNodeCandidate(snapshot, candidates);
+            graph = chosen.Graph;
+            node = chosen.Node;
+            ApplyAirlockSecurityNodeOverride(snapshot, graph, ref node);
+            return true;
+        }
+
+        if (!snapshot.IsSecurityWiresAccessible &&
+            TryFindAirlockGraphAndNode(out var airlockGraph, out var airlockNode) &&
+            airlockGraph != null && airlockNode != null)
+        {
+            graph = airlockGraph;
+            node = airlockNode;
+            ApplyAirlockSecurityNodeOverride(snapshot, graph, ref node);
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool TryResolveGraphAndNode(
         EntityUid target,
-        out ConstructionGraphPrototype? graph,
-        out ConstructionGraphNode? node,
+        out IndexedConstructionGraph? graph,
+        out IndexedGraphNode? node,
         out string? explicitTargetNode)
     {
         graph = null;
         node = null;
         explicitTargetNode = null;
 
-        if (!_entMan.EntityExists(target))
+        if (_entMan == null || !_entMan.EntityExists(target))
             return false;
 
         EnsureCacheInitialized();
 
-        // 1. Check client-visible ConstructionComponent first
         var constructionComp = FindComponentByName(target, "ConstructionComponent");
         if (constructionComp != null)
         {
@@ -182,7 +214,6 @@ public sealed partial class RobustaConstructionSolver
             }
         }
 
-        // 2. Fallback to EntityPrototype ID -> (Graph, Node) lookup
         var meta = _entMan.GetComponent<MetaDataComponent>(target);
         var proto = meta.EntityPrototype;
         if (proto != null)
@@ -204,7 +235,7 @@ public sealed partial class RobustaConstructionSolver
                     return true;
                 }
 
-                if (curProto.Parents != null)
+                if (curProto.Parents != null && _protoMan != null)
                 {
                     foreach (var parentId in curProto.Parents)
                     {
@@ -215,7 +246,6 @@ public sealed partial class RobustaConstructionSolver
             }
         }
 
-        // 3. Live-component fallback for Airlocks, Consoles (ComputerComponent), and Machines (MachineComponent)
         var protoIdStr = proto?.ID ?? string.Empty;
         if (!string.Equals(protoIdStr, "AirlockAssembly", StringComparison.OrdinalIgnoreCase) &&
             !protoIdStr.Contains("Windoor", StringComparison.OrdinalIgnoreCase) &&
@@ -247,8 +277,8 @@ public sealed partial class RobustaConstructionSolver
             (FindComponentByName(target, "MachineComponent") != null ||
              FindComponentByName(target, "LatheComponent") != null ||
              FindComponentByName(target, "SharedLatheComponent") != null ||
-             _container.TryGetContainer(target, "machine_board", out _) ||
-             _container.TryGetContainer(target, "machine_parts", out _)) &&
+             (_container != null && _container.TryGetContainer(target, "machine_board", out _)) ||
+             (_container != null && _container.TryGetContainer(target, "machine_parts", out _))) &&
             TryFindMachineGraphAndNode(out var machineGraph, out var machineNode) &&
             machineGraph != null && machineNode != null)
         {
@@ -260,25 +290,68 @@ public sealed partial class RobustaConstructionSolver
         return false;
     }
 
+    private bool TryLookupDirectRecipeId(string protoId, out string? recipeId)
+    {
+        if (_entityToConstructionProto.TryGetValue(protoId, out recipeId))
+            return true;
+
+        if (_recipesById.TryGetValue(protoId, out var sameIdRecipe))
+        {
+            recipeId = sameIdRecipe.Id;
+            return true;
+        }
+
+        if (_protoMan != null && _protoMan.TryIndex<ConstructionPrototype>(protoId, out var sameIdProto))
+        {
+            recipeId = sameIdProto.ID;
+            return true;
+        }
+
+        recipeId = null;
+        return false;
+    }
+
+    private void ApplyAirlockSecurityNodeOverride(
+        in ConstructionTargetSnapshot snapshot,
+        IndexedConstructionGraph graph,
+        ref IndexedGraphNode? node)
+    {
+        if (!string.Equals(graph.Id, "Airlock", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var secNodeName = !snapshot.IsSecurityWiresAccessible ? ResolveCurrentSecurityNode(snapshot, graph) : null;
+        ApplyAirlockSecurityOverride(graph, snapshot.IsSecurityWiresAccessible, secNodeName, ref node);
+    }
+
     private void ApplyAirlockSecurityNodeOverride(
         EntityUid target,
-        ConstructionGraphPrototype graph,
-        ref ConstructionGraphNode? node)
+        IndexedConstructionGraph graph,
+        ref IndexedGraphNode? node)
     {
-        if (!string.Equals(graph.ID, "Airlock", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(graph.Id, "Airlock", StringComparison.OrdinalIgnoreCase))
             return;
 
         var secComp = FindComponentByName(target, "WiresPanelSecurityComponent");
         if (secComp == null)
             return;
 
-        if (GetMemberValue(secComp, "WiresAccessible") is false)
+        bool wiresAccessible = GetMemberValue(secComp, "WiresAccessible") is not false;
+        var secNodeName = !wiresAccessible ? ResolveCurrentSecurityNode(target, secComp, graph) : null;
+        ApplyAirlockSecurityOverride(graph, wiresAccessible, secNodeName, ref node);
+    }
+
+    private void ApplyAirlockSecurityOverride(
+        IndexedConstructionGraph graph,
+        bool wiresAccessible,
+        string? secNodeName,
+        ref IndexedGraphNode? node)
+    {
+        if (!wiresAccessible)
         {
-            var secNodeName = ResolveCurrentSecurityNode(target, secComp, graph);
             if (!string.IsNullOrEmpty(secNodeName) && TryGetNodeByName(graph, secNodeName, out var secNode))
                 node = secNode;
         }
-        else if (node != null && GetNodeName(node).Contains("Security", StringComparison.OrdinalIgnoreCase))
+        else if (node != null && node.Name.Contains("Security", StringComparison.OrdinalIgnoreCase))
         {
             if (TryGetNodeByName(graph, "airlock", out var airlockNode))
                 node = airlockNode;
@@ -287,7 +360,7 @@ public sealed partial class RobustaConstructionSolver
 
     public bool CanVerifyInPlaceNodeTransition(EntityUid uid, string graphId)
     {
-        if (!_entMan.EntityExists(uid))
+        if (_entMan == null || !_entMan.EntityExists(uid))
             return false;
 
         var protoId = _entMan.GetComponent<MetaDataComponent>(uid).EntityPrototype?.ID ?? string.Empty;
@@ -313,21 +386,55 @@ public sealed partial class RobustaConstructionSolver
         return false;
     }
 
-    private (ConstructionGraphPrototype Graph, ConstructionGraphNode Node) SelectBestNodeCandidate(
-        EntityUid target,
-        List<(ConstructionGraphPrototype Graph, ConstructionGraphNode Node)> candidates)
+    private static (IndexedConstructionGraph Graph, IndexedGraphNode Node) SelectBestSnapshotNodeCandidate(
+        in ConstructionTargetSnapshot snapshot,
+        List<(IndexedConstructionGraph Graph, IndexedGraphNode Node)> candidates)
     {
         if (candidates.Count == 1)
             return candidates[0];
 
-        bool hasBoard = _container.TryGetContainer(target, "board", out var boardCont) && boardCont.ContainedEntities.Count > 0;
+        if (snapshot.HasMachineFrameBoard)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (string.Equals(candidate.Node.Name, "machineFrame", StringComparison.OrdinalIgnoreCase))
+                    return candidate;
+            }
+        }
+        else
+        {
+            foreach (var candidate in candidates)
+            {
+                var name = candidate.Node.Name;
+                if (name.Equals("frameUnsecured", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("assembly", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("missingWires", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("girder", StringComparison.OrdinalIgnoreCase))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return candidates[0];
+    }
+
+    private (IndexedConstructionGraph Graph, IndexedGraphNode Node) SelectBestNodeCandidate(
+        EntityUid target,
+        List<(IndexedConstructionGraph Graph, IndexedGraphNode Node)> candidates)
+    {
+        if (candidates.Count == 1)
+            return candidates[0];
+
+        bool hasBoard = _container != null &&
+                        _container.TryGetContainer(target, "board", out var boardCont) &&
+                        boardCont.ContainedEntities.Count > 0;
         if (!hasBoard && HasMachineFrameBoard(target))
             hasBoard = true;
 
         TryGetSpriteLayerZeroState(target, out var spriteState);
 
-        // Disambiguate ComputerFrame stages ("0" -> frameUnsecured, "1" -> boardUnsecured, "2" -> missingWires, "3" -> monitorMissing, "4" -> monitorUnsecured)
-        if (candidates.Any(c => string.Equals(c.Graph.ID, "Computer", StringComparison.OrdinalIgnoreCase)))
+        if (candidates.Any(c => string.Equals(c.Graph.Id, "Computer", StringComparison.OrdinalIgnoreCase)))
         {
             string? desiredCompFrameNode = spriteState switch
             {
@@ -343,7 +450,7 @@ public sealed partial class RobustaConstructionSolver
             {
                 foreach (var candidate in candidates)
                 {
-                    if (string.Equals(GetNodeName(candidate.Node), desiredCompFrameNode, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(candidate.Node.Name, desiredCompFrameNode, StringComparison.OrdinalIgnoreCase))
                         return candidate;
                 }
             }
@@ -352,7 +459,7 @@ public sealed partial class RobustaConstructionSolver
             {
                 foreach (var candidate in candidates)
                 {
-                    var name = GetNodeName(candidate.Node);
+                    var name = candidate.Node.Name;
                     if (name.Equals("monitorUnsecured", StringComparison.OrdinalIgnoreCase) ||
                         name.Equals("boardUnsecured", StringComparison.OrdinalIgnoreCase))
                     {
@@ -362,8 +469,7 @@ public sealed partial class RobustaConstructionSolver
             }
         }
 
-        // Disambiguate MachineFrame stages ("missingWires" vs "machineFrame")
-        if (candidates.Any(c => string.Equals(c.Graph.ID, "Machine", StringComparison.OrdinalIgnoreCase)))
+        if (candidates.Any(c => string.Equals(c.Graph.Id, "Machine", StringComparison.OrdinalIgnoreCase)))
         {
             bool isMissingWires = false;
             bool isWiredFrame = false;
@@ -391,7 +497,7 @@ public sealed partial class RobustaConstructionSolver
             {
                 foreach (var candidate in candidates)
                 {
-                    if (string.Equals(GetNodeName(candidate.Node), "machineFrame", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(candidate.Node.Name, "machineFrame", StringComparison.OrdinalIgnoreCase))
                         return candidate;
                 }
             }
@@ -399,7 +505,7 @@ public sealed partial class RobustaConstructionSolver
             {
                 foreach (var candidate in candidates)
                 {
-                    if (string.Equals(GetNodeName(candidate.Node), "missingWires", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(candidate.Node.Name, "missingWires", StringComparison.OrdinalIgnoreCase))
                         return candidate;
                 }
             }
@@ -409,7 +515,7 @@ public sealed partial class RobustaConstructionSolver
         {
             foreach (var candidate in candidates)
             {
-                var name = GetNodeName(candidate.Node);
+                var name = candidate.Node.Name;
                 if (name.Equals("frameUnsecured", StringComparison.OrdinalIgnoreCase) ||
                     name.Equals("assembly", StringComparison.OrdinalIgnoreCase) ||
                     name.Equals("missingWires", StringComparison.OrdinalIgnoreCase) ||

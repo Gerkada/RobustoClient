@@ -16,7 +16,21 @@ public sealed partial class RobustaConstructionSolver
         return val.ToString();
     }
 
-    private void ConvertEdgeSteps(
+    private static void AppendEdgeSteps(
+        IndexedGraphEdge edge,
+        string expectedNextNode,
+        List<ConstructionActionStep> output)
+    {
+        foreach (var step in edge.Steps)
+        {
+            output.Add(!string.IsNullOrEmpty(expectedNextNode) &&
+                       !string.Equals(step.ExpectedNextNode, expectedNextNode, StringComparison.OrdinalIgnoreCase)
+                ? step with { ExpectedNextNode = expectedNextNode }
+                : step);
+        }
+    }
+
+    private void ConvertRawEdgeSteps(
         ConstructionGraphEdge edge,
         string expectedNextNode,
         List<ConstructionActionStep> output)
@@ -40,7 +54,6 @@ public sealed partial class RobustaConstructionSolver
         var type = stepObj.GetType();
         var typeName = type.Name;
 
-        // Handle NestedConstructionGraphStep (which stores nested step collections)
         if (typeName.Contains("NestedConstructionGraphStep", StringComparison.OrdinalIgnoreCase))
         {
             var nestedEnumerable = GetMemberValue(stepObj, "Steps") as IEnumerable
@@ -72,7 +85,6 @@ public sealed partial class RobustaConstructionSolver
         float doAfter = GetFloatMember(stepObj, "DoAfter", 0f);
         int amount = Math.Max(1, GetIntMember(stepObj, "Amount", 1));
 
-        // 1. MaterialConstructionGraphStep
         if (typeName.Contains("MaterialConstructionGraphStep", StringComparison.OrdinalIgnoreCase))
         {
             var materialId = GetStringMember(stepObj, "MaterialPrototypeId")
@@ -88,7 +100,6 @@ public sealed partial class RobustaConstructionSolver
             return;
         }
 
-        // 2. ToolConstructionGraphStep
         if (typeName.Contains("ToolConstructionGraphStep", StringComparison.OrdinalIgnoreCase))
         {
             var toolQuality = GetStringMember(stepObj, "Tool") ?? "Wrenching";
@@ -102,7 +113,6 @@ public sealed partial class RobustaConstructionSolver
             return;
         }
 
-        // 3. PrototypeConstructionGraphStep / EntityInsertConstructionGraphStep
         if (typeName.Contains("PrototypeConstructionGraphStep", StringComparison.OrdinalIgnoreCase) ||
             (typeName.Contains("EntityInsertConstructionGraphStep", StringComparison.OrdinalIgnoreCase) &&
              !typeName.Contains("Component", StringComparison.OrdinalIgnoreCase) &&
@@ -121,7 +131,6 @@ public sealed partial class RobustaConstructionSolver
             return;
         }
 
-        // 4. ComponentConstructionGraphStep
         if (typeName.Contains("ComponentConstructionGraphStep", StringComparison.OrdinalIgnoreCase))
         {
             var compName = GetStringMember(stepObj, "Component") ?? string.Empty;
@@ -135,7 +144,6 @@ public sealed partial class RobustaConstructionSolver
             return;
         }
 
-        // 5. TagConstructionGraphStep / MultipleTagsConstructionGraphStep
         if (typeName.Contains("TagConstructionGraphStep", StringComparison.OrdinalIgnoreCase) ||
             typeName.Contains("MultipleTagsConstructionGraphStep", StringComparison.OrdinalIgnoreCase))
         {

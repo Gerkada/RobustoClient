@@ -1,52 +1,34 @@
 using System.Collections;
-using Content.Shared.Construction;
-using Content.Shared.Construction.Prototypes;
 
 namespace RobustoClient.Systems.Construction;
 
 public sealed partial class RobustaConstructionSolver
 {
     public string? ResolveCurrentSecurityNode(
-        EntityUid target,
-        object? secComp = null,
-        ConstructionGraphPrototype? graph = null)
+        in ConstructionTargetSnapshot snapshot,
+        IndexedConstructionGraph? graph = null)
     {
         EnsureCacheInitialized();
 
         if (graph == null)
             TryFindAirlockGraphAndNode(out graph, out _);
 
-        secComp ??= FindComponentByName(target, "WiresPanelSecurityComponent");
-        if (secComp == null)
-            return null;
-
-        if (GetMemberValue(secComp, "WiresAccessible") is true)
+        if (snapshot.IsSecurityWiresAccessible)
             return "airlock";
 
-        var examine = GetStringMember(secComp, "Examine");
+        var examine = snapshot.SecurityExamine;
         if (graph != null && !string.IsNullOrEmpty(examine))
         {
-            // 1. Check node actions if present on the graph
-            foreach (var n in EnumerateGraphNodes(graph))
+            foreach (var n in graph.Nodes.Values)
             {
-                var actions = GetMemberValue(n, "Actions") as IEnumerable
-                              ?? GetMemberValue(n, "_actions") as IEnumerable;
-                if (actions == null)
-                    continue;
-
-                foreach (var act in actions)
-                {
-                    if (act == null)
-                        continue;
-
-                    var actExamine = GetStringMember(act, "Examine");
-                    if (string.Equals(actExamine, examine, StringComparison.OrdinalIgnoreCase))
-                        return GetNodeName(n);
-                }
+                if (string.Equals(n.SecurityExamine, examine, StringComparison.OrdinalIgnoreCase))
+                    return n.Name;
             }
+
+            if (TryGetNodeByName(graph, examine, out var directSecNode))
+                return directSecNode.Name;
         }
 
-        // 2. Map standard locale IDs, adapting to the actual nodes present in the Airlock graph
         var mapped = GetSecurityRemovalTarget(examine);
         if (!string.IsNullOrEmpty(mapped))
         {
@@ -67,19 +49,45 @@ public sealed partial class RobustaConstructionSolver
             }
         }
 
-        // 3. Fallback to the component/prototype's SecurityLevel field
+        return mapped;
+    }
+
+    public string? ResolveCurrentSecurityNode(
+        EntityUid target,
+        object? secComp = null,
+        IndexedConstructionGraph? graph = null)
+    {
+        EnsureCacheInitialized();
+
+        if (graph == null)
+            TryFindAirlockGraphAndNode(out graph, out _);
+
+        secComp ??= FindComponentByName(target, "WiresPanelSecurityComponent");
+        if (secComp == null)
+            return null;
+
+        bool wiresAccessible = GetMemberValue(secComp, "WiresAccessible") is true;
+        var examine = GetStringMember(secComp, "Examine");
+        var snapshot = new ConstructionTargetSnapshot(
+            IsSecurityWiresAccessible: wiresAccessible,
+            SecurityExamine: examine);
+
+        var resolved = ResolveCurrentSecurityNode(in snapshot, graph);
+        if (!string.IsNullOrEmpty(resolved))
+            return resolved;
+
         var secLevel = GetStringMember(secComp, "SecurityLevel");
-        if (string.IsNullOrEmpty(secLevel) && _entMan.EntityExists(target))
+        if (string.IsNullOrEmpty(secLevel) && _entMan != null && _entMan.EntityExists(target))
         {
             var proto = _entMan.GetComponent<MetaDataComponent>(target).EntityPrototype;
-            if (proto != null && _itemUtil.TryGetPrototypeComponent<object>(proto, "WiresPanelSecurity", out var protoSec))
+            if (proto != null && _itemUtil != null && _itemUtil.TryGetPrototypeComponent<object>(proto, "WiresPanelSecurity", out var protoSec))
                 secLevel = GetStringMember(protoSec, "SecurityLevel");
         }
 
         if (!string.IsNullOrEmpty(secLevel) && (graph == null || TryGetNodeByName(graph, secLevel, out _)))
             return secLevel;
 
-        return mapped;
+        return null;
     }
 
     public string? ResolveNextSecurityNode(EntityUid target, string currentNodeName)
@@ -94,7 +102,7 @@ public sealed partial class RobustaConstructionSolver
             var path = FindShortestEdgePath(graph, currentNodeName, "airlock");
             if (path != null && path.Count > 0)
             {
-                var nextInGraph = GetNodeName(path[0].To);
+                var nextInGraph = path[0].To.Name;
                 if (!string.IsNullOrEmpty(nextInGraph))
                     return nextInGraph;
             }
@@ -133,72 +141,61 @@ public sealed partial class RobustaConstructionSolver
         };
     }
 
-    private bool ShouldOpenWirePanelBeforeEdge(
-        ConstructionGraphPrototype graph,
-        ConstructionGraphNode currentNode,
-        ConstructionGraphEdge firstEdge,
-        IComponent panelComp)
+    private static bool ShouldOpenWirePanelBeforeEdge(
+        IndexedConstructionGraph graph,
+        IndexedGraphNode currentNode,
+        IndexedGraphEdge firstEdge,
+        in ConstructionTargetSnapshot snapshot)
     {
-        if (TryGetEdgeWirePanelCondition(firstEdge, out bool requiredOpen))
+        if (!snapshot.HasWirePanel)
+            return false;
+
+        if (firstEdge.RequiredWirePanelOpen is { } requiredOpen)
             return requiredOpen;
 
-        // Consoles (Computer graph) do not require opening a wire panel to deconstruct;
-        // their first deconstruction step operates directly on the monitor/frame.
-        if (string.Equals(graph.ID, "Computer", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(GetNodeName(currentNode), "computer", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(graph.Id, "Computer", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(currentNode.Name, "computer", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        var openTool = GetStringMember(panelComp, "OpeningTool") ?? "Screwing";
+        var openTool = string.IsNullOrEmpty(snapshot.WirePanelOpeningTool) ? "Screwing" : snapshot.WirePanelOpeningTool;
         if (FirstEdgeStepIsTool(firstEdge, openTool))
             return false;
 
         return true;
     }
 
-    private bool ShouldWeldDoorBeforeDeconstruct(
-        EntityUid target,
-        ConstructionGraphPrototype graph,
-        ConstructionGraphNode currentNode,
-        ConstructionGraphEdge firstEdge)
+    private static bool ShouldWeldDoorBeforeDeconstruct(
+        in ConstructionTargetSnapshot snapshot,
+        IndexedConstructionGraph graph,
+        IndexedGraphNode currentNode,
+        IndexedGraphEdge firstEdge)
     {
-        if (TryGetEdgeDoorWeldedCondition(firstEdge, out bool requiredWelded))
+        if (snapshot.IsDoorWelded != false)
+            return false;
+
+        if (firstEdge.RequiredDoorWelded is { } requiredWelded)
             return requiredWelded;
 
-        var weldableComp = FindComponentByName(target, "WeldableComponent");
-        if (weldableComp == null)
-            return false;
-
-        if (GetMemberValue(weldableComp, "IsWelded") is true)
-            return false;
-
-        var graphId = graph.ID ?? string.Empty;
-        var nodeName = GetNodeName(currentNode);
-        if (graphId.Contains("Airlock", StringComparison.OrdinalIgnoreCase) ||
-            nodeName.Contains("airlock", StringComparison.OrdinalIgnoreCase) ||
-            FindComponentByName(target, "AirlockComponent") != null)
-        {
-            return true;
-        }
-
-        return false;
+        var graphId = graph.Id ?? string.Empty;
+        var nodeName = currentNode.Name;
+        return graphId.Contains("Airlock", StringComparison.OrdinalIgnoreCase) ||
+               nodeName.Contains("airlock", StringComparison.OrdinalIgnoreCase);
     }
 
-    private bool ShouldCutInternalWiresBeforeEdge(
-        EntityUid target,
-        ConstructionGraphPrototype graph,
-        ConstructionGraphNode currentNode,
-        ConstructionGraphEdge firstEdge,
-        IComponent? panelComp)
+    private static bool ShouldCutInternalWiresBeforeEdge(
+        in ConstructionTargetSnapshot snapshot,
+        IndexedConstructionGraph graph,
+        IndexedGraphNode currentNode,
+        IndexedGraphEdge firstEdge)
     {
-        if (TryGetEdgeAllWiresCutCondition(firstEdge, out bool requiredAllCut))
+        if (firstEdge.RequiredAllWiresCut is { } requiredAllCut)
             return requiredAllCut;
 
-        var graphId = graph.ID ?? string.Empty;
-        var nodeName = GetNodeName(currentNode);
+        var graphId = graph.Id ?? string.Empty;
+        var nodeName = currentNode.Name;
 
-        // Consoles and standard MachineFrames do not require cutting all hacking wires to deconstruct
         if (string.Equals(graphId, "Computer", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(graphId, "Machine", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(graphId, "AirlockShuttle", StringComparison.OrdinalIgnoreCase) ||
@@ -208,7 +205,6 @@ public sealed partial class RobustaConstructionSolver
             return false;
         }
 
-        // Airlocks and Windoors require all internal wires in the wire panel to be cut when leaving the main door node
         if (string.Equals(nodeName, "airlock", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(nodeName, "glassAirlock", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(nodeName, "windoor", StringComparison.OrdinalIgnoreCase) ||
@@ -223,16 +219,14 @@ public sealed partial class RobustaConstructionSolver
             return false;
         }
 
-        if (panelComp != null && HasWiresUserInterface(target))
-        {
-            return true;
-        }
-
-        return false;
+        return snapshot.HasWirePanel && snapshot.HasWiresUi;
     }
 
     public bool HasWiresUserInterface(EntityUid target)
     {
+        if (_entMan == null || !_entMan.EntityExists(target))
+            return false;
+
         var uiComp = FindComponentByName(target, "UserInterfaceComponent");
         if (uiComp == null)
             return false;
@@ -257,14 +251,13 @@ public sealed partial class RobustaConstructionSolver
             }
         }
 
-        // Prototype fallback if Interfaces dictionary is private/inaccessible
         var proto = _entMan.GetComponent<MetaDataComponent>(target).EntityPrototype;
         if (proto != null &&
             (FindComponentByName(target, "AirlockComponent") != null ||
              FindComponentByName(target, "DoorBoltComponent") != null ||
              FindComponentByName(target, "WiresVisualsComponent") != null ||
-             _itemUtil.HasPrototypeComponent(proto, "Wires") ||
-             _itemUtil.HasPrototypeComponent(proto, "WiresPanelSecurity")))
+             (_itemUtil != null && _itemUtil.HasPrototypeComponent(proto, "Wires")) ||
+             (_itemUtil != null && _itemUtil.HasPrototypeComponent(proto, "WiresPanelSecurity"))))
         {
             return true;
         }
