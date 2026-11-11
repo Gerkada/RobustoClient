@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Content.Shared", "space-sta
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Robust.Shared", "space-station-14\RobustToolbox\Robust.Shared\Robust.Shared.csproj", "{ECD32E31-6A31-4AC9-B8A8-8904A9997515}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RobustoClient.Tests", "RobustoClient.Tests\RobustoClient.Tests.csproj", "{D2CE5CF7-9857-468A-B9D1-A4363C25FEF0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -42,5 +44,9 @@ Global
 		{ECD32E31-6A31-4AC9-B8A8-8904A9997515}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{ECD32E31-6A31-4AC9-B8A8-8904A9997515}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{ECD32E31-6A31-4AC9-B8A8-8904A9997515}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D2CE5CF7-9857-468A-B9D1-A4363C25FEF0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D2CE5CF7-9857-468A-B9D1-A4363C25FEF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D2CE5CF7-9857-468A-B9D1-A4363C25FEF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D2CE5CF7-9857-468A-B9D1-A4363C25FEF0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
