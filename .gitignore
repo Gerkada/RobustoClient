@@ -260,6 +260,21 @@ FakesAssemblies/
 # Visual Studio 6 workspace options file
 *.optAutoChemLog.txt
 
-# Cline bs
-.clinerules/
+# AI & Agent tooling
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+GLOSSARY*.md
+CONTEXT*.md
+skills-lock.json
 .agents/
+.agent/
+_agents/
+_agent/
+.clinerules/
+.cursor/
+.cursorrules
+.windsurf/
+.windsurfrules
+.scratch/
+docs/
