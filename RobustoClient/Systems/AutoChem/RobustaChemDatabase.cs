@@ -3,13 +3,23 @@ using System.Collections.Generic;
 using System.Linq;
 using Content.Shared.Chemistry.Reaction;
 using Robust.Shared.IoC;
+using Robust.Shared.Log;
 using Robust.Shared.Prototypes;
 
 namespace RobustoClient.Systems.AutoChem;
 
+public sealed record ChemReactant(string Id, float Amount, bool Catalyst = false);
+
+public sealed record ChemRecipeDefinition(
+    string Id,
+    IReadOnlyDictionary<string, float> Products,
+    IReadOnlyList<ChemReactant> Reactants,
+    int Priority = 0,
+    float MinimumTemperature = 0f);
+
 public static class RobustaChemDatabase
 {
-    public static Dictionary<string, ReactionPrototype> RecipesByProduct = new(StringComparer.OrdinalIgnoreCase);
+    public static Dictionary<string, ChemRecipeDefinition> RecipesByProduct = new(StringComparer.OrdinalIgnoreCase);
     
     public static bool IsInitialized = false;
 
@@ -40,28 +50,32 @@ public static class RobustaChemDatabase
         _minTempProperty = type.GetProperty("MinimumTemperature");
     }
 
-    public static IEnumerable<string> GetProductIds(ReactionPrototype reaction)
+    private static Dictionary<string, float> ReflectProducts(ReactionPrototype reaction)
     {
+        var products = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         object? obj = _productsField?.GetValue(reaction) ?? _productsProperty?.GetValue(reaction);
         if (obj is System.Collections.IDictionary dict)
-            foreach (var key in dict.Keys) yield return key.ToString() ?? string.Empty;
+        {
+            foreach (System.Collections.DictionaryEntry entry in dict)
+            {
+                string id = entry.Key?.ToString() ?? string.Empty;
+                if (string.IsNullOrEmpty(id)) continue;
+
+                float yield = 1f;
+                if (entry.Value != null)
+                {
+                    var floatMethod = entry.Value.GetType().GetMethod("Float", Type.EmptyTypes);
+                    if (floatMethod != null) yield = (float)(floatMethod.Invoke(entry.Value, null) ?? 1f);
+                }
+                products[id] = yield;
+            }
+        }
+        return products;
     }
 
-    public static IEnumerable<string> GetReactantIds(ReactionPrototype reaction)
+    private static List<ChemReactant> ReflectReactants(ReactionPrototype reaction)
     {
-        object? obj = _reactantsField?.GetValue(reaction) ?? _reactantsProperty?.GetValue(reaction);
-        if (obj is System.Collections.IDictionary dict)
-            foreach (var key in dict.Keys) yield return key.ToString() ?? string.Empty;
-    }
-
-    public static IEnumerable<(string Id, string Amount)> GetReactantsAndAmounts(ReactionPrototype reaction)
-    {
-        foreach (var r in GetReactants(reaction))
-            yield return (r.Id, r.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture));
-    }
-
-    public static IEnumerable<(string Id, float Amount, bool Catalyst)> GetReactants(ReactionPrototype reaction)
-    {
+        var reactants = new List<ChemReactant>();
         object? obj = _reactantsField?.GetValue(reaction) ?? _reactantsProperty?.GetValue(reaction);
         if (obj is System.Collections.IDictionary dict)
         {
@@ -83,27 +97,26 @@ public static class RobustaChemDatabase
                     var catObj = valType.GetField("Catalyst")?.GetValue(entry.Value) ?? valType.GetProperty("Catalyst")?.GetValue(entry.Value);
                     if (catObj is bool b) catalyst = b;
                 }
-                yield return (id, amount, catalyst);
+                reactants.Add(new ChemReactant(id, amount, catalyst));
             }
         }
+        return reactants;
     }
 
-    public static float GetProductYield(ReactionPrototype reaction, string targetProductId)
+    public static IEnumerable<(string Id, string Amount)> GetReactantsAndAmounts(ChemRecipeDefinition recipe)
     {
-        object? obj = _productsField?.GetValue(reaction) ?? _productsProperty?.GetValue(reaction);
-        if (obj is System.Collections.IDictionary dict)
+        foreach (var r in recipe.Reactants)
+            yield return (r.Id, r.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    public static IEnumerable<ChemReactant> GetReactants(ChemRecipeDefinition recipe) => recipe.Reactants;
+
+    public static float GetProductYield(ChemRecipeDefinition recipe, string targetProductId)
+    {
+        foreach (var (id, yield) in recipe.Products)
         {
-            foreach (System.Collections.DictionaryEntry entry in dict)
-            {
-                if (entry.Key?.ToString()?.Equals(targetProductId, StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    if (entry.Value != null)
-                    {
-                        var floatMethod = entry.Value.GetType().GetMethod("Float", Type.EmptyTypes);
-                        if (floatMethod != null) return (float)(floatMethod.Invoke(entry.Value, null) ?? 1f);
-                    }
-                }
-            }
+            if (id.Equals(targetProductId, StringComparison.OrdinalIgnoreCase))
+                return yield;
         }
         return 1f;
     }
@@ -120,6 +133,33 @@ public static class RobustaChemDatabase
         return val is float f ? f : 0f;
     }
 
+    public static int LoadRecipes(IEnumerable<ChemRecipeDefinition> recipes)
+    {
+        RecipesByProduct.Clear();
+        int recipeCount = 0;
+
+        foreach (var recipe in recipes)
+        {
+            if (recipe.Products.Count == 0)
+                continue;
+
+            int currentScore = CalculateRecipeScore(recipe);
+
+            foreach (var productId in recipe.Products.Keys)
+            {
+                if (!RecipesByProduct.TryGetValue(productId, out var existing) || 
+                    currentScore > CalculateRecipeScore(existing))
+                {
+                    RecipesByProduct[productId] = recipe;
+                    recipeCount++;
+                }
+            }
+        }
+
+        IsInitialized = true;
+        return recipeCount;
+    }
+
     // This method should be called once (e.g., during client load or first bot activation)
     public static void Initialize()
     {
@@ -127,66 +167,47 @@ public static class RobustaChemDatabase
 
         InitReflection();
 
-        // Attempting to get the prototype manager directly via IoC
         var protoMan = IoCManager.Resolve<IPrototypeManager>();
-        
-        int recipeCount = 0;
+        var definitions = protoMan.EnumeratePrototypes<ReactionPrototype>()
+            .Select(r => new ChemRecipeDefinition(
+                (string)r.ID,
+                ReflectProducts(r),
+                ReflectReactants(r),
+                SafeGetPriority(r),
+                SafeGetMinTemp(r)));
 
-        // Iterating through reaction prototypes
-        foreach (var reaction in protoMan.EnumeratePrototypes<ReactionPrototype>())
-        {
-            var productIds = GetProductIds(reaction).ToList();
-            if (productIds.Count == 0)
-                continue;
-
-            int currentScore = CalculateRecipeScore(reaction);
-
-            foreach (var productId in productIds)
-            {
-                // Saving the "best" recipe for this product
-                if (!RecipesByProduct.TryGetValue(productId, out var existing) || 
-                    currentScore > CalculateRecipeScore(existing))
-                {
-                    RecipesByProduct[productId] = reaction;
-                    recipeCount++;
-                }
-            }
-        }
-
-        IsInitialized = true;
-        Logger.GetSawmill("autochem").Info($"Database initialized! Recipes loaded: {recipeCount}");
+        int recipeCount = LoadRecipes(definitions);
+        if (IoCManager.Instance != null && IoCManager.Instance.TryResolveType<ILogManager>(out var logMan))
+            logMan.GetSawmill("autochem").Info($"Database initialized! Recipes loaded: {recipeCount}");
     }
 
-    private static int CalculateRecipeScore(ReactionPrototype reaction)
+    private static int CalculateRecipeScore(ChemRecipeDefinition recipe)
     {
         // Base weight based on game priority
-        int score = SafeGetPriority(reaction) * 100;
+        int score = recipe.Priority * 100;
 
         // Large penalty for using biological fluids or "dirty" components
         var badReagents = new[] { "Blood", "Urine", "Vomit", "AmmoniaBlood", "SpaceCleaner", "Slime", "Facum" };
         
-        foreach (var reactantId in GetReactantIds(reaction))
+        foreach (var reactant in recipe.Reactants)
         {
-            if (badReagents.Any(r => reactantId.Contains(r, StringComparison.OrdinalIgnoreCase)))
+            if (badReagents.Any(r => reactant.Id.Contains(r, StringComparison.OrdinalIgnoreCase)))
                 score -= 2000; // Doubled the penalty
         }
 
-        // Cast reaction.ID to string
-        string reactionId = (string)reaction.ID;
-
         // Penalty for dirty reaction IDs
-        if (reactionId.Contains("Blood") || reactionId.Contains("Urine") || reactionId.Contains("Vomit"))
+        if (recipe.Id.Contains("Blood") || recipe.Id.Contains("Urine") || recipe.Id.Contains("Vomit"))
             score -= 2000;
 
         // Heating penalty (prefer mixing over heating)
-        if (SafeGetMinTemp(reaction) > 295f)
+        if (recipe.MinimumTemperature > 295f)
             score -= 50;
 
         // Bonus for simple gases and base metals (common dispenser items)
         var commonReagents = new[] { "Hydrogen", "Nitrogen", "Oxygen", "Carbon", "Iron", "Iodine", "Phosphorus" };
-        foreach (var reactantId in GetReactantIds(reaction))
+        foreach (var reactant in recipe.Reactants)
         {
-            if (commonReagents.Any(r => reactantId.Equals(r, StringComparison.OrdinalIgnoreCase)))
+            if (commonReagents.Any(r => reactant.Id.Equals(r, StringComparison.OrdinalIgnoreCase)))
                 score += 20;
         }
 
@@ -196,7 +217,7 @@ public static class RobustaChemDatabase
     /// <summary>
     /// Get the direct recipe for a chemical (what needs to be dispensed to create it)
     /// </summary>
-    public static ReactionPrototype? GetRecipe(string targetReagentId)
+    public static ChemRecipeDefinition? GetRecipe(string targetReagentId)
     {
         if (!IsInitialized) Initialize();
 
@@ -210,11 +231,11 @@ public static class RobustaChemDatabase
     /// <summary>
     /// Checks if heating is required for this recipe
     /// </summary>
-    public static bool RequiresHeating(ReactionPrototype recipe)
+    public static bool RequiresHeating(ChemRecipeDefinition recipe)
     {
         // In SS14, base room temperature is ~293.15 Kelvin (20°C)
         // If the reaction requires more (e.g., 300+), a heater is needed
-        return SafeGetMinTemp(recipe) > 295f; 
+        return recipe.MinimumTemperature > 295f; 
     }
 
     /// <summary>
