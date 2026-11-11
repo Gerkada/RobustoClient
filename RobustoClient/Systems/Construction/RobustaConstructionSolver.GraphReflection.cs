@@ -8,7 +8,7 @@ namespace RobustoClient.Systems.Construction;
 
 public sealed partial class RobustaConstructionSolver
 {
-    private IEnumerable<ConstructionGraphNode> EnumerateGraphNodes(ConstructionGraphPrototype graph)
+    private IEnumerable<ConstructionGraphNode> EnumerateRawGraphNodes(ConstructionGraphPrototype graph)
     {
         var nodesDict = GetMemberValue(graph, "Nodes") as IDictionary ?? GetMemberValue(graph, "_nodes") as IDictionary;
         if (nodesDict != null)
@@ -31,25 +31,10 @@ public sealed partial class RobustaConstructionSolver
         }
     }
 
-    private bool TryGetNodeByName(ConstructionGraphPrototype graph, string nodeName, out ConstructionGraphNode node)
-    {
-        foreach (var n in EnumerateGraphNodes(graph))
-        {
-            if (string.Equals(GetNodeName(n), nodeName, StringComparison.OrdinalIgnoreCase))
-            {
-                node = n;
-                return true;
-            }
-        }
-
-        node = default!;
-        return false;
-    }
-
-    private static string GetNodeName(ConstructionGraphNode node)
+    private static string GetRawNodeName(ConstructionGraphNode node)
         => GetStringMember(node, "Name") ?? string.Empty;
 
-    private static IReadOnlyList<ConstructionGraphEdge> GetNodeEdges(ConstructionGraphNode node)
+    private static IReadOnlyList<ConstructionGraphEdge> GetRawNodeEdges(ConstructionGraphNode node)
     {
         var edgesObj = GetMemberValue(node, "Edges") ?? GetMemberValue(node, "_edges");
         if (edgesObj is IReadOnlyList<ConstructionGraphEdge> roList)
@@ -69,7 +54,7 @@ public sealed partial class RobustaConstructionSolver
         return Array.Empty<ConstructionGraphEdge>();
     }
 
-    private string? GetNodeEntityId(ConstructionGraphNode node, EntityUid? uid)
+    private string? GetRawNodeEntityId(ConstructionGraphNode node, EntityUid? uid)
     {
         var entityObj = GetMemberValue(node, "Entity") ?? GetMemberValue(node, "_entity");
         if (entityObj == null)
@@ -155,6 +140,9 @@ public sealed partial class RobustaConstructionSolver
 
     private IComponent? FindComponentByName(EntityUid uid, string componentTypeName)
     {
+        if (_entMan == null || !_entMan.EntityExists(uid))
+            return null;
+
         foreach (var comp in _entMan.GetComponents(uid))
         {
             if (string.Equals(comp.GetType().Name, componentTypeName, StringComparison.OrdinalIgnoreCase))

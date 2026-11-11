@@ -7,113 +7,61 @@ namespace RobustoClient.Systems.Construction;
 
 public sealed partial class RobustaConstructionSolver
 {
+    public void LoadIndexedGraphs(
+        IEnumerable<IndexedConstructionGraph> graphs,
+        IEnumerable<IndexedConstructionRecipe>? recipes = null)
+    {
+        ClearCache();
+        _cacheInitialized = true;
+
+        foreach (var graph in graphs)
+        {
+            _indexedGraphs[graph.Id] = graph;
+            foreach (var node in graph.Nodes.Values)
+            {
+                if (!string.IsNullOrEmpty(node.EntityId))
+                {
+                    RegisterEntityNodeMapping(node.EntityId, graph, node);
+                    RegisterEntityIdPipeLayerSuffix(node.EntityId);
+                }
+            }
+        }
+
+        if (recipes != null)
+        {
+            foreach (var recipe in recipes)
+            {
+                RegisterIndexedRecipe(recipe);
+            }
+        }
+
+        RegisterStandardBaseNodeMappings();
+    }
+
     public void EnsureCacheInitialized()
     {
-        if (_cacheInitialized)
+        if (_cacheInitialized || _protoMan == null)
             return;
 
-        _cacheInitialized = true;
-        _entityToGraphNodes.Clear();
-        _graphToConstructionProtos.Clear();
-        _entityToConstructionProto.Clear();
-        _entityAltLayerProtos.Clear();
-        _altEntityToBaseAndLayer.Clear();
-        _constructionAltLayerProtos.Clear();
+        var indexedGraphs = new List<IndexedConstructionGraph>();
+        foreach (var rawGraph in _protoMan.EnumeratePrototypes<ConstructionGraphPrototype>())
+        {
+            indexedGraphs.Add(BuildIndexedGraph(rawGraph));
+        }
 
+        var indexedRecipes = new List<IndexedConstructionRecipe>();
         foreach (var cProto in _protoMan.EnumeratePrototypes<ConstructionPrototype>())
         {
-            var graphId = GetStringMember(cProto, "Graph");
-            if (string.IsNullOrEmpty(graphId))
-                continue;
-
-            if (!_graphToConstructionProtos.TryGetValue(graphId, out var list))
-            {
-                list = new List<ConstructionPrototype>();
-                _graphToConstructionProtos[graphId] = list;
-            }
-            list.Add(cProto);
-
-            var targetNodeName = GetStringMember(cProto, "TargetNode");
-            if (!string.IsNullOrEmpty(targetNodeName) &&
-                TryGetGraph(graphId, out var cGraph) &&
-                TryGetNodeByName(cGraph, targetNodeName, out var targetNode))
-            {
-                var targetEntId = GetNodeEntityId(targetNode, null);
-                if (!string.IsNullOrEmpty(targetEntId) && !_entityToConstructionProto.ContainsKey(targetEntId))
-                    _entityToConstructionProto[targetEntId] = cProto.ID;
-            }
-
-            RegisterConstructionAlternativePrototypes(cProto);
+            if (BuildIndexedRecipe(cProto) is { } recipe)
+                indexedRecipes.Add(recipe);
         }
 
-        foreach (var graph in _protoMan.EnumeratePrototypes<ConstructionGraphPrototype>())
-        {
-            foreach (var node in EnumerateGraphNodes(graph))
-            {
-                var entityId = GetNodeEntityId(node, null);
-                if (!string.IsNullOrEmpty(entityId))
-                    RegisterEntityNodeMapping(entityId, graph, node);
-            }
-        }
+        LoadIndexedGraphs(indexedGraphs, indexedRecipes);
 
         TryFindComputerGraphAndNode(out var compGraph, out var compNode);
         TryFindMachineGraphAndNode(out var machineGraph, out var machineNode);
         TryFindAirlockGraphAndNode(out var airlockGraph, out var airlockNode);
 
-        if (airlockGraph != null && airlockNode != null)
-        {
-            foreach (var baseAirlockId in BaseAirlockPrototypeIds)
-            {
-                RegisterEntityNodeMapping(baseAirlockId, airlockGraph, airlockNode);
-            }
-        }
-
-        // Register all intermediate ComputerFrame nodes so ComputerFrame can disambiguate its exact stage
-        if (compGraph != null)
-        {
-            string[] compFrameNodeNames =
-            {
-                "frameUnsecured",
-                "boardUnsecured",
-                "missingWires",
-                "monitorMissing",
-                "monitorUnsecured"
-            };
-            foreach (var cfNodeName in compFrameNodeNames)
-            {
-                if (TryGetNodeByName(compGraph, cfNodeName, out var cfNode))
-                    RegisterEntityNodeMapping("ComputerFrame", compGraph, cfNode);
-            }
-
-            if (compNode != null)
-            {
-                foreach (var baseConsoleId in BaseConsolePrototypeIds)
-                {
-                    RegisterEntityNodeMapping(baseConsoleId, compGraph, compNode);
-                }
-            }
-        }
-
-        // Register intermediate MachineFrame nodes and base machine prototypes
-        if (machineGraph != null)
-        {
-            string[] machineFrameNodeNames = { "missingWires", "machineFrame" };
-            foreach (var mfNodeName in machineFrameNodeNames)
-            {
-                if (TryGetNodeByName(machineGraph, mfNodeName, out var mfNode))
-                    RegisterEntityNodeMapping("MachineFrame", machineGraph, mfNode);
-            }
-
-            if (machineNode != null)
-            {
-                foreach (var baseMachineId in BaseMachinePrototypeIds)
-                {
-                    RegisterEntityNodeMapping(baseMachineId, machineGraph, machineNode);
-                }
-            }
-        }
-
-        // Map EntityPrototypes that declare ConstructionComponent, AtmosPipeLayers, Computer/Machine components, or are constructed from boards
         foreach (var entityProto in _protoMan.EnumeratePrototypes<EntityPrototype>())
         {
             RegisterEntityAlternativePipeLayers(entityProto);
@@ -183,16 +131,12 @@ public sealed partial class RobustaConstructionSolver
                 var elecProtoId = GetStringMember(elecBoard, "Prototype");
                 if (!string.IsNullOrEmpty(elecProtoId))
                 {
-                    // Search existing graphs for a BoardNodeEntity node if not already mapped
-                    foreach (var g in _protoMan.EnumeratePrototypes<ConstructionGraphPrototype>())
+                    foreach (var g in _indexedGraphs.Values)
                     {
-                        foreach (var n in EnumerateGraphNodes(g))
+                        foreach (var n in g.Nodes.Values)
                         {
-                            var entObj = GetMemberValue(n, "Entity");
-                            if (entObj != null && entObj.GetType().Name.Contains("BoardNodeEntity", StringComparison.OrdinalIgnoreCase))
-                            {
+                            if (n.IsBoardNodeEntity)
                                 RegisterEntityNodeMapping(elecProtoId, g, n);
-                            }
                         }
                     }
                 }
@@ -200,18 +144,201 @@ public sealed partial class RobustaConstructionSolver
         }
     }
 
-    private void RegisterEntityNodeMapping(string entityProtoId, ConstructionGraphPrototype graph, ConstructionGraphNode node)
+    private void RegisterIndexedRecipe(IndexedConstructionRecipe recipe)
+    {
+        if (string.IsNullOrEmpty(recipe.GraphId))
+            return;
+
+        _recipesById[recipe.Id] = recipe;
+
+        if (!_graphToConstructionProtos.TryGetValue(recipe.GraphId, out var list))
+        {
+            list = new List<IndexedConstructionRecipe>();
+            _graphToConstructionProtos[recipe.GraphId] = list;
+        }
+        list.Add(recipe);
+
+        if (!string.IsNullOrEmpty(recipe.TargetNode) &&
+            TryGetGraph(recipe.GraphId, out var cGraph) &&
+            TryGetNodeByName(cGraph, recipe.TargetNode, out var targetNode))
+        {
+            var targetEntId = targetNode.EntityId;
+            if (!string.IsNullOrEmpty(targetEntId) && !_entityToConstructionProto.ContainsKey(targetEntId))
+                _entityToConstructionProto[targetEntId] = recipe.Id;
+        }
+
+        if (recipe.AlternativePrototypes != null)
+        {
+            foreach (var (layer, altId) in recipe.AlternativePrototypes)
+            {
+                if (layer > 0 && !string.IsNullOrEmpty(altId))
+                    _constructionAltLayerProtos[(recipe.Id, layer)] = altId;
+            }
+        }
+    }
+
+    private void RegisterStandardBaseNodeMappings()
+    {
+        TryFindComputerGraphAndNode(out var compGraph, out var compNode);
+        TryFindMachineGraphAndNode(out var machineGraph, out var machineNode);
+        TryFindAirlockGraphAndNode(out var airlockGraph, out var airlockNode);
+
+        if (airlockGraph != null && airlockNode != null)
+        {
+            foreach (var baseAirlockId in BaseAirlockPrototypeIds)
+            {
+                RegisterEntityNodeMapping(baseAirlockId, airlockGraph, airlockNode);
+            }
+        }
+
+        if (compGraph != null)
+        {
+            string[] compFrameNodeNames =
+            {
+                "frameUnsecured",
+                "boardUnsecured",
+                "missingWires",
+                "monitorMissing",
+                "monitorUnsecured"
+            };
+            foreach (var cfNodeName in compFrameNodeNames)
+            {
+                if (TryGetNodeByName(compGraph, cfNodeName, out var cfNode))
+                    RegisterEntityNodeMapping("ComputerFrame", compGraph, cfNode);
+            }
+
+            if (compNode != null)
+            {
+                foreach (var baseConsoleId in BaseConsolePrototypeIds)
+                {
+                    RegisterEntityNodeMapping(baseConsoleId, compGraph, compNode);
+                }
+            }
+        }
+
+        if (machineGraph != null)
+        {
+            string[] machineFrameNodeNames = { "missingWires", "machineFrame" };
+            foreach (var mfNodeName in machineFrameNodeNames)
+            {
+                if (TryGetNodeByName(machineGraph, mfNodeName, out var mfNode))
+                    RegisterEntityNodeMapping("MachineFrame", machineGraph, mfNode);
+            }
+
+            if (machineNode != null)
+            {
+                foreach (var baseMachineId in BaseMachinePrototypeIds)
+                {
+                    RegisterEntityNodeMapping(baseMachineId, machineGraph, machineNode);
+                }
+            }
+        }
+    }
+
+    private IndexedConstructionGraph BuildIndexedGraph(ConstructionGraphPrototype rawGraph)
+    {
+        var nodes = new Dictionary<string, IndexedGraphNode>(StringComparer.OrdinalIgnoreCase);
+        var startNode = GetStringMember(rawGraph, "Start") ?? "start";
+
+        foreach (var rawNode in EnumerateRawGraphNodes(rawGraph))
+        {
+            var nodeName = GetRawNodeName(rawNode);
+            if (string.IsNullOrEmpty(nodeName))
+                continue;
+
+            var entityId = GetRawNodeEntityId(rawNode, null);
+            var entObj = GetMemberValue(rawNode, "Entity") ?? GetMemberValue(rawNode, "_entity");
+            bool isBoardNode = entObj != null &&
+                               entObj.GetType().Name.Contains("BoardNodeEntity", StringComparison.OrdinalIgnoreCase);
+
+            string? securityExamine = null;
+            var actions = GetMemberValue(rawNode, "Actions") as IEnumerable
+                          ?? GetMemberValue(rawNode, "_actions") as IEnumerable;
+            if (actions != null)
+            {
+                foreach (var act in actions)
+                {
+                    if (act != null && GetStringMember(act, "Examine") is { Length: > 0 } ex)
+                    {
+                        securityExamine = ex;
+                        break;
+                    }
+                }
+            }
+
+            bool isAnchorable = KnownAnchorableFrameNodes.Contains(nodeName);
+            var protoIdForAnchor = entityId ?? GetInferredFramePrototypeForNode(rawGraph.ID, nodeName);
+            if (!isAnchorable &&
+                !string.IsNullOrEmpty(protoIdForAnchor) &&
+                _protoMan != null &&
+                _protoMan.TryIndex<EntityPrototype>(protoIdForAnchor, out var eProto) &&
+                _itemUtil != null &&
+                _itemUtil.HasPrototypeComponent(eProto, "Anchorable"))
+            {
+                isAnchorable = true;
+            }
+
+            var edges = new List<IndexedGraphEdge>();
+            foreach (var rawEdge in GetRawNodeEdges(rawNode))
+            {
+                var targetName = GetStringMember(rawEdge, "Target");
+                if (string.IsNullOrEmpty(targetName))
+                    continue;
+
+                var edgeSteps = new List<ConstructionActionStep>();
+                ConvertRawEdgeSteps(rawEdge, targetName, edgeSteps);
+
+                bool? reqAnchored = TryGetRawEdgeAnchoredCondition(rawEdge, out bool a) ? a : null;
+                bool? reqWirePanel = TryGetRawEdgeWirePanelCondition(rawEdge, out bool w) ? w : null;
+                bool? reqDoorWelded = TryGetRawEdgeDoorWeldedCondition(rawEdge, out bool d) ? d : null;
+                bool? reqAllWiresCut = TryGetRawEdgeAllWiresCutCondition(rawEdge, out bool c) ? c : null;
+
+                edges.Add(new IndexedGraphEdge(
+                    targetName,
+                    edgeSteps,
+                    reqAnchored,
+                    reqWirePanel,
+                    reqDoorWelded,
+                    reqAllWiresCut));
+            }
+
+            nodes[nodeName] = new IndexedGraphNode(
+                nodeName,
+                entityId,
+                edges,
+                isBoardNode,
+                securityExamine,
+                isAnchorable);
+        }
+
+        return new IndexedConstructionGraph(rawGraph.ID, startNode, nodes);
+    }
+
+    private IndexedConstructionRecipe? BuildIndexedRecipe(ConstructionPrototype cProto)
+    {
+        var graphId = GetStringMember(cProto, "Graph");
+        if (string.IsNullOrEmpty(graphId))
+            return null;
+
+        var targetNode = GetStringMember(cProto, "TargetNode") ?? string.Empty;
+        var startNode = GetStringMember(cProto, "StartNode") ?? "start";
+        var altProtos = ExtractConstructionAlternativePrototypes(cProto);
+
+        return new IndexedConstructionRecipe(cProto.ID, graphId, targetNode, startNode, altProtos);
+    }
+
+    private void RegisterEntityNodeMapping(string entityProtoId, IndexedConstructionGraph graph, IndexedGraphNode node)
     {
         if (!_entityToGraphNodes.TryGetValue(entityProtoId, out var list))
         {
-            list = new List<(ConstructionGraphPrototype, ConstructionGraphNode)>();
+            list = new List<(IndexedConstructionGraph, IndexedGraphNode)>();
             _entityToGraphNodes[entityProtoId] = list;
         }
 
         foreach (var existing in list)
         {
-            if (string.Equals(existing.Graph.ID, graph.ID, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(GetNodeName(existing.Node), GetNodeName(node), StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(existing.Graph.Id, graph.Id, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(existing.Node.Name, node.Name, StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
@@ -233,8 +360,9 @@ public sealed partial class RobustaConstructionSolver
         return !string.IsNullOrEmpty(graphId) && !string.IsNullOrEmpty(nodeName);
     }
 
-    private void RegisterConstructionAlternativePrototypes(ConstructionPrototype cProto)
+    private static Dictionary<int, string>? ExtractConstructionAlternativePrototypes(ConstructionPrototype cProto)
     {
+        Dictionary<int, string>? result = null;
         var altObj = GetMemberValue(cProto, "AlternativePrototypes") ?? GetMemberValue(cProto, "_alternativePrototypes");
         if (altObj is IDictionary dict)
         {
@@ -244,7 +372,10 @@ public sealed partial class RobustaConstructionSolver
                 {
                     var altId = ExtractIdString(entry.Value);
                     if (!string.IsNullOrEmpty(altId))
-                        _constructionAltLayerProtos[(cProto.ID, layer)] = altId;
+                    {
+                        result ??= new Dictionary<int, string>();
+                        result[layer] = altId;
+                    }
                 }
             }
         }
@@ -260,20 +391,30 @@ public sealed partial class RobustaConstructionSolver
                     if (layer == 0 && idx >= 1 && idx <= 2)
                         layer = idx;
                     if (layer > 0)
-                        _constructionAltLayerProtos[(cProto.ID, layer)] = altId;
+                    {
+                        result ??= new Dictionary<int, string>();
+                        result[layer] = altId;
+                    }
                 }
                 idx++;
             }
+        }
+
+        return result;
+    }
+
+    private void RegisterEntityIdPipeLayerSuffix(string entityId)
+    {
+        if (TryExtractPipeLayerSuffix(entityId, out var baseFromId, out int layerFromId) && layerFromId > 0)
+        {
+            _entityAltLayerProtos[(baseFromId, layerFromId)] = entityId;
+            _altEntityToBaseAndLayer[entityId] = (baseFromId, layerFromId);
         }
     }
 
     private void RegisterEntityAlternativePipeLayers(EntityPrototype entityProto)
     {
-        if (TryExtractPipeLayerSuffix(entityProto.ID, out var baseFromId, out int layerFromId) && layerFromId > 0)
-        {
-            _entityAltLayerProtos[(baseFromId, layerFromId)] = entityProto.ID;
-            _altEntityToBaseAndLayer[entityProto.ID] = (baseFromId, layerFromId);
-        }
+        RegisterEntityIdPipeLayerSuffix(entityProto.ID);
 
         if (!_itemUtil.TryGetPrototypeComponent<object>(entityProto, "AtmosPipeLayers", out var pipeLayersComp) ||
             pipeLayersComp == null)

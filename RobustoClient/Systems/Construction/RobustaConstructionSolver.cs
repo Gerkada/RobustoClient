@@ -16,10 +16,16 @@ public sealed partial class RobustaConstructionSolver : EntitySystem
 
     private bool _cacheInitialized;
 
-    private readonly Dictionary<string, List<(ConstructionGraphPrototype Graph, ConstructionGraphNode Node)>> _entityToGraphNodes =
+    private readonly Dictionary<string, IndexedConstructionGraph> _indexedGraphs =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly Dictionary<string, List<ConstructionPrototype>> _graphToConstructionProtos =
+    private readonly Dictionary<string, List<(IndexedConstructionGraph Graph, IndexedGraphNode Node)>> _entityToGraphNodes =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly Dictionary<string, List<IndexedConstructionRecipe>> _graphToConstructionProtos =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly Dictionary<string, IndexedConstructionRecipe> _recipesById =
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, string> _entityToConstructionProto =
@@ -173,9 +179,16 @@ public sealed partial class RobustaConstructionSolver : EntitySystem
 
     private void OnPrototypesReloaded(PrototypesReloadedEventArgs args)
     {
+        ClearCache();
+    }
+
+    private void ClearCache()
+    {
         _cacheInitialized = false;
+        _indexedGraphs.Clear();
         _entityToGraphNodes.Clear();
         _graphToConstructionProtos.Clear();
+        _recipesById.Clear();
         _entityToConstructionProto.Clear();
         _entityAltLayerProtos.Clear();
         _altEntityToBaseAndLayer.Clear();

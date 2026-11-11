@@ -38,7 +38,9 @@ public sealed partial class RobustaConstructionSolver
         if (suffixLayer > 0)
             return suffixLayer;
 
-        if (_protoMan.TryIndex<EntityPrototype>(entityProtoId, out var proto) &&
+        if (_protoMan != null &&
+            _protoMan.TryIndex<EntityPrototype>(entityProtoId, out var proto) &&
+            _itemUtil != null &&
             _itemUtil.TryGetPrototypeComponent<object>(proto, "AtmosPipeLayers", out var layers) &&
             layers != null &&
             TryParsePipeLayerValue(GetMemberValue(layers, "CurrentPipeLayer"), out int declaredLayer))

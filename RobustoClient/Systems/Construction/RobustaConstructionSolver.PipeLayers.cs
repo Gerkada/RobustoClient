@@ -69,15 +69,15 @@ public sealed partial class RobustaConstructionSolver
     }
 
     public bool ShouldUseScrewdriverForPipeLayer(
-        ConstructionGraphPrototype graph,
-        ConstructionGraphNode node,
+        IndexedConstructionGraph graph,
+        IndexedGraphNode node,
         string? desiredEntityProtoId)
     {
-        if (!IsPipeOrAtmosGraphOrNode(graph, node, null))
+        if (!IsPipeOrAtmosGraphOrNode(graph, node, desiredEntityProtoId))
             return false;
 
-        var graphId = graph.ID ?? string.Empty;
-        var nodeName = GetNodeName(node);
+        var graphId = graph.Id ?? string.Empty;
+        var nodeName = node.Name;
         var protoId = desiredEntityProtoId ?? string.Empty;
 
         // Pipes (GasPipe / DisposalPipe) and Manifolds are placed directly on their target layer via ConstructionPrototype,

@@ -1,13 +1,10 @@
-using Content.Shared.Construction;
-using Content.Shared.Construction.Prototypes;
-
 namespace RobustoClient.Systems.Construction;
 
 public sealed partial class RobustaConstructionSolver
 {
     public bool DoesEdgeReplaceOrDeleteEntity(EntityUid currentTarget, string graphId, string? expectedNextNode)
     {
-        if (string.IsNullOrEmpty(expectedNextNode) || !_entMan.EntityExists(currentTarget))
+        if (string.IsNullOrEmpty(expectedNextNode) || _entMan == null || !_entMan.EntityExists(currentTarget))
             return false;
 
         EnsureCacheInitialized();
@@ -24,12 +21,10 @@ public sealed partial class RobustaConstructionSolver
 
         var currentProtoId = _entMan.GetComponent<MetaDataComponent>(currentTarget).EntityPrototype?.ID;
 
-        // Transitions on an already-constructed Airlock between "airlock" and any wire-panel security node
-        // happen in-place on the existing Airlock entity without replacing or deleting it.
-        if (string.Equals(graph.ID, "Airlock", StringComparison.OrdinalIgnoreCase) &&
+        if (string.Equals(graph.Id, "Airlock", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(currentProtoId, "AirlockAssembly", StringComparison.OrdinalIgnoreCase))
         {
-            var toNodeName = GetNodeName(toNode);
+            var toNodeName = toNode.Name;
             if (string.Equals(toNodeName, "airlock", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toNodeName, "glassAirlock", StringComparison.OrdinalIgnoreCase) ||
                 toNodeName.Contains("Security", StringComparison.OrdinalIgnoreCase))
@@ -38,14 +33,11 @@ public sealed partial class RobustaConstructionSolver
             }
         }
 
-        var entObj = GetMemberValue(toNode, "Entity") ?? GetMemberValue(toNode, "_entity");
-        if (entObj != null && entObj.GetType().Name.Contains("BoardNodeEntity", StringComparison.OrdinalIgnoreCase))
-        {
+        if (toNode.IsBoardNodeEntity)
             return true;
-        }
 
-        var nextProtoId = GetNodeEntityId(toNode, currentTarget)
-                          ?? GetInferredFramePrototypeForNode(graph, toNode);
+        var nextProtoId = toNode.EntityId
+                          ?? GetInferredFramePrototypeForNode(graph.Id, toNode.Name);
 
         if (!string.IsNullOrEmpty(nextProtoId) &&
             !string.IsNullOrEmpty(currentProtoId) &&
@@ -57,19 +49,18 @@ public sealed partial class RobustaConstructionSolver
         return false;
     }
 
-    private string? FindBestBuildTargetNode(ConstructionGraphPrototype graph, ConstructionGraphNode currentNode)
+    private string? FindBestBuildTargetNode(IndexedConstructionGraph graph, IndexedGraphNode currentNode)
     {
-        var currentName = GetNodeName(currentNode);
+        var currentName = currentNode.Name;
 
-        // 1. Check ConstructionPrototype recipes associated with this graph (excluding intermediate frame nodes)
-        if (_graphToConstructionProtos.TryGetValue(graph.ID, out var protos))
+        if (_graphToConstructionProtos.TryGetValue(graph.Id, out var protos))
         {
             string? bestTarget = null;
             int bestDist = int.MaxValue;
 
-            foreach (var cProto in protos)
+            foreach (var recipe in protos)
             {
-                var tNode = GetStringMember(cProto, "TargetNode");
+                var tNode = recipe.TargetNode;
                 if (string.IsNullOrEmpty(tNode) ||
                     string.Equals(tNode, currentName, StringComparison.OrdinalIgnoreCase) ||
                     NonTerminalBuildNodeNames.Contains(tNode))
@@ -89,7 +80,6 @@ public sealed partial class RobustaConstructionSolver
                 return bestTarget;
         }
 
-        // 2. Check well-known terminal node names on the graph (e.g. "machine", "computer", "wall", "reinforcedWall", "airlock", "window")
         string[] commonBuildTargets = { "machine", "computer", "wall", "reinforcedWall", "airlock", "window" };
         foreach (var candidate in commonBuildTargets)
         {
@@ -102,10 +92,9 @@ public sealed partial class RobustaConstructionSolver
             }
         }
 
-        // 3. Fallback: nearest reachable node that produces a constructed entity and isn't a deconstruction/start node
-        foreach (var node in EnumerateGraphNodes(graph))
+        foreach (var node in graph.Nodes.Values)
         {
-            var nodeName = GetNodeName(node);
+            var nodeName = node.Name;
             if (string.IsNullOrEmpty(nodeName) ||
                 string.Equals(nodeName, currentName, StringComparison.OrdinalIgnoreCase) ||
                 PrimaryDeconstructTargets.Contains(nodeName, StringComparer.OrdinalIgnoreCase) ||
@@ -123,8 +112,8 @@ public sealed partial class RobustaConstructionSolver
     }
 
     private List<string> GetDeconstructCandidateNodes(
-        EntityUid target,
-        ConstructionGraphPrototype graph,
+        in ConstructionTargetSnapshot snapshot,
+        IndexedConstructionGraph graph,
         string currentNodeName)
     {
         var result = new List<string>();
@@ -140,24 +129,16 @@ public sealed partial class RobustaConstructionSolver
                 result.Add(name);
         }
 
-        var constructionComp = FindComponentByName(target, "ConstructionComponent");
-        if (constructionComp != null)
-            TryAdd(GetStringMember(constructionComp, "DeconstructionNode"));
-
-        TryAdd(GetStringMember(graph, "Start"));
+        TryAdd(snapshot.DeconstructionNode);
+        TryAdd(graph.StartNode);
 
         foreach (var primary in PrimaryDeconstructTargets)
             TryAdd(primary);
 
-        // Any node whose Entity is null/empty (such as "start" or a deleted-entity terminal node)
-        foreach (var n in EnumerateGraphNodes(graph))
+        foreach (var n in graph.Nodes.Values)
         {
-            var name = GetNodeName(n);
-            if (string.IsNullOrEmpty(GetNodeEntityId(n, null)) &&
-                GetNodeEdges(n).Count == 0)
-            {
-                TryAdd(name);
-            }
+            if (string.IsNullOrEmpty(n.EntityId) && n.Edges.Count == 0)
+                TryAdd(n.Name);
         }
 
         foreach (var fallback in FallbackDeconstructTargets)
@@ -166,8 +147,8 @@ public sealed partial class RobustaConstructionSolver
         return result;
     }
 
-    private List<(ConstructionGraphNode From, ConstructionGraphEdge Edge, ConstructionGraphNode To)>? FindShortestEdgePath(
-        ConstructionGraphPrototype graph,
+    private List<(IndexedGraphNode From, IndexedGraphEdge Edge, IndexedGraphNode To)>? FindShortestEdgePath(
+        IndexedConstructionGraph graph,
         string startNodeName,
         string targetNodeName)
     {
@@ -177,24 +158,24 @@ public sealed partial class RobustaConstructionSolver
             return null;
         }
 
-        var queue = new Queue<ConstructionGraphNode>();
-        var cameFrom = new Dictionary<string, (ConstructionGraphNode From, ConstructionGraphEdge Edge)>(StringComparer.OrdinalIgnoreCase);
+        var queue = new Queue<IndexedGraphNode>();
+        var cameFrom = new Dictionary<string, (IndexedGraphNode From, IndexedGraphEdge Edge)>(StringComparer.OrdinalIgnoreCase);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var startName = GetNodeName(startNode);
+        var startName = startNode.Name;
         queue.Enqueue(startNode);
         visited.Add(startName);
 
         while (queue.Count > 0)
         {
             var current = queue.Dequeue();
-            var currentName = GetNodeName(current);
+            var currentName = current.Name;
 
             if (string.Equals(currentName, targetNodeName, StringComparison.OrdinalIgnoreCase))
             {
-                var path = new List<(ConstructionGraphNode From, ConstructionGraphEdge Edge, ConstructionGraphNode To)>();
+                var path = new List<(IndexedGraphNode From, IndexedGraphEdge Edge, IndexedGraphNode To)>();
                 var traceNode = targetNode;
-                var traceName = GetNodeName(traceNode);
+                var traceName = traceNode.Name;
 
                 while (!string.Equals(traceName, startName, StringComparison.OrdinalIgnoreCase))
                 {
@@ -203,23 +184,22 @@ public sealed partial class RobustaConstructionSolver
 
                     path.Add((prev.From, prev.Edge, traceNode));
                     traceNode = prev.From;
-                    traceName = GetNodeName(traceNode);
+                    traceName = traceNode.Name;
                 }
 
                 path.Reverse();
                 return path;
             }
 
-            foreach (var edge in GetNodeEdges(current))
+            foreach (var edge in current.Edges)
             {
-                var edgeTargetName = GetStringMember(edge, "Target");
+                var edgeTargetName = edge.TargetNode;
                 if (string.IsNullOrEmpty(edgeTargetName))
                     continue;
 
                 if (!TryGetNodeByName(graph, edgeTargetName, out var nextNode))
                     continue;
 
-                // Never traverse through a terminal deconstruction node (like "start") as an intermediate step
                 if (!string.Equals(edgeTargetName, targetNodeName, StringComparison.OrdinalIgnoreCase) &&
                     IsTerminalDeconstructNode(graph, nextNode))
                 {
@@ -237,29 +217,25 @@ public sealed partial class RobustaConstructionSolver
         return null;
     }
 
-    private float SumEdgeDoAfter(ConstructionGraphEdge edge)
+    private static float SumEdgeDoAfter(IndexedGraphEdge edge)
     {
         float total = 0f;
-        var tmp = new List<ConstructionActionStep>();
-        ConvertEdgeSteps(edge, string.Empty, tmp);
-        foreach (var s in tmp)
+        foreach (var s in edge.Steps)
             total += s.DoAfterDelay;
         return total;
     }
 
-
-    private bool IsTerminalDeconstructNode(ConstructionGraphPrototype graph, ConstructionGraphNode toNode)
+    private static bool IsTerminalDeconstructNode(IndexedConstructionGraph graph, IndexedGraphNode toNode)
     {
-        var toName = GetNodeName(toNode);
+        var toName = toNode.Name;
         if (string.IsNullOrEmpty(toName))
             return false;
 
         if (string.Equals(toName, "start", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        var graphStart = GetStringMember(graph, "Start");
-        if (!string.IsNullOrEmpty(graphStart) &&
-            string.Equals(toName, graphStart, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrEmpty(graph.StartNode) &&
+            string.Equals(toName, graph.StartNode, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -267,7 +243,6 @@ public sealed partial class RobustaConstructionSolver
         if (PrimaryDeconstructTargets.Contains(toName, StringComparer.OrdinalIgnoreCase))
             return true;
 
-        return string.IsNullOrEmpty(GetNodeEntityId(toNode, null)) &&
-               GetNodeEdges(toNode).Count == 0;
+        return string.IsNullOrEmpty(toNode.EntityId) && toNode.Edges.Count == 0;
     }
 }

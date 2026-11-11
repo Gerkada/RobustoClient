@@ -5,10 +5,10 @@ namespace RobustoClient.Systems.Construction;
 
 public sealed partial class RobustaConstructionSolver
 {
-    private bool TryGetEdgeAnchoredCondition(ConstructionGraphEdge edge, out bool requiredAnchored)
+    private static bool TryGetRawEdgeAnchoredCondition(ConstructionGraphEdge edge, out bool requiredAnchored)
     {
         requiredAnchored = false;
-        foreach (var cond in EnumerateEdgeConditions(edge))
+        foreach (var cond in EnumerateRawEdgeConditions(edge))
         {
             if (cond.GetType().Name.Contains("EntityAnchored", StringComparison.OrdinalIgnoreCase))
             {
@@ -22,10 +22,10 @@ public sealed partial class RobustaConstructionSolver
         return false;
     }
 
-    private bool TryGetEdgeWirePanelCondition(ConstructionGraphEdge edge, out bool requiredOpen)
+    private static bool TryGetRawEdgeWirePanelCondition(ConstructionGraphEdge edge, out bool requiredOpen)
     {
         requiredOpen = true;
-        foreach (var cond in EnumerateEdgeConditions(edge))
+        foreach (var cond in EnumerateRawEdgeConditions(edge))
         {
             if (cond.GetType().Name.Contains("WirePanel", StringComparison.OrdinalIgnoreCase))
             {
@@ -37,10 +37,10 @@ public sealed partial class RobustaConstructionSolver
         return false;
     }
 
-    private bool TryGetEdgeDoorWeldedCondition(ConstructionGraphEdge edge, out bool requiredWelded)
+    private static bool TryGetRawEdgeDoorWeldedCondition(ConstructionGraphEdge edge, out bool requiredWelded)
     {
         requiredWelded = true;
-        foreach (var cond in EnumerateEdgeConditions(edge))
+        foreach (var cond in EnumerateRawEdgeConditions(edge))
         {
             if (cond.GetType().Name.Contains("DoorWelded", StringComparison.OrdinalIgnoreCase))
             {
@@ -52,10 +52,10 @@ public sealed partial class RobustaConstructionSolver
         return false;
     }
 
-    private bool TryGetEdgeAllWiresCutCondition(ConstructionGraphEdge edge, out bool requiredAllCut)
+    private static bool TryGetRawEdgeAllWiresCutCondition(ConstructionGraphEdge edge, out bool requiredAllCut)
     {
         requiredAllCut = true;
-        foreach (var cond in EnumerateEdgeConditions(edge))
+        foreach (var cond in EnumerateRawEdgeConditions(edge))
         {
             var cName = cond.GetType().Name;
             if (cName.Contains("AllWiresCut", StringComparison.OrdinalIgnoreCase) ||
@@ -69,7 +69,7 @@ public sealed partial class RobustaConstructionSolver
         return false;
     }
 
-    private static IEnumerable<object> EnumerateEdgeConditions(ConstructionGraphEdge edge)
+    private static IEnumerable<object> EnumerateRawEdgeConditions(ConstructionGraphEdge edge)
     {
         var conds = GetMemberValue(edge, "Conditions") as IEnumerable
                     ?? GetMemberValue(edge, "_conditions") as IEnumerable;
@@ -83,20 +83,16 @@ public sealed partial class RobustaConstructionSolver
         }
     }
 
-    private bool FirstEdgeStepIsTool(ConstructionGraphEdge edge, string toolQuality)
+    private static bool FirstEdgeStepIsTool(IndexedGraphEdge edge, string toolQuality)
     {
-        var tmp = new List<ConstructionActionStep>();
-        ConvertEdgeSteps(edge, string.Empty, tmp);
-        return tmp.Count > 0 &&
-               tmp[0].Kind == ConstructionActionKind.UseTool &&
-               string.Equals(tmp[0].PrototypeOrQualityOrTag, toolQuality, StringComparison.OrdinalIgnoreCase);
+        return edge.Steps.Count > 0 &&
+               edge.Steps[0].Kind == ConstructionActionKind.UseTool &&
+               string.Equals(edge.Steps[0].PrototypeOrQualityOrTag, toolQuality, StringComparison.OrdinalIgnoreCase);
     }
 
-    private bool EdgeContainsToolStep(ConstructionGraphEdge edge, string toolQuality)
+    private static bool EdgeContainsToolStep(IndexedGraphEdge edge, string toolQuality)
     {
-        var tmp = new List<ConstructionActionStep>();
-        ConvertEdgeSteps(edge, string.Empty, tmp);
-        foreach (var s in tmp)
+        foreach (var s in edge.Steps)
         {
             if (s.Kind == ConstructionActionKind.UseTool &&
                 string.Equals(s.PrototypeOrQualityOrTag, toolQuality, StringComparison.OrdinalIgnoreCase))

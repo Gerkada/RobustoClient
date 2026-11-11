@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Reflection;
-using Content.Shared.Construction;
-using Content.Shared.Construction.Prototypes;
+using Content.Shared.Stacks;
 using Robust.Shared.Prototypes;
 
 namespace RobustoClient.Systems.Construction;
@@ -10,7 +9,7 @@ public sealed partial class RobustaConstructionSolver
 {
     public void NoteHeldEntity(EntityUid? heldUid)
     {
-        if (!heldUid.HasValue || !_entMan.EntityExists(heldUid.Value))
+        if (!heldUid.HasValue || _entMan == null || !_entMan.EntityExists(heldUid.Value))
             return;
 
         if (IsMachineBoardEntity(heldUid.Value))
@@ -23,10 +22,11 @@ public sealed partial class RobustaConstructionSolver
 
     public bool HasMachineFrameBoard(EntityUid uid)
     {
-        if (!_entMan.EntityExists(uid))
+        if (_entMan == null || !_entMan.EntityExists(uid))
             return false;
 
-        if (_container.TryGetContainer(uid, "machine_board", out var boardCont) &&
+        if (_container != null &&
+            _container.TryGetContainer(uid, "machine_board", out var boardCont) &&
             boardCont.ContainedEntities.Count > 0)
         {
             return true;
@@ -140,63 +140,29 @@ public sealed partial class RobustaConstructionSolver
     }
 
     private void AppendMachineFrameStepsIfNeeded(
-        EntityUid? target,
-        ConstructionGraphPrototype graph,
-        ConstructionGraphNode fromNode,
-        ConstructionGraphNode toNode,
-        string? desiredEntityProtoId,
+        in ConstructionTargetSnapshot snapshot,
+        IndexedConstructionGraph graph,
+        IndexedGraphNode fromNode,
+        IndexedGraphNode toNode,
         List<ConstructionActionStep> steps)
     {
-        if (!string.Equals(graph.ID, "Machine", StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(GetNodeName(fromNode), "machineFrame", StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(GetNodeName(toNode), "machine", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(graph.Id, "Machine", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(fromNode.Name, "machineFrame", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(toNode.Name, "machine", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        bool alreadyHasBoard = target.HasValue && HasMachineFrameBoard(target.Value);
-        EntityUid? boardUid = null;
-        EntityPrototype? boardProto = null;
-
-        if (target.HasValue &&
-            _entMan.EntityExists(target.Value) &&
-            _container.TryGetContainer(target.Value, "machine_board", out var boardContainer) &&
-            boardContainer.ContainedEntities.Count > 0)
+        var board = snapshot.MachineBoard;
+        if (!snapshot.HasMachineFrameBoard)
         {
-            boardUid = boardContainer.ContainedEntities[0];
-            boardProto = _entMan.GetComponent<MetaDataComponent>(boardUid.Value).EntityPrototype;
-            if (boardProto != null)
-                _lastKnownMachineBoardProtoId = boardProto.ID;
-        }
-
-        if (boardUid == null && boardProto == null)
-        {
-            if (!alreadyHasBoard)
+            if (board != null && !string.IsNullOrEmpty(board.BoardPrototypeId))
             {
-                TryFindAvailableMachineBoard(target, desiredEntityProtoId, out boardUid, out boardProto);
-            }
-            else
-            {
-                // Frame already has a board inside, but closed container contents may not be networked to client;
-                // resolve board prototype from desiredEntityProtoId or the last held/inserted MachineBoard.
-                if (!string.IsNullOrEmpty(desiredEntityProtoId))
-                    TryFindBoardPrototypeForMachine(desiredEntityProtoId, out boardProto);
-                if (boardProto == null && !string.IsNullOrEmpty(_lastKnownMachineBoardProtoId))
-                    _protoMan.TryIndex(_lastKnownMachineBoardProtoId, out boardProto);
-                if (boardProto == null)
-                    TryFindAvailableMachineBoard(target, desiredEntityProtoId, out boardUid, out boardProto);
-            }
-        }
-
-        if (!alreadyHasBoard)
-        {
-            if (boardProto != null)
-            {
-                _lastKnownMachineBoardProtoId = boardProto.ID;
+                _lastKnownMachineBoardProtoId = board.BoardPrototypeId;
                 steps.Add(new ConstructionActionStep(
                     ConstructionActionKind.InsertPrototype,
-                    $"Insert {boardProto.ID}",
-                    PrototypeOrQualityOrTag: boardProto.ID,
+                    $"Insert {board.BoardPrototypeId}",
+                    PrototypeOrQualityOrTag: board.BoardPrototypeId,
                     Amount: 1,
                     DoAfterDelay: 0f,
                     ExpectedNextNode: null));
@@ -213,27 +179,14 @@ public sealed partial class RobustaConstructionSolver
             }
         }
 
-        object? boardComp = null;
-        if (boardUid.HasValue && _entMan.EntityExists(boardUid.Value))
-            boardComp = FindComponentByName(boardUid.Value, "MachineBoardComponent");
-        if (boardComp == null && boardProto != null)
-            _itemUtil.TryGetPrototypeComponent<object>(boardProto, "MachineBoard", out boardComp);
-
-        if (boardComp == null)
+        if (board == null)
             return;
 
-        // 1. Stack / Material Requirements (StackRequirements, MaterialRequirements, MaterialIdRequirements)
         var seenStacks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        string[] stackPropNames = { "StackRequirements", "MaterialRequirements", "MaterialIdRequirements" };
-        foreach (var propName in stackPropNames)
+        if (board.StackRequirements != null)
         {
-            if (GetMemberValue(boardComp, propName) is not IDictionary stackReqs)
-                continue;
-
-            foreach (DictionaryEntry entry in stackReqs)
+            foreach (var (stackId, amount) in board.StackRequirements)
             {
-                var stackId = ExtractIdString(entry.Key);
-                var amount = entry.Value is int i ? i : GetIntMember(entry.Value, "Amount", 1);
                 if (amount > 0 && !string.IsNullOrEmpty(stackId) && seenStacks.Add(stackId))
                 {
                     steps.Add(new ConstructionActionStep(
@@ -247,54 +200,30 @@ public sealed partial class RobustaConstructionSolver
             }
         }
 
-        // 2. MachinePart Requirements (Requirements, MachinePartRequirements, PartRequirements)
-        var seenParts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        string[] partPropNames = { "Requirements", "MachinePartRequirements", "PartRequirements" };
-        foreach (var propName in partPropNames)
+        if (board.PartRequirements != null)
         {
-            if (GetMemberValue(boardComp, propName) is not IDictionary partReqs)
-                continue;
-
-            foreach (DictionaryEntry entry in partReqs)
+            foreach (var (partId, amount) in board.PartRequirements)
             {
-                var partId = ExtractIdString(entry.Key);
-                var amount = entry.Value is int i ? i : GetIntMember(entry.Value, "Amount", 1);
-                if (amount <= 0 || string.IsNullOrEmpty(partId) || !seenParts.Add(partId) || seenStacks.Contains(partId))
+                if (amount <= 0 || string.IsNullOrEmpty(partId) || seenStacks.Contains(partId))
                     continue;
 
-                if (_protoMan.HasIndex<Content.Shared.Stacks.StackPrototype>(partId))
+                for (int k = 0; k < amount; k++)
                 {
                     steps.Add(new ConstructionActionStep(
-                        ConstructionActionKind.AddMaterial,
-                        $"Add {amount}x {partId}",
-                        PrototypeOrQualityOrTag: partId,
-                        Amount: amount,
+                        ConstructionActionKind.InsertComponent,
+                        $"Insert {partId} ({k + 1}/{amount})",
+                        PrototypeOrQualityOrTag: $"MachinePart:{partId}",
+                        Amount: 1,
                         DoAfterDelay: 0f,
                         ExpectedNextNode: null));
-                }
-                else
-                {
-                    for (int k = 0; k < amount; k++)
-                    {
-                        steps.Add(new ConstructionActionStep(
-                            ConstructionActionKind.InsertComponent,
-                            $"Insert {partId} ({k + 1}/{amount})",
-                            PrototypeOrQualityOrTag: $"MachinePart:{partId}",
-                            Amount: 1,
-                            DoAfterDelay: 0f,
-                            ExpectedNextNode: null));
-                    }
                 }
             }
         }
 
-        // 3. Component Requirements (each item inserted individually)
-        if (GetMemberValue(boardComp, "ComponentRequirements") is IDictionary compReqs)
+        if (board.ComponentRequirements != null)
         {
-            foreach (DictionaryEntry entry in compReqs)
+            foreach (var (compName, amt) in board.ComponentRequirements)
             {
-                var compName = ExtractIdString(entry.Key);
-                var amt = entry.Value is int i ? i : GetIntMember(entry.Value, "Amount", 1);
                 if (amt > 0 && !string.IsNullOrEmpty(compName))
                 {
                     for (int k = 0; k < amt; k++)
@@ -311,13 +240,10 @@ public sealed partial class RobustaConstructionSolver
             }
         }
 
-        // 4. Tag Requirements (each item inserted individually)
-        if (GetMemberValue(boardComp, "TagRequirements") is IDictionary tagReqs)
+        if (board.TagRequirements != null)
         {
-            foreach (DictionaryEntry entry in tagReqs)
+            foreach (var (tagId, amt) in board.TagRequirements)
             {
-                var tagId = ExtractIdString(entry.Key);
-                var amt = entry.Value is int i ? i : GetIntMember(entry.Value, "Amount", 1);
                 if (amt > 0 && !string.IsNullOrEmpty(tagId))
                 {
                     for (int k = 0; k < amt; k++)
@@ -335,9 +261,106 @@ public sealed partial class RobustaConstructionSolver
         }
     }
 
+    private MachineBoardRequirements? ExtractMachineBoardRequirements(
+        EntityUid? target,
+        string? desiredEntityProtoId,
+        bool alreadyHasBoard)
+    {
+        if (_entMan == null || _protoMan == null)
+            return null;
+
+        EntityUid? boardUid = null;
+        EntityPrototype? boardProto = null;
+
+        if (target.HasValue &&
+            _entMan.EntityExists(target.Value) &&
+            _container != null &&
+            _container.TryGetContainer(target.Value, "machine_board", out var boardContainer) &&
+            boardContainer.ContainedEntities.Count > 0)
+        {
+            boardUid = boardContainer.ContainedEntities[0];
+            boardProto = _entMan.GetComponent<MetaDataComponent>(boardUid.Value).EntityPrototype;
+            if (boardProto != null)
+                _lastKnownMachineBoardProtoId = boardProto.ID;
+        }
+
+        if (boardUid == null && boardProto == null)
+        {
+            if (!alreadyHasBoard)
+            {
+                TryFindAvailableMachineBoard(target, desiredEntityProtoId, out boardUid, out boardProto);
+            }
+            else
+            {
+                if (!string.IsNullOrEmpty(desiredEntityProtoId))
+                    TryFindBoardPrototypeForMachine(desiredEntityProtoId, out boardProto);
+                if (boardProto == null && !string.IsNullOrEmpty(_lastKnownMachineBoardProtoId))
+                    _protoMan.TryIndex(_lastKnownMachineBoardProtoId, out boardProto);
+                if (boardProto == null)
+                    TryFindAvailableMachineBoard(target, desiredEntityProtoId, out boardUid, out boardProto);
+            }
+        }
+
+        object? boardComp = null;
+        if (boardUid.HasValue && _entMan.EntityExists(boardUid.Value))
+            boardComp = FindComponentByName(boardUid.Value, "MachineBoardComponent");
+        if (boardComp == null && boardProto != null && _itemUtil != null)
+            _itemUtil.TryGetPrototypeComponent<object>(boardProto, "MachineBoard", out boardComp);
+
+        var boardProtoId = boardProto?.ID ?? string.Empty;
+        if (boardComp == null)
+            return !string.IsNullOrEmpty(boardProtoId) ? new MachineBoardRequirements(boardProtoId) : null;
+
+        var stacks = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        PopulateRequirementDict(boardComp, ["StackRequirements", "MaterialRequirements", "MaterialIdRequirements"], stacks);
+
+        var rawParts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        PopulateRequirementDict(boardComp, ["Requirements", "MachinePartRequirements", "PartRequirements"], rawParts);
+
+        var parts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (partId, amount) in rawParts)
+        {
+            if (stacks.ContainsKey(partId))
+                continue;
+
+            if (_protoMan.HasIndex<StackPrototype>(partId))
+                stacks[partId] = amount;
+            else
+                parts[partId] = amount;
+        }
+
+        var comps = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        PopulateRequirementDict(boardComp, ["ComponentRequirements"], comps);
+
+        var tags = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        PopulateRequirementDict(boardComp, ["TagRequirements"], tags);
+
+        return new MachineBoardRequirements(boardProtoId, stacks, parts, comps, tags);
+    }
+
+    private void PopulateRequirementDict(
+        object boardComp,
+        ReadOnlySpan<string> propNames,
+        Dictionary<string, int> target)
+    {
+        foreach (var propName in propNames)
+        {
+            if (GetMemberValue(boardComp, propName) is not IDictionary reqs)
+                continue;
+
+            foreach (DictionaryEntry entry in reqs)
+            {
+                var id = ExtractIdString(entry.Key);
+                var amount = entry.Value is int i ? i : GetIntMember(entry.Value, "Amount", 1);
+                if (amount > 0 && !string.IsNullOrEmpty(id) && !target.ContainsKey(id))
+                    target[id] = amount;
+            }
+        }
+    }
+
     public bool IsMachineBoardEntity(EntityUid uid)
     {
-        if (!_entMan.EntityExists(uid))
+        if (_entMan == null || !_entMan.EntityExists(uid))
             return false;
 
         if (FindComponentByName(uid, "MachineBoardComponent") != null)
@@ -347,7 +370,7 @@ public sealed partial class RobustaConstructionSolver
         if (proto == null)
             return false;
 
-        if (_itemUtil.HasPrototypeComponent(proto, "MachineBoard"))
+        if (_itemUtil != null && _itemUtil.HasPrototypeComponent(proto, "MachineBoard"))
             return true;
 
         if (proto.ID.Contains("MachineCircuitboard", StringComparison.OrdinalIgnoreCase))
@@ -370,6 +393,9 @@ public sealed partial class RobustaConstructionSolver
     {
         boardUid = null;
         boardProto = null;
+
+        if (_itemUtil == null || _entMan == null)
+            return false;
 
         var candidates = _itemUtil.FindItemsByPredicate(IsMachineBoardEntity);
         if (!string.IsNullOrEmpty(desiredMachineProtoId))
@@ -412,6 +438,9 @@ public sealed partial class RobustaConstructionSolver
     private bool TryFindBoardPrototypeForMachine(string machineProtoId, out EntityPrototype? boardProto)
     {
         boardProto = null;
+        if (_protoMan == null || _itemUtil == null)
+            return false;
+
         foreach (var eProto in _protoMan.EnumeratePrototypes<EntityPrototype>())
         {
             if (!_itemUtil.TryGetPrototypeComponent<object>(eProto, "MachineBoard", out var boardComp) || boardComp == null)
@@ -431,7 +460,7 @@ public sealed partial class RobustaConstructionSolver
 
     private bool HasPrototypeContainer(EntityPrototype proto, string containerId)
     {
-        if (!_itemUtil.TryGetPrototypeComponent<object>(proto, "ContainerContainer", out var ccObj) || ccObj == null)
+        if (_itemUtil == null || !_itemUtil.TryGetPrototypeComponent<object>(proto, "ContainerContainer", out var ccObj) || ccObj == null)
             return false;
 
         if (GetMemberValue(ccObj, "Containers") is IDictionary dict)
