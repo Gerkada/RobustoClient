@@ -79,7 +79,6 @@ public static class RobustaRecipeSolver
     public static DispensePlan? CreatePlan(string targetReagent, float amount, float capacity = 50f)
     {
         var plan = new DispensePlan { TargetReagent = targetReagent, TargetAmount = amount };
-        var sawmill = Logger.GetSawmill("autochem");
 
         float globalLCM = CalculateRecursiveLCM(targetReagent);
         
@@ -96,7 +95,8 @@ public static class RobustaRecipeSolver
 
         float totalTargetCycles = globalLCM * batchCount;
         
-        sawmill.Info($"[PLAN] Target: {targetReagent}, Amount: {targetAmount}, Yield/Cycle: {yieldPerCycle}, GlobalLCM: {globalLCM}, Cycles: {totalTargetCycles}");
+        if (IoCManager.Instance != null && IoCManager.Instance.TryResolveType<ILogManager>(out var logMan))
+            logMan.GetSawmill("autochem").Info($"[PLAN] Target: {targetReagent}, Amount: {targetAmount}, Yield/Cycle: {yieldPerCycle}, GlobalLCM: {globalLCM}, Cycles: {totalTargetCycles}");
 
         if (!ResolveRecursive(targetReagent, totalTargetCycles, plan))
             return null;
