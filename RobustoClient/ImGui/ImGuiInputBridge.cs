@@ -12,6 +12,24 @@ namespace RobustoClient.ImGui;
 public static class ImGuiInputBridge
 {
     private static bool _textInputActive;
+    private static Vector2 _lastMousePos;
+    private static bool _hasMousePos;
+    private static bool _mouseButtonQueuedThisFrame;
+
+    public static void OnWindowVisibilityChanged(bool anyVisible)
+    {
+        if (!RobustaImGuiManager.IsInitialized)
+            return;
+
+        RobustaImGuiManager.EnsureCurrentContext();
+        var io = Hexa.NET.ImGui.ImGui.GetIO();
+        io.ClearEventsQueue();
+        io.ClearInputKeys();
+        _mouseButtonQueuedThisFrame = false;
+
+        if (anyVisible && _hasMousePos)
+            io.AddMousePosEvent(_lastMousePos.X, _lastMousePos.Y);
+    }
 
     public static void UpdateBeforeNewFrame(
         IClyde clyde,
@@ -19,7 +37,9 @@ public static class ImGuiInputBridge
         IInputManager inputManager,
         IUserInterfaceManager uiManager)
     {
+        RobustaImGuiManager.EnsureCurrentContext();
         var io = Hexa.NET.ImGui.ImGui.GetIO();
+        io.ConfigInputTrickleEventQueue = false;
 
         var screenSize = clyde.ScreenSize;
         io.DisplaySize = new Vector2(Math.Max(1, screenSize.X), Math.Max(1, screenSize.Y));
@@ -29,8 +49,17 @@ public static class ImGuiInputBridge
         var mousePos = inputManager.MouseScreenPosition;
         if (mousePos.IsValid)
         {
-            io.AddMousePosEvent(mousePos.Position.X, mousePos.Position.Y);
+            _lastMousePos = mousePos.Position;
+            _hasMousePos = true;
         }
+
+        // Do not append a trailing MousePos event after a MouseButton event was already queued this frame.
+        if (_hasMousePos && !_mouseButtonQueuedThisFrame && io.MousePos != _lastMousePos)
+        {
+            io.AddMousePosEvent(_lastMousePos.X, _lastMousePos.Y);
+        }
+
+        _mouseButtonQueuedThisFrame = false;
 
         bool wantText = RobustaImGuiManager.AnyWindowVisible && io.WantTextInput;
         if (wantText != _textInputActive)
@@ -52,40 +81,65 @@ public static class ImGuiInputBridge
 
     public static void OnMouseMove(MouseMoveEventArgs ev)
     {
-        if (!RobustaImGuiManager.IsInitialized)
+        if (ev.Position.IsValid)
+        {
+            _lastMousePos = ev.Position.Position;
+            _hasMousePos = true;
+        }
+
+        if (!RobustaImGuiManager.IsInitialized || !RobustaImGuiManager.AnyWindowVisible)
             return;
 
+        RobustaImGuiManager.EnsureCurrentContext();
         var io = Hexa.NET.ImGui.ImGui.GetIO();
+        io.ConfigInputTrickleEventQueue = false;
         io.AddMousePosEvent(ev.Position.Position.X, ev.Position.Position.Y);
     }
 
     /// <summary>Returns true if the scroll event should be blocked from reaching SS14.</summary>
     public static bool OnMouseWheel(MouseWheelEventArgs ev)
     {
-        if (!RobustaImGuiManager.IsInitialized)
+        if (ev.Position.IsValid)
+        {
+            _lastMousePos = ev.Position.Position;
+            _hasMousePos = true;
+        }
+
+        if (!RobustaImGuiManager.IsInitialized || !RobustaImGuiManager.AnyWindowVisible)
             return false;
 
+        RobustaImGuiManager.EnsureCurrentContext();
         var io = Hexa.NET.ImGui.ImGui.GetIO();
+        io.ConfigInputTrickleEventQueue = false;
+        if (_hasMousePos)
+            io.AddMousePosEvent(_lastMousePos.X, _lastMousePos.Y);
         io.AddMouseWheelEvent(ev.Delta.X, ev.Delta.Y);
 
-        return RobustaImGuiManager.AnyWindowVisible && io.WantCaptureMouse;
+        return io.WantCaptureMouse;
     }
 
     /// <summary>Returns true if the key/mouse-down event should be blocked from reaching SS14.</summary>
     public static bool OnKeyDown(KeyEventArgs ev)
     {
-        if (!RobustaImGuiManager.IsInitialized)
+        if (!RobustaImGuiManager.IsInitialized || !RobustaImGuiManager.AnyWindowVisible)
             return false;
 
+        RobustaImGuiManager.EnsureCurrentContext();
         var io = Hexa.NET.ImGui.ImGui.GetIO();
+        io.ConfigInputTrickleEventQueue = false;
 
         if (ev.Key.IsMouseKey())
         {
+            SyncMousePositionBeforeButtonEvent(io);
+
             int btn = MapMouseButton(ev.Key);
             if (btn >= 0)
+            {
                 io.AddMouseButtonEvent(btn, true);
+                _mouseButtonQueuedThisFrame = true;
+            }
 
-            if (RobustaImGuiManager.AnyWindowVisible && io.WantCaptureMouse)
+            if (io.WantCaptureMouse)
             {
                 if (RobustaImGuiManager.TryResolve<IUserInterfaceManager>(out var uiMan) && uiMan.KeyboardFocused != null)
                 {
@@ -120,22 +174,29 @@ public static class ImGuiInputBridge
             return false;
 
         // Block game hotkeys/WASD/chat only when an ImGui text input widget is focused.
-        return RobustaImGuiManager.AnyWindowVisible && io.WantTextInput;
+        return io.WantTextInput;
     }
 
     /// <summary>Returns true if the key/mouse-up event should be blocked from reaching SS14.</summary>
     public static bool OnKeyUp(KeyEventArgs ev)
     {
-        if (!RobustaImGuiManager.IsInitialized)
+        if (!RobustaImGuiManager.IsInitialized || !RobustaImGuiManager.AnyWindowVisible)
             return false;
 
+        RobustaImGuiManager.EnsureCurrentContext();
         var io = Hexa.NET.ImGui.ImGui.GetIO();
+        io.ConfigInputTrickleEventQueue = false;
 
         if (ev.Key.IsMouseKey())
         {
+            SyncMousePositionBeforeButtonEvent(io);
+
             int btn = MapMouseButton(ev.Key);
             if (btn >= 0)
+            {
                 io.AddMouseButtonEvent(btn, false);
+                _mouseButtonQueuedThisFrame = true;
+            }
 
             // Never block MouseUp so SS14 doesn't get stuck with a held button.
             return false;
@@ -147,6 +208,22 @@ public static class ImGuiInputBridge
             io.AddKeyEvent(imguiKey, false);
 
         return false;
+    }
+
+    private static void SyncMousePositionBeforeButtonEvent(ImGuiIOPtr io)
+    {
+        if (RobustaImGuiManager.TryResolve<IInputManager>(out var inputMan))
+        {
+            var mousePos = inputMan.MouseScreenPosition;
+            if (mousePos.IsValid)
+            {
+                _lastMousePos = mousePos.Position;
+                _hasMousePos = true;
+            }
+        }
+
+        if (_hasMousePos)
+            io.AddMousePosEvent(_lastMousePos.X, _lastMousePos.Y);
     }
 
     /// <summary>Returns true if the text input event should be blocked from reaching SS14.</summary>
