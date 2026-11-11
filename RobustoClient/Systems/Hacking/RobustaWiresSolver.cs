@@ -9,10 +9,10 @@ using Content.Shared.Doors;
 using Content.Shared.Doors.Components;
 using Content.Shared.Tools.Systems;
 using Content.Shared.Wires;
-using Robust.Client.Player;
 using Robust.Shared.GameObjects;
 using Robust.Shared.IoC;
 using Robust.Shared.Log;
+using Robust.Shared.Player;
 using RobustoClient.Systems.Abstract;
 
 namespace RobustoClient.Systems.Hacking;
@@ -51,6 +51,12 @@ public sealed record SolvedWiresAction(int WireId, string WireName, WiresAction 
 public sealed record SolvedTargetToolAction(string ToolQuality, DoorState ExpectedState) : SolvedWiresStep;
 
 public sealed record SolvedWiresPlan(EntityUid Target, string IntentName, IReadOnlyList<SolvedWiresStep> Actions);
+
+public sealed record WiresTargetSnapshot(
+    string ProfileName = "Airlock",
+    bool IsDoor = true,
+    bool IsBolted = false,
+    bool BoltWireCut = false);
 
 /// <summary>Describes why a wire-panel solve could not be started or planned.</summary>
 public enum WiresSolveFailureReason
@@ -101,7 +107,7 @@ public sealed partial class RobustaWiresSolver : EntitySystem
     ];
 
     [Dependency] private readonly ItemUtilitySystem _itemUtility = default!;
-    [Dependency] private readonly IPlayerManager _playerManager = default!;
+    [Dependency] private readonly ISharedPlayerManager _playerManager = default!;
     [Dependency] private readonly SharedToolSystem _tools = default!;
     [Dependency] private readonly SharedUserInterfaceSystem _uiSystem = default!;
 
@@ -125,12 +131,16 @@ public sealed partial class RobustaWiresSolver : EntitySystem
 
     public bool IsSolving => _activeSolve != null;
 
+    public RobustaWiresSolver()
+    {
+        RegisterStepExpanders();
+        RegisterDefaultIntents();
+    }
+
     public override void Initialize()
     {
         base.Initialize();
         _log = Logger.GetSawmill("robusta.wires");
-        RegisterStepExpanders();
-        RegisterDefaultIntents();
     }
 
     public override void FrameUpdate(float frameTime)
@@ -242,6 +252,9 @@ public sealed partial class RobustaWiresSolver : EntitySystem
             failureReason = WiresSolveFailureReason.UnknownIntent;
             return false;
         }
+
+        if (TryBuildUnpoweredDoorPlan(target, intentName, state, out plan))
+            return true;
 
         var context = new IntentExpansionContext(target, state)
         {
@@ -357,11 +370,18 @@ public sealed partial class RobustaWiresSolver : EntitySystem
 
     private bool ExpandTargetTool(WiresIntentStep step, IntentExpansionContext context)
     {
-        if (step is not UseToolOnTargetStep tool || !HasComp<DoorComponent>(context.Target))
+        if (step is not UseToolOnTargetStep tool || !IsTargetDoor(context.Target))
             return false;
 
         context.Actions.Add(new SolvedTargetToolAction(tool.ToolQuality, tool.ExpectedState));
         return true;
+    }
+
+    private bool IsTargetDoor(EntityUid target)
+    {
+        if (_snapshots.TryGetValue(target, out var snapshot))
+            return snapshot.IsDoor;
+        return EntityManager != null && HasComp<DoorComponent>(target);
     }
 
     private bool ExpandEnsurePanelOpen(WiresIntentStep step, IntentExpansionContext context) => true;
@@ -973,14 +993,20 @@ public sealed partial class RobustaWiresSolver : EntitySystem
 
     public bool IsDoorBolted(EntityUid uid)
     {
-        if (TryComp<DoorBoltComponent>(uid, out var bolts) && bolts.BoltsDown)
-            return true;
-
         if (_states.TryGetValue(uid, out var state) &&
             GetLight(state, AirlockWireStatus.BoltIndicator) == StatusLightState.On)
         {
             return true;
         }
+
+        if (_snapshots.TryGetValue(uid, out var snapshot))
+            return snapshot.IsBolted;
+
+        if (EntityManager == null)
+            return false;
+
+        if (TryComp<DoorBoltComponent>(uid, out var bolts) && bolts.BoltsDown)
+            return true;
 
         foreach (var comp in EntityManager.GetComponents(uid))
         {
@@ -1013,6 +1039,14 @@ public sealed partial class RobustaWiresSolver : EntitySystem
     }
 
     public bool TrySyncOpenWiresState(EntityUid target)
+    {
+        if (_snapshots.ContainsKey(target) || EntityManager == null)
+            return _states.ContainsKey(target);
+
+        return TrySyncOpenWiresStateFromUi(target);
+    }
+
+    private bool TrySyncOpenWiresStateFromUi(EntityUid target)
     {
         if (!TryComp<UserInterfaceComponent>(target, out var uiComp))
             return false;
