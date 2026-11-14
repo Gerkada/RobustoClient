@@ -259,7 +259,7 @@ public sealed class RobustaInventoryViewerSystem : EntitySystem
                 if (cId.Equals("actions", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                var cName = $"{parentName} → {cId}";
+                var cName = $"{parentName} -> {cId}";
 
                 foreach (var ent in container.ContainedEntities)
                 {

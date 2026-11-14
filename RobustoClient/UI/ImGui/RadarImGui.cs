@@ -11,7 +11,7 @@ using RobustoClient.ImGui;
 
 namespace RobustoClient.UI.ImGui;
 
-public enum RadarMarkerType { Player, Item, Syndicate }
+public enum RadarMarkerType { Player, Syndicate }
 public enum RadarOrientation { CameraUp, NorthUp, HeadingUp }
 
 public sealed class RadarImGui
@@ -19,8 +19,7 @@ public sealed class RadarImGui
     public bool IsOpen;
 
     private float _rangeMeters = 30f;
-    private bool _showPlayers = true;
-    private bool _showItems = true;
+    private bool _showMobs = true;
     private RadarOrientation _orientation = RadarOrientation.CameraUp;
     private int _frameCounter;
     private const int UpdateInterval = 10;
@@ -38,12 +37,10 @@ public sealed class RadarImGui
             return;
         }
 
-        Hexa.NET.ImGui.ImGui.SetNextItemWidth(MathF.Max(75f, Hexa.NET.ImGui.ImGui.GetContentRegionAvail().X - 175f));
+        Hexa.NET.ImGui.ImGui.SetNextItemWidth(MathF.Max(75f, Hexa.NET.ImGui.ImGui.GetContentRegionAvail().X - 95f));
         Hexa.NET.ImGui.ImGui.SliderFloat("Range", ref _rangeMeters, 15f, 60f, "%.0fm");
         Hexa.NET.ImGui.ImGui.SameLine();
-        Hexa.NET.ImGui.ImGui.Checkbox("Mobs", ref _showPlayers);
-        Hexa.NET.ImGui.ImGui.SameLine();
-        Hexa.NET.ImGui.ImGui.Checkbox("Items", ref _showItems);
+        Hexa.NET.ImGui.ImGui.Checkbox("Mobs", ref _showMobs);
 
         Hexa.NET.ImGui.ImGui.AlignTextToFramePadding();
         Hexa.NET.ImGui.ImGui.TextColored(RobustaImGuiTheme.TextMuted, "Align:");
@@ -75,10 +72,11 @@ public sealed class RadarImGui
         var mousePos = Hexa.NET.ImGui.ImGui.GetIO().MousePos;
 
         var dl = Hexa.NET.ImGui.ImGui.GetWindowDrawList();
-        uint bgOuter = RobustaImGuiTheme.ColU32(new Vector4(0.06f, 0.08f, 0.12f, 0.95f));
-        uint bgInner = RobustaImGuiTheme.ColU32(new Vector4(0.03f, 0.05f, 0.08f, 0.98f));
-        uint ringCol = RobustaImGuiTheme.ColU32(new Vector4(0.18f, 0.42f, 0.30f, 0.65f));
-        uint gridCol = RobustaImGuiTheme.ColU32(new Vector4(0.14f, 0.32f, 0.22f, 0.45f));
+        var rc = RobustaImGuiTheme.Colors;
+        uint bgOuter = RobustaImGuiTheme.ColU32(rc.RadarBgOuter);
+        uint bgInner = RobustaImGuiTheme.ColU32(rc.RadarBgInner);
+        uint ringCol = RobustaImGuiTheme.ColU32(rc.RadarRing);
+        uint gridCol = RobustaImGuiTheme.ColU32(rc.RadarGrid);
 
         dl.AddCircleFilled(center, radius + 2f, bgOuter, 64);
         dl.AddCircleFilled(center, radius, bgInner, 64);
@@ -144,43 +142,30 @@ public sealed class RadarImGui
 
         string? hoveredTooltip = null;
 
-        foreach (var marker in _markers)
+        if (_showMobs)
         {
-            if (marker.Type == RadarMarkerType.Item && !_showItems)
-                continue;
-            if (marker.Type != RadarMarkerType.Item && !_showPlayers)
-                continue;
-
-            var offsetMeters = marker.WorldPos - playerPos;
-            var relativeOffset = radarRot.RotateVec(offsetMeters);
-            var uiOffset = new Vector2(relativeOffset.X, -relativeOffset.Y) * scale;
-
-            float distancePixels = uiOffset.Length();
-            var drawPos = center + uiOffset;
-
-            if (distancePixels > radius - 6f)
+            foreach (var marker in _markers)
             {
-                uiOffset = Vector2.Normalize(uiOffset) * (radius - 6f);
-                drawPos = center + uiOffset;
-            }
+                var offsetMeters = marker.WorldPos - playerPos;
+                var relativeOffset = radarRot.RotateVec(offsetMeters);
+                var uiOffset = new Vector2(relativeOffset.X, -relativeOffset.Y) * scale;
 
-            if (marker.Type == RadarMarkerType.Item)
-            {
-                dl.AddRectFilled(drawPos - new Vector2(3f, 3f), drawPos + new Vector2(3f, 3f), marker.Color);
-            }
-            else
-            {
+                float distancePixels = uiOffset.Length();
+                var drawPos = center + uiOffset;
+
+                if (distancePixels > radius - 6f)
+                {
+                    uiOffset = Vector2.Normalize(uiOffset) * (radius - 6f);
+                    drawPos = center + uiOffset;
+                }
+
                 dl.AddCircleFilled(drawPos, 4f, marker.Color, 12);
-            }
 
-            if (distancePixels < radius - 18f && !string.IsNullOrEmpty(marker.Name))
-            {
-                dl.AddText(drawPos + new Vector2(6f, -6f), marker.Color, marker.Name);
-            }
+                if (distancePixels < radius - 18f && !string.IsNullOrEmpty(marker.Name))
+                    dl.AddText(drawPos + new Vector2(6f, -6f), marker.Color, marker.Name);
 
-            if (Vector2.DistanceSquared(mousePos, drawPos) <= 64f)
-            {
-                hoveredTooltip = $"{marker.Name} ({offsetMeters.Length():F1}m)";
+                if (Vector2.DistanceSquared(mousePos, drawPos) <= 64f)
+                    hoveredTooltip = $"{marker.Name} ({offsetMeters.Length():F1}m)";
             }
         }
 
@@ -203,38 +188,27 @@ public sealed class RadarImGui
 
         uint colPlayer = RobustaImGuiTheme.ColU32(RobustaImGuiTheme.AccentGreen);
         uint colSyndi = RobustaImGuiTheme.ColU32(RobustaImGuiTheme.AccentRed);
-        uint colItem = RobustaImGuiTheme.ColU32(RobustaImGuiTheme.AccentGold);
 
         foreach (var uid in entities)
         {
-            if (uid == localPlayer)
+            if (uid == localPlayer || !entMan.HasComponent<MobStateComponent>(uid))
                 continue;
 
             var targetPos = transformSys.GetWorldPosition(uid);
             var name = entMan.GetComponentOrNull<MetaDataComponent>(uid)?.EntityName ?? "Unknown";
 
-            if (entMan.HasComponent<MobStateComponent>(uid))
+            uint color = colPlayer;
+            var type = RadarMarkerType.Player;
+
+            if (name.Contains("syndicate", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("operative", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("nuke", StringComparison.OrdinalIgnoreCase))
             {
-                uint color = colPlayer;
-                var type = RadarMarkerType.Player;
-
-                if (name.Contains("syndicate", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("operative", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("nuke", StringComparison.OrdinalIgnoreCase))
-                {
-                    color = colSyndi;
-                    type = RadarMarkerType.Syndicate;
-                }
-
-                _markers.Add((targetPos, color, name, type));
-                continue;
+                color = colSyndi;
+                type = RadarMarkerType.Syndicate;
             }
 
-            if (RobustaConfig.ItemSearchEnabled && !string.IsNullOrWhiteSpace(RobustaConfig.ItemSearchQuery))
-            {
-                if (name.Contains(RobustaConfig.ItemSearchQuery, StringComparison.OrdinalIgnoreCase))
-                    _markers.Add((targetPos, colItem, name, RadarMarkerType.Item));
-            }
+            _markers.Add((targetPos, color, name, type));
         }
     }
 }

@@ -216,14 +216,18 @@ public sealed class InventoryViewerImGui
         _ => severity.ToUpperInvariant()
     };
 
-    private static Vector4 GetSeverityColor(string severity) => severity.ToLowerInvariant() switch
+    private static Vector4 GetSeverityColor(string severity)
     {
-        "syndicate" => RobustaImGuiTheme.Hex("#FF6B6B"),
-        "grandtheft" => RobustaImGuiTheme.Hex("#FFA500"),
-        "major" => RobustaImGuiTheme.Hex("#FFD700"),
-        "restricted" => RobustaImGuiTheme.Hex("#7090FF"),
-        "minor" => RobustaImGuiTheme.Hex("#B0B0B0"),
-        "" => RobustaImGuiTheme.TextPrimary,
-        _ => RobustaImGuiTheme.Hex("#E090FF")
-    };
+        var colors = RobustaImGuiTheme.Colors;
+        return severity.ToLowerInvariant() switch
+        {
+            "syndicate" => colors.SeveritySyndicate,
+            "grandtheft" => colors.SeverityGrandTheft,
+            "major" => colors.SeverityMajor,
+            "restricted" => colors.SeverityRestricted,
+            "minor" => colors.SeverityMinor,
+            "" => colors.TextPrimary,
+            _ => colors.SeverityUnknown
+        };
+    }
 }

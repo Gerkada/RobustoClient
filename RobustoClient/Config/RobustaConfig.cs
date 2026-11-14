@@ -37,25 +37,25 @@ public static partial class RobustaConfig
 {
     #region Keybinds
 
-    [KeybindConfig("Toggle Cheat Menu", command: "robusta.toggle_menu", defaultKey: Keyboard.Key.F4)]
+    [KeybindConfig("Open Menu", command: "robusta.toggle_menu", defaultKey: Keyboard.Key.F4)]
     public static RobustaKeybind ToggleMenuKey = new(Keyboard.Key.F4);
 
-    [KeybindConfig("Target Lock (Aim/Throw)", defaultKey: Keyboard.Key.Space)]
+    [KeybindConfig("Target Lock", defaultKey: Keyboard.Key.Space)]
     public static RobustaKeybind TargetLockKey = new(Keyboard.Key.Space);
 
-    [KeybindConfig("Auto-Construct (Build)", command: "robusta.auto_construct", defaultKey: Keyboard.Key.V)]
+    [KeybindConfig("Auto-Construct", command: "robusta.auto_construct", defaultKey: Keyboard.Key.V)]
     public static RobustaKeybind AutoConstructKey = new(Keyboard.Key.V);
 
     [KeybindConfig("Auto-Deconstruct", command: "robusta.auto_deconstruct", defaultKey: Keyboard.Key.N)]
     public static RobustaKeybind AutoDeconstructKey = new(Keyboard.Key.N);
 
-    [KeybindConfig("Auto-Hack Wire Panel", command: "robusta.hack", defaultKey: Keyboard.Key.H, defaultMod1: Keyboard.Key.Shift)]
+    [KeybindConfig("Auto-Hack", command: "robusta.hack", defaultKey: Keyboard.Key.H, defaultMod1: Keyboard.Key.Shift)]
     public static RobustaKeybind HackingKey = new(Keyboard.Key.H, Keyboard.Key.Shift);
 
     [KeybindConfig("Smart Auto-Reload", command: "robusta.autoreload")]
     public static RobustaKeybind AutoReloadKey = new(Keyboard.Key.Unknown);
 
-    [KeybindConfig("View Target Inventory", command: "robusta.view_inv")]
+    [KeybindConfig("View Inventory", command: "robusta.view_inv")]
     public static RobustaKeybind ViewInvKey = new(Keyboard.Key.Unknown);
 
     [KeybindConfig("Toggle Forced Zoom", command: "robusta.auto_zoom.toggle")]
@@ -79,17 +79,14 @@ public static partial class RobustaConfig
 
     public static bool UsePrediction = false; // Toggles prediction
 
-    public static bool SyndicateDetector = true;
-
-    public static bool ContrabandDetector = true;
-
     public static bool FOVDisable = true;
 
-    public static bool OverlaysDisable = true;
+    /// <summary>
+    /// Hides the upstream visual effects (flash, blindness, blurry vision, drunk, rainbow)
+    /// </summary>
+    public static bool DisableVisualOverlays = false;
 
     public static bool FullbrightEnabled = false;
-
-    public static bool EspEnabled = false;
 
     public static bool AntiSlipEnabled = true;
 
@@ -125,19 +122,111 @@ public static partial class RobustaConfig
 
     #endregion
 
-    #region Friends
+    #region ESP
 
-    public static HashSet<string> FriendsSet = [];
+    /// <summary>
+    /// Per-feature ESP switch. Colours are hex overrides: an empty string means "use the colour
+    /// declared in esp.yml", so the YAML stays authoritative and the picker is an override.
+    /// </summary>
+    public sealed class EspFeatureConfig
+    {
+        public bool Enabled { get; set; } = true;
+
+        public string Color { get; set; } = "";
+    }
+
+    /// <summary>
+    /// One switch per user-facing ESP feature. Properties rather than fields because
+    /// <see cref="RobustaConfig"/> serializes each static field with System.Text.Json, which ignores
+    /// public fields by default; a field-based type would persist as an empty object.
+    /// </summary>
+    public sealed class EspSettings
+    {
+        public EspFeatureConfig Players { get; set; } = new();
+        public EspFeatureConfig Mobs { get; set; } = new();
+        public EspFeatureConfig HeldItems { get; set; } = new();
+        public EspFeatureConfig Syndicate { get; set; } = new();
+        public EspFeatureConfig Contraband { get; set; } = new();
+        public EspFeatureConfig Health { get; set; } = new();
+        public EspFeatureConfig Icons { get; set; } = new();
+
+        /// <summary>
+        /// Settings for a feature, or null for a value outside <see cref="Systems.ESP.EspFeature"/>.
+        /// Every declared member must map here; <c>EspSettingsTests</c> fails when one does not.
+        /// </summary>
+        public EspFeatureConfig? For(Systems.ESP.EspFeature feature) => feature switch
+        {
+            Systems.ESP.EspFeature.Players => Players,
+            Systems.ESP.EspFeature.Mobs => Mobs,
+            Systems.ESP.EspFeature.HeldItems => HeldItems,
+            Systems.ESP.EspFeature.Syndicate => Syndicate,
+            Systems.ESP.EspFeature.Contraband => Contraband,
+            Systems.ESP.EspFeature.Health => Health,
+            Systems.ESP.EspFeature.Icons => Icons,
+            _ => null
+        };
+
+        public bool IsEnabled(Systems.ESP.EspFeature feature) => For(feature)?.Enabled ?? false;
+
+        /// <summary>Cheap early-out for the overlay: nothing to draw when every feature is off.</summary>
+        [JsonIgnore] public bool AnyEnabled =>
+            (Players?.Enabled ?? false) || (Mobs?.Enabled ?? false) || (HeldItems?.Enabled ?? false) ||
+            (Syndicate?.Enabled ?? false) || (Contraband?.Enabled ?? false) || (Health?.Enabled ?? false) ||
+            (Icons?.Enabled ?? false);
+
+        internal void EnsureDefaults()
+        {
+            Players ??= new();
+            Mobs ??= new();
+            HeldItems ??= new();
+            Syndicate ??= new();
+            Contraband ??= new();
+            Health ??= new();
+            Icons ??= new();
+        }
+
+        internal void SetAllEnabled(bool enabled)
+        {
+            EnsureDefaults();
+            Players.Enabled = enabled;
+            Mobs.Enabled = enabled;
+            HeldItems.Enabled = enabled;
+            Syndicate.Enabled = enabled;
+            Contraband.Enabled = enabled;
+            Health.Enabled = enabled;
+            Icons.Enabled = enabled;
+        }
+
+        /// <summary>
+        /// Colour for a feature: the hex override when one is set and parseable, otherwise the
+        /// category's own colour from esp.yml.
+        /// </summary>
+        public Robust.Shared.Maths.Color ResolveColor(
+            Systems.ESP.EspFeature feature,
+            Robust.Shared.Maths.Color fallback)
+        {
+            var config = For(feature);
+            if (config == null || string.IsNullOrWhiteSpace(config.Color))
+                return fallback;
+
+            return Robust.Shared.Maths.Color.TryFromHex(config.Color, out var parsed) ? parsed : fallback;
+        }
+    }
+
+    public static EspSettings Esp = new();
 
     #endregion
 
-    #region Session only (never persisted)
+    #region Appearance
 
-    [JsonIgnore] public static bool ItemSearchEnabled = false;
+    /// <summary>Theme restored at startup. Built-in is "Dark"; user themes live in the Themes folder.</summary>
+    public static string DefaultTheme = "Dark";
 
-    [JsonIgnore] public static string ItemSearchQuery = "";
+    #endregion
 
-    [JsonIgnore] public static int ManualPingMs = 0;
+    #region Friends
+
+    public static HashSet<string> FriendsSet = [];
 
     #endregion
 }

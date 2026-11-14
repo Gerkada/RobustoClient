@@ -18,6 +18,9 @@ public static unsafe class RobustaImGuiManager
 
     public static bool IsInitialized { get; private set; }
 
+    /// <summary>Active GL backend. Null until <see cref="EnsureInitialized"/> has run.</summary>
+    public static ImGuiGl3Renderer? Renderer => _renderer;
+
     public static CheatMenuImGui CheatMenu { get; } = new();
     public static RadarImGui Radar { get; } = new();
     public static InventoryViewerImGui InventoryViewer { get; } = new();
@@ -47,11 +50,16 @@ public static unsafe class RobustaImGuiManager
         var io = Hexa.NET.ImGui.ImGui.GetIO();
         io.IniFilename = null;
         io.LogFilename = null;
+
+        // Trickling reorders queued events within a frame and breaks the click registration the
+        // input bridge relies on. Set once here; nothing else should touch it.
         io.ConfigInputTrickleEventQueue = false;
 
         _renderer = new ImGuiGl3Renderer();
         _renderer.Initialize(clyde);
 
+        // Restore the persisted theme before the first frame so there is no flash of the default.
+        RobustaImGuiTheme.RestoreSelectedTheme();
         RobustaImGuiTheme.Apply();
         CheatMenu.Initialize();
 
@@ -84,8 +92,12 @@ public static unsafe class RobustaImGuiManager
         EnsureInitialized(clyde);
         Hexa.NET.ImGui.ImGui.SetCurrentContext(new ImGuiContextPtr((ImGuiContext*)_context));
 
-        float dt = MathF.Max((float)timing.FrameTime.TotalSeconds, 1e-4f);
-        CheatMenu.TickTimers(dt);
+        // Palette edits from the Themes tab arrive as a dirty flag; re-applying is cheap struct writes.
+        if (RobustaImGuiTheme.StyleDirty)
+        {
+            RobustaImGuiTheme.ApplyStyle();
+            RobustaImGuiTheme.ClearStyleDirty();
+        }
 
         bool anyVisible = AnyWindowVisible;
         if (!anyVisible && !_wasAnyWindowVisible)
@@ -101,7 +113,7 @@ public static unsafe class RobustaImGuiManager
         Hexa.NET.ImGui.ImGui.NewFrame();
 
         if (!RobustaImGuiTheme.FontRegular.IsNull)
-            Hexa.NET.ImGui.ImGui.PushFont(RobustaImGuiTheme.FontRegular, 15.5f);
+            Hexa.NET.ImGui.ImGui.PushFont(RobustaImGuiTheme.FontRegular, RobustaImGuiTheme.Typography.RegularSize);
 
         if (CheatMenu.IsOpen)
             CheatMenu.Draw();
@@ -121,5 +133,8 @@ public static unsafe class RobustaImGuiManager
         Hexa.NET.ImGui.ImGui.Render();
         if (anyVisible)
             _renderer!.RenderDrawData(Hexa.NET.ImGui.ImGui.GetDrawData());
+
+        // One-shot: only the first frame after reopening sees this as true.
+        ImGuiInputBridge.ConsumeVisibilityEdge();
     }
 }

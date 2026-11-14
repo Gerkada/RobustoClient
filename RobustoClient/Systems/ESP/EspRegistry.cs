@@ -15,7 +15,8 @@ public sealed class EspRegistry
 
     public IReadOnlyCollection<EspCategoryDefinition> Categories => _categories.Values;
 
-    private const string DefaultConfig = @"
+    internal const string DefaultConfig = @"
+# rob-esp-version: 2
 - id: OocName
   priority: 5
   color: ""#FFFFFF""
@@ -83,10 +84,20 @@ public sealed class EspRegistry
     customRule: [ ""IsAlive"" ]
     hasNotComponent: [ ""PAI"" ]
 
+- id: MobName
+  priority: 10
+  color: ""#C8C8C8""
+  textFormat: ""{EntityName}""
+  feature: Mobs
+  dock: Top
+  conditions:
+    customRule: [ ""IsNonPlayerMob"" ]
+
 - id: AntagonistTag
   priority: 90
   color: ""#FF0000""
   textFormat: ""ANTAG""
+  feature: Syndicate
   dock: Right
   conditions:
     customRule: [ ""IsAntag"" ]
@@ -95,6 +106,7 @@ public sealed class EspRegistry
   priority: 80
   color: ""#FFA500""
   textFormat: ""SUS""
+  feature: Contraband
   dock: Right
   conditions:
     customRule: [ ""IsSus"" ]
@@ -111,10 +123,20 @@ public sealed class EspRegistry
   priority: 50
   color: ""#FFA500""
   textFormat: "">> {HeldItems} <<""
+  feature: HeldItems
   dock: Bottom
   conditions:
     customRule: [ ""HasHeldItems"" ]
 ";
+
+    /// <summary>
+    /// Version of <see cref="DefaultConfig"/>. A file on disk without this stamp, or with an older one,
+    /// is rewritten from the default so a shipped category change reaches an existing install. The
+    /// rewrite discards local edits to esp.yml, which is intended: there is no editor for the file.
+    /// </summary>
+    private const int ConfigVersion = 2;
+
+    private const string ConfigVersionKey = "# rob-esp-version:";
 
     public EspRegistry()
     {
@@ -138,13 +160,19 @@ public sealed class EspRegistry
             {
                 global::System.IO.File.WriteAllText(file, DefaultConfig);
             }
+            else if (!global::System.IO.File.ReadAllText(file)
+                         .Contains($"{ConfigVersionKey} {ConfigVersion}"))
+            {
+                // Older or unstamped file: rewrite it so shipped category changes take effect.
+                global::System.IO.File.WriteAllText(file, DefaultConfig);
+            }
 
             var yamlString = global::System.IO.File.ReadAllText(file);
             LoadFromString(yamlString);
         }
         catch (Exception ex)
         {
-            Robust.Shared.Log.Logger.GetSawmill("ESP").Error($"Failed to load ESP configs from disk: {ex}");
+            MarseyLogger.Warn($"[ESP] Failed to load ESP configs from disk: {ex}");
             // Fallback to default in memory if file reading fails
             LoadFromString(DefaultConfig);
         }
@@ -174,7 +202,7 @@ public sealed class EspRegistry
         }
         catch (Exception ex)
         {
-            Robust.Shared.Log.Logger.GetSawmill("ESP").Error($"Failed to parse ESP YAML: {ex}");
+            MarseyLogger.Warn($"[ESP] Failed to parse ESP YAML: {ex}");
         }
     }
 
@@ -202,6 +230,14 @@ public sealed class EspRegistry
 
         if (mapping.TryGet("group", out ValueDataNode? groupNode))
             def.Group = groupNode.Value;
+
+        if (mapping.TryGet("feature", out ValueDataNode? featureNode))
+        {
+            if (Enum.TryParse<EspFeature>(featureNode.Value, true, out var feature))
+                def.Feature = feature;
+            else
+                MarseyLogger.Warn($"[ESP] Unknown feature '{featureNode.Value}' on '{def.Id}'; using Players.");
+        }
 
         if (mapping.TryGet("conditions", out MappingDataNode? condMapping))
         {

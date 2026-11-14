@@ -123,7 +123,7 @@ public sealed class AutoChemImGui
             float rightEdge = Hexa.NET.ImGui.ImGui.GetCursorPosX() + Hexa.NET.ImGui.ImGui.GetContentRegionAvail().X;
             Hexa.NET.ImGui.ImGui.AlignTextToFramePadding();
             if (isSelected)
-                Hexa.NET.ImGui.ImGui.TextColored(RobustaImGuiTheme.AccentCyan, $"● {chemId}");
+                Hexa.NET.ImGui.ImGui.TextColored(RobustaImGuiTheme.AccentCyan, chemId);
             else
                 Hexa.NET.ImGui.ImGui.TextUnformatted(chemId);
 
