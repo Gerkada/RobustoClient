@@ -22,20 +22,25 @@ public class RobustaPredictionSystem : EntitySystem
     private System.Reflection.PropertyInfo? _mobStateProp;
     private System.Reflection.FieldInfo? _mobStateField;
 
-    private float GetPingSeconds()
+    /// <summary>One-way delay assumed for the Stable profile (~80ms RTT).</summary>
+    private const float StableDelaySeconds = 0.04f;
+
+    /// <summary>One-way delay assumed for the Laggy profile (~200ms RTT).</summary>
+    private const float LaggyDelaySeconds = 0.1f;
+
+    /// <summary>Network delay to the server in seconds. Ping is RTT, so Auto halves it.</summary>
+    private float GetOneWayDelaySeconds()
     {
         switch (RobustaConfig.CurrentPingMode)
         {
             case RobustaConfig.PingMode.Local: return 0f;
-            case RobustaConfig.PingMode.Stable: return 0.04f; // ~80ms RTT
-            case RobustaConfig.PingMode.Laggy: return 0.1f;   // ~200ms RTT
+            case RobustaConfig.PingMode.Stable: return StableDelaySeconds;
+            case RobustaConfig.PingMode.Laggy: return LaggyDelaySeconds;
             case RobustaConfig.PingMode.Auto:
             default:
-                // Ping in SS14 is RTT (round-trip time). We need the one-way time to the server.
                 if (_net.IsClient && _net.Channels.Any())
-                {
                     return _net.Channels.First().Ping / 2000f;
-                }
+
                 return 0f;
         }
     }
@@ -48,9 +53,7 @@ public class RobustaPredictionSystem : EntitySystem
         Vector2 shooterPos = _transform.GetWorldPosition(shooterXform);
         Vector2 targetPos = _transform.GetWorldPosition(targetXform);
 
-        // ==========================================
-        // FIX FOR PRONE AND CRITICAL TARGETS
-        // ==========================================
+        // Prone and critical targets are drawn off-centre, so aim at the AABB centre instead.
         try 
         {
             var aabb = _lookup.GetWorldAABB(target);
@@ -85,17 +88,10 @@ public class RobustaPredictionSystem : EntitySystem
             }
         } 
 
-        // ==========================================
-        // FIX FOR HITSCAN (Lasers)
-        // ==========================================
+        // Hitscan reaches the target instantly: no lead is needed.
         if (projectileSpeed >= 999f)
-        {
             return targetPos;
-        }
 
-        // ==========================================
-        // MAIN PREDICTION
-        // ==========================================
         Vector2 targetVel = Vector2.Zero;
         Vector2 shooterBaseVel = Vector2.Zero;
         
@@ -126,8 +122,8 @@ public class RobustaPredictionSystem : EntitySystem
 
         if (relVel.LengthSquared() < 0.1f)
         {
-            // Add ping lead even for "stationary" targets in case of micro-movements
-            float pingT = GetPingSeconds();
+            // Add ping lead even for a nearly stationary target, in case of micro-movements.
+            float pingT = GetOneWayDelaySeconds();
             return targetPos + (targetVel * pingT);
         }
 
@@ -144,8 +140,8 @@ public class RobustaPredictionSystem : EntitySystem
             t = relPos.Length() / projectileSpeed;
         }
 
-        // PING CORRECTION: add network delay to flight time
-        t += GetPingSeconds();
+        // Add network delay to the flight time.
+        t += GetOneWayDelaySeconds();
 
         t = Math.Clamp(t, 0.01f, 1.5f);
         t += 0.05f;

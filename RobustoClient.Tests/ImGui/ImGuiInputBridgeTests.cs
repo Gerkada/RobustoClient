@@ -11,15 +11,42 @@ using RobustoClient.Patches;
 using RobustoClient.UI.ImGui;
 using Xunit;
 
-namespace RobustoClient.Tests;
+namespace RobustoClient.Tests.ImGui;
 
-public unsafe class ImGuiInputBridgeTests
+/// <summary>
+/// ImGui state and the config dirty flag are process-wide, so these tests share one collection with the
+/// config persistence tests and must not run alongside any other class that creates a context.
+/// </summary>
+[Collection("ProcessWideState")]
+public unsafe class ImGuiInputBridgeTests : IDisposable
 {
     private static readonly Vector2 ButtonCenter = new(150, 120);
 
+    private readonly string _tempConfigPath = Path.Combine(
+        Path.GetTempPath(), "RobustoClient.Tests", Guid.NewGuid().ToString("N"), "config.json");
+
     public ImGuiInputBridgeTests()
     {
+        // Closing a window flushes a dirty config. Without a throwaway path, a stray dirty flag would
+        // overwrite the developer's real config.json.
+        RobustaConfig.ConfigPathOverride = _tempConfigPath;
         ImGuiNativeLoader.Initialize();
+    }
+
+    public void Dispose()
+    {
+        RobustaConfig.ConfigPathOverride = null;
+
+        try
+        {
+            var dir = Path.GetDirectoryName(_tempConfigPath);
+            if (dir != null && Directory.Exists(dir))
+                Directory.Delete(dir, recursive: true);
+        }
+        catch (IOException)
+        {
+            // A locked temp file is not worth failing a test over.
+        }
     }
 
     [Fact]
@@ -153,5 +180,43 @@ public unsafe class ImGuiInputBridgeTests
 
         CloseAllWindows();
         RobustaImGuiManager.CheatMenu.IsOpen = true;
+    }
+
+    [Fact]
+    public void VisibilityEdge_IsSetOnReopen_AndClearedByConsume()
+    {
+        SetupHeadlessImGuiContext();
+
+        CloseAllWindows();
+        ImGuiInputBridge.OnWindowVisibilityChanged(false);
+        ImGuiInputBridge.ConsumeVisibilityEdge();
+
+        ImGuiInputBridge.JustBecameVisible.Should().BeFalse();
+
+        // Hiding then showing again is the transition that must be observable exactly once.
+        RobustaImGuiManager.CheatMenu.IsOpen = true;
+        ImGuiInputBridge.OnWindowVisibilityChanged(true);
+
+        ImGuiInputBridge.JustBecameVisible.Should().BeTrue();
+
+        ImGuiInputBridge.ConsumeVisibilityEdge();
+        ImGuiInputBridge.JustBecameVisible.Should().BeFalse("the edge is one-shot");
+    }
+
+    [Fact]
+    public void CloseAndReopen_DoesNotLeakConfigWrites()
+    {
+        SetupHeadlessImGuiContext();
+
+        // Close flushes at most once; reopening must not flush again.
+        RobustaImGuiManager.CheatMenu.IsOpen = false;
+
+        var dirtyField = typeof(RobustaConfig).GetField("_dirty", BindingFlags.NonPublic | BindingFlags.Static)!;
+        dirtyField.SetValue(null, false);
+
+        RobustaImGuiManager.CheatMenu.IsOpen = true;
+        ImGuiInputBridge.OnWindowVisibilityChanged(true);
+
+        dirtyField.GetValue(null).Should().Be(false, "opening the menu must not queue a config write");
     }
 }

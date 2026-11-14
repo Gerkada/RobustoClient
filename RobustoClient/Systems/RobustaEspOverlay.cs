@@ -8,6 +8,7 @@ using Robust.Shared.Maths;
 using Robust.Client.Player;
 using Robust.Client.ResourceManagement;
 using RobustoClient.Systems.ESP;
+using RobustoClient.Systems.Utility;
 using System.Collections.Generic;
 using Content.Shared.Inventory;
 using Content.Shared.PDA;
@@ -23,6 +24,9 @@ namespace RobustoClient.Systems;
 
 public sealed class RobustaEspOverlay : Overlay
 {
+    /// <summary>ESP rule marking a mob that no player controls. Referenced by esp.yml, so it is a constant.</summary>
+    internal const string NonPlayerMobRule = "IsNonPlayerMob";
+
     private readonly IEntityManager _entMan;
     private readonly IPlayerManager _player;
     private readonly IEyeManager _eyeManager;
@@ -37,8 +41,6 @@ public sealed class RobustaEspOverlay : Overlay
     private readonly SharedHandsSystem _hands;
 
     private readonly FieldInfo? _pendingStatesField;
-    private readonly PropertyInfo? _hasMindProp;
-    private readonly FieldInfo? _hasMindField;
     private readonly List<EntityUid> _cachedViewportEntities = new();
     private int _entityCacheFrameCounter = 10;
     private MapId _lastCachedMapId = MapId.Nullspace;
@@ -62,8 +64,6 @@ public sealed class RobustaEspOverlay : Overlay
         _layoutManager = new EspLayoutManager(_font);
 
         _pendingStatesField = _player.GetType().GetField("_pendingStates", BindingFlags.NonPublic | BindingFlags.Instance);
-        _hasMindProp = typeof(MindContainerComponent).GetProperty("HasMind");
-        _hasMindField = typeof(MindContainerComponent).GetField("HasMind");
         
         RegisterHooks();
     }
@@ -132,22 +132,24 @@ public sealed class RobustaEspOverlay : Overlay
             return string.Join("\n", list); 
         });
 
-        _esp.RegisterCondition("IsAlive", uid => {
-            if (!_entMan.TryGetComponent<MindContainerComponent>(uid, out var mind)) return false;
-            if (_hasMindProp != null) return (bool)(_hasMindProp.GetValue(mind) ?? false);
-            if (_hasMindField != null) return (bool)(_hasMindField.GetValue(mind) ?? false);
-            return false;
-        });
+        _esp.RegisterCondition("IsAlive", uid => PlayerState.HasMind(_entMan, uid));
 
         _esp.RegisterCondition("IsAntag", uid => _entMan.HasComponent<MindContainerComponent>(uid) && _syndi.CheckPlayerStatus(uid).Uplink);
         _esp.RegisterCondition("IsSus", uid => _entMan.HasComponent<MindContainerComponent>(uid) && _syndi.CheckPlayerStatus(uid).Contra);
         _esp.RegisterCondition("HasHeldItems", uid => !string.IsNullOrEmpty(_esp.ResolveVariable(uid, "HeldItems")));
         _esp.RegisterCondition("HasImplants", uid => _entMan.HasComponent<MindContainerComponent>(uid) && _syndi.CheckPlayerStatus(uid).Implants.Count > 0);
+
+        // Non-player mob: a mob with no mind attached. Every mob inherits MindContainerComponent from
+        // BaseControllable, so the component's presence says nothing about who controls it; HasMind is
+        // what separates an NPC from a player-controlled mob.
+        _esp.RegisterCondition(
+            NonPlayerMobRule,
+            uid => _entMan.HasComponent<MobStateComponent>(uid) && !PlayerState.HasMind(_entMan, uid));
     }
 
     protected override void Draw(in OverlayDrawArgs args)
     {
-        if (!RobustaConfig.EspEnabled) return;
+        if (!RobustaConfig.Esp.AnyEnabled) return;
 
         var screenHandle = args.ScreenHandle;
         var localPlayer = _player.LocalSession?.AttachedEntity;
@@ -188,7 +190,13 @@ public sealed class RobustaEspOverlay : Overlay
             
             foreach (var res in results)
             {
-                _layoutManager.Add(res.Category.Dock, res.RenderText, res.Category.Color, res.Category.Priority);
+                // Each category answers to one user-facing switch, so filtering here is what makes
+                // the ESP menu toggles actually do something.
+                if (!RobustaConfig.Esp.IsEnabled(res.Category.Feature))
+                    continue;
+
+                var color = RobustaConfig.Esp.ResolveColor(res.Category.Feature, res.Category.Color);
+                _layoutManager.Add(res.Category.Dock, res.RenderText, color, res.Category.Priority);
             }
 
             _layoutManager.DrawAll();

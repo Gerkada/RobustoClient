@@ -47,6 +47,7 @@ public sealed unsafe class ImGuiGl3Renderer : IDisposable
     private const uint GL_TEXTURE_WRAP_S = 0x2802;
     private const uint GL_TEXTURE_WRAP_T = 0x2803;
     private const int GL_LINEAR = 0x2601;
+    private const int GL_NEAREST = 0x2600;
     private const int GL_CLAMP_TO_EDGE = 0x812F;
     private const uint GL_UNPACK_ROW_LENGTH = 0x0CF2;
     private const int GL_RGBA8 = 0x8058;
@@ -114,6 +115,74 @@ public sealed unsafe class ImGuiGl3Renderer : IDisposable
     private uint _vaoHandle;
     private bool _isGles;
     private bool _initialized;
+    /// <summary>True once GL entry points and device objects are ready.</summary>
+    public bool IsInitialized => _initialized;
+
+    /// <summary>
+    /// Uploads raw RGBA32 pixels as a new GL texture and returns its ImGui handle.
+    /// ImGui accepts backend-owned texture ids directly in draw commands, so static images need no
+    /// <see cref="ImTextureData"/> bookkeeping.
+    /// </summary>
+    /// <remarks>The caller owns the texture and must release it with <see cref="DestroyTexture"/>.</remarks>
+    public unsafe ImTextureID CreateTexture(byte* rgba, int width, int height)
+    {
+        if (!_initialized || rgba == null || width <= 0 || height <= 0)
+            return ImTextureID.Null;
+
+        uint tex = 0;
+        _glGenTextures(1, &tex);
+        if (tex == 0)
+            return ImTextureID.Null;
+
+        int lastUnpackRowLength = GetInteger(GL_UNPACK_ROW_LENGTH);
+        _glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+
+        _glBindTexture(GL_TEXTURE_2D, tex);
+        _glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        _glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        _glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        _glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        _glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+
+        _glPixelStorei(GL_UNPACK_ROW_LENGTH, lastUnpackRowLength);
+
+        return new ImTextureID(tex);
+    }
+
+    /// <summary>Releases a texture created by <see cref="CreateTexture"/>.</summary>
+    public unsafe void DestroyTexture(ImTextureID id)
+    {
+        if (!_initialized || id.Handle == 0)
+            return;
+
+        uint tex = (uint)id.Handle;
+        _glDeleteTextures(1, &tex);
+    }
+
+    /// <summary>
+    /// Switches an existing texture between smooth and pixel-perfect sampling.
+    /// </summary>
+    /// <remarks>
+    /// The filter is texture state, not draw state, so it can be changed without re-uploading the
+    /// pixels. Nearest sampling keeps a low-resolution sprite's pixel grid intact when it is scaled
+    /// up; linear sampling interpolates and blurs it.
+    /// </remarks>
+    public unsafe void SetTextureFilter(ImTextureID id, bool nearest)
+    {
+        if (!_initialized || id.Handle == 0)
+            return;
+
+        uint lastTexture = (uint)GetInteger(GL_TEXTURE_BINDING_2D);
+        _glBindTexture(GL_TEXTURE_2D, (uint)id.Handle);
+
+        int filter = nearest ? GL_NEAREST : GL_LINEAR;
+        _glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+        _glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+
+        _glBindTexture(GL_TEXTURE_2D, lastTexture);
+    }
+
 
     public void Initialize(IClyde clyde)
     {

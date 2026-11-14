@@ -87,7 +87,11 @@ public static class ImGuiNativeLoader
         if (!shortName.Equals("Hexa.NET.ImGui", StringComparison.OrdinalIgnoreCase) &&
             !shortName.Equals("HexaGen.Runtime", StringComparison.OrdinalIgnoreCase))
         {
-            return null;
+            // The mod loads into the game's own load context, which does not probe the game
+            // directory for this assembly's dependencies. Anything already loaded there can be
+            // handed back by simple name, which is enough for transitive content dependencies such
+            // as SixLabors.ImageSharp that Content.Client has already brought in.
+            return FindLoadedAssembly(shortName);
         }
 
         lock (SyncLock)
@@ -118,6 +122,23 @@ public static class ImGuiNativeLoader
             LoadedAssemblies[shortName] = loaded;
             return loaded;
         }
+    }
+
+    /// <summary>
+    /// Returns an assembly that is already loaded under the given simple name, if any.
+    /// </summary>
+    private static Assembly? FindLoadedAssembly(string shortName)
+    {
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (assembly.IsDynamic)
+                continue;
+
+            if (shortName.Equals(assembly.GetName().Name, StringComparison.OrdinalIgnoreCase))
+                return assembly;
+        }
+
+        return null;
     }
 
     private static nint EnsureNativeCImGuiLoaded()

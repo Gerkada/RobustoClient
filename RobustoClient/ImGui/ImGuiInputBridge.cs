@@ -16,6 +16,12 @@ public static class ImGuiInputBridge
     private static bool _hasMousePos;
     private static bool _mouseButtonQueuedThisFrame;
 
+    /// <summary>
+    /// True on the first frame after the overlay went from hidden back to visible. Windows use this to
+    /// drop state that must not survive being closed (stale text buffers, capture sessions).
+    /// </summary>
+    public static bool JustBecameVisible { get; private set; }
+
     public static void OnWindowVisibilityChanged(bool anyVisible)
     {
         if (!RobustaImGuiManager.IsInitialized)
@@ -26,10 +32,19 @@ public static class ImGuiInputBridge
         io.ClearEventsQueue();
         io.ClearInputKeys();
         _mouseButtonQueuedThisFrame = false;
+        JustBecameVisible = anyVisible;
+
+        // A widget can still hold focus from before the overlay was hidden; the input queues above do
+        // not touch that. A focus-loss event is the public way to drop it, so a text box does not
+        // resume mid-edit when the window reopens.
+        io.AddFocusEvent(false);
 
         if (anyVisible && _hasMousePos)
             io.AddMousePosEvent(_lastMousePos.X, _lastMousePos.Y);
     }
+
+    /// <summary>Clears the one-shot <see cref="JustBecameVisible"/> flag. Called once per visible frame.</summary>
+    public static void ConsumeVisibilityEdge() => JustBecameVisible = false;
 
     public static void UpdateBeforeNewFrame(
         IClyde clyde,
@@ -39,7 +54,6 @@ public static class ImGuiInputBridge
     {
         RobustaImGuiManager.EnsureCurrentContext();
         var io = Hexa.NET.ImGui.ImGui.GetIO();
-        io.ConfigInputTrickleEventQueue = false;
 
         var screenSize = clyde.ScreenSize;
         io.DisplaySize = new Vector2(Math.Max(1, screenSize.X), Math.Max(1, screenSize.Y));
@@ -92,7 +106,6 @@ public static class ImGuiInputBridge
 
         RobustaImGuiManager.EnsureCurrentContext();
         var io = Hexa.NET.ImGui.ImGui.GetIO();
-        io.ConfigInputTrickleEventQueue = false;
         io.AddMousePosEvent(ev.Position.Position.X, ev.Position.Position.Y);
     }
 
@@ -110,7 +123,6 @@ public static class ImGuiInputBridge
 
         RobustaImGuiManager.EnsureCurrentContext();
         var io = Hexa.NET.ImGui.ImGui.GetIO();
-        io.ConfigInputTrickleEventQueue = false;
         if (_hasMousePos)
             io.AddMousePosEvent(_lastMousePos.X, _lastMousePos.Y);
         io.AddMouseWheelEvent(ev.Delta.X, ev.Delta.Y);
@@ -126,7 +138,6 @@ public static class ImGuiInputBridge
 
         RobustaImGuiManager.EnsureCurrentContext();
         var io = Hexa.NET.ImGui.ImGui.GetIO();
-        io.ConfigInputTrickleEventQueue = false;
 
         if (ev.Key.IsMouseKey())
         {
@@ -185,7 +196,6 @@ public static class ImGuiInputBridge
 
         RobustaImGuiManager.EnsureCurrentContext();
         var io = Hexa.NET.ImGui.ImGui.GetIO();
-        io.ConfigInputTrickleEventQueue = false;
 
         if (ev.Key.IsMouseKey())
         {
@@ -232,6 +242,7 @@ public static class ImGuiInputBridge
         if (!RobustaImGuiManager.IsInitialized || !RobustaImGuiManager.AnyWindowVisible)
             return false;
 
+        RobustaImGuiManager.EnsureCurrentContext();
         var io = Hexa.NET.ImGui.ImGui.GetIO();
         if (!string.IsNullOrEmpty(ev.Text))
             io.AddInputCharactersUTF8(ev.Text);

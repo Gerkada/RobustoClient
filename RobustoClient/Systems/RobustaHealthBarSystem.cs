@@ -1,53 +1,49 @@
-using System;
-using System.Collections;
-using System.Reflection;
 using Content.Shared.Overlays;
+using Robust.Client.Player;
+using Robust.Shared.Player;
 using RobustoClient.Systems.Abstract;
 
 namespace RobustoClient.Systems;
 
+/// <summary>
+/// Turns the upstream health-bar overlay on or off.
+/// </summary>
+/// <remarks>
+/// The overlay belongs to <c>ShowHealthBarsSystem</c>, an <c>EquipmentHudSystem</c>. That system
+/// subscribes to its own refresh event on whichever entity holds the component, so a
+/// <see cref="ShowHealthBarsComponent"/> on the local player is enough to activate it, and the
+/// component survives the player changing clothes.
+/// </remarks>
 public class RobustaHealthBarSystem : LocalPlayerAddCompSystem<ShowHealthBarsComponent>
 {
-    private static readonly string[] DefaultContainers = ["Biological", "Silicon"];
+    [Dependency] private readonly IPlayerManager _playerManager = default!;
 
-    protected override ShowHealthBarsComponent CompOverride => CreateComponent();
+    /// <summary>Restores the saved switch when a new local player attaches.</summary>
+    protected override void OnAttached(LocalPlayerAttachedEvent ev) =>
+        SetEnabled(RobustaConfig.Esp.Health.Enabled);
 
-    private static ShowHealthBarsComponent CreateComponent()
+    /// <summary>Adds or removes the overlay for the local player.</summary>
+    public void SetEnabled(bool enabled)
     {
-        var comp = new ShowHealthBarsComponent();
-        try
+        if (_playerManager.LocalEntity is not { } uid || !Exists(uid))
+            return;
+
+        if (enabled)
         {
-            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-            var field = typeof(ShowHealthBarsComponent).GetField("DamageContainers", flags);
-            var prop = typeof(ShowHealthBarsComponent).GetProperty("DamageContainers", flags);
-            var listObj = field?.GetValue(comp) ?? prop?.GetValue(comp);
-
-            if (listObj is IList list)
-            {
-                list.Clear();
-                var listType = listObj.GetType();
-                var elemType = listType.IsGenericType ? listType.GetGenericArguments()[0] : typeof(string);
-
-                foreach (var id in DefaultContainers)
-                {
-                    if (elemType == typeof(string))
-                    {
-                        list.Add(id);
-                    }
-                    else
-                    {
-                        var ctor = elemType.GetConstructor([typeof(string)]);
-                        if (ctor != null)
-                            list.Add(ctor.Invoke([id]));
-                    }
-                }
-            }
+            if (!HasComp<ShowHealthBarsComponent>(uid))
+                AddComp(uid, NewComp());
         }
-        catch (Exception ex)
+        else if (HasComp<ShowHealthBarsComponent>(uid))
         {
-            MarseyLogger.Warn($"RobustaHealthBarSystem failed to populate DamageContainers: {ex.Message}");
+            RemComp<ShowHealthBarsComponent>(uid);
         }
-
-        return comp;
     }
+
+    // Client-side only, so it never reaches the server. Both damage containers are listed because a
+    // silicon mob would otherwise get no bar.
+    private static ShowHealthBarsComponent NewComp() => new()
+    {
+        DamageContainers = ["Biological", "Silicon"],
+        NetSyncEnabled = false,
+    };
 }
