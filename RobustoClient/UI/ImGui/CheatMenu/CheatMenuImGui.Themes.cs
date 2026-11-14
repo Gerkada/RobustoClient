@@ -28,6 +28,9 @@ public sealed partial class CheatMenuImGui
     /// carry whatever name was current when they were written.</summary>
     private string? _themeSelection;
 
+    private List<string>? _cachedThemeNames;
+    private bool _themePresetComboOpen;
+
     private void DrawThemesTab()
     {
         BeginWideSection("##ThemesScroll");
@@ -169,7 +172,13 @@ public sealed partial class CheatMenuImGui
 
         if (BeginCombo("##themePreset", selection))
         {
-            foreach (var name in AvailableThemeNames())
+            if (!_themePresetComboOpen || _cachedThemeNames == null)
+            {
+                _themePresetComboOpen = true;
+                _cachedThemeNames = AvailableThemeNames();
+            }
+
+            foreach (var name in _cachedThemeNames)
             {
                 if (!Selectable(name, name == selection))
                     continue;
@@ -184,6 +193,10 @@ public sealed partial class CheatMenuImGui
             }
 
             EndCombo();
+        }
+        else
+        {
+            _themePresetComboOpen = false;
         }
 
         Spacing();
@@ -218,8 +231,7 @@ public sealed partial class CheatMenuImGui
         if (RobustaImGuiTheme.Builtins.Any(theme => string.Equals(theme.Name, name, StringComparison.OrdinalIgnoreCase)))
             return RobustaImGuiTheme.SetTheme(name);
 
-        var path = Path.Combine(RobustaImGuiTheme.ThemesDirectory, name + ".json");
-        if (!File.Exists(path))
+        if (RobustaImGuiTheme.ResolveThemeFilePath(name) is not { } path || !File.Exists(path))
             return false;
 
         RobustaImGuiTheme.ApplyPalette(ThemeJson.LoadFile(path, RobustaImGuiTheme.Current));
@@ -309,6 +321,7 @@ public sealed partial class CheatMenuImGui
 
         var typography = RobustaImGuiTheme.Current.Typography;
         DrawFloatSetting("Regular", "##tReg", typography.RegularSize, 10f, 24f, typography, nameof(typography.RegularSize));
+        DrawFloatSetting("Monospace", "##tMono", typography.MonoSize, 10f, 24f, typography, nameof(typography.MonoSize));
         DrawFloatSetting("Title", "##tTitle", typography.TitleSize, 12f, 40f, typography, nameof(typography.TitleSize));
         DrawFloatSetting("Card title", "##tCard", typography.CardTitleSize, 10f, 24f, typography, nameof(typography.CardTitleSize));
 
@@ -368,21 +381,9 @@ public sealed partial class CheatMenuImGui
         RobustaImGuiWidgets.MutedText("Edits are preview-only. Export writes them to disk; closing the menu discards them.");
     }
 
-    /// <summary>
-    /// File path for a theme name, or null when the name is blank. Illegal filename characters are
-    /// replaced rather than rejected, so a pasted name cannot escape the themes folder.
-    /// </summary>
-    private static string? ThemePath(string name)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        var clean = new string(name.Trim().Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray());
-
-        return string.IsNullOrWhiteSpace(clean) ? null : Path.Combine(RobustaImGuiTheme.ThemesDirectory, clean + ".json");
-    }
-
     private void ExportCurrentTheme()
     {
-        if (ThemePath(_themeName) is not { } path)
+        if (RobustaImGuiTheme.ResolveThemeFilePath(_themeName) is not { } path)
         {
             _themeStatus = "Enter a name to export under.";
             return;
@@ -393,6 +394,7 @@ public sealed partial class CheatMenuImGui
             ThemeJson.SaveFile(path, RobustaImGuiTheme.Current);
             _themeName = Path.GetFileNameWithoutExtension(path);
             _themeSelection = _themeName;
+            _cachedThemeNames = null;
             _themeStatus = $"Exported {_themeName}.";
         }
         catch (Exception ex)
@@ -404,7 +406,7 @@ public sealed partial class CheatMenuImGui
 
     private void ImportTheme()
     {
-        if (ThemePath(_themeName) is not { } path)
+        if (RobustaImGuiTheme.ResolveThemeFilePath(_themeName) is not { } path)
         {
             _themeStatus = "Enter the name of a theme to import.";
             return;

@@ -1,5 +1,7 @@
+using System.IO;
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Hexa.NET.ImGui;
 using SixLabors.ImageSharp;
@@ -158,65 +160,11 @@ public static class RobustaImGuiLogo
                 return;
             }
 
-            byte[] rgba;
-            int width, height;
-
-            using (var image = Image.Load<Rgba32>(stream))
+            if (!TryDecodeLogoPng(stream, out var rgba, out int width, out int height))
             {
-                width = image.Width;
-                height = image.Height;
-
-                if (width <= 0 || height <= 0)
-                {
-                    MarseyLogger.Warn("[Logo] Embedded image decoded to zero size.");
-                    _failed = true;
-                    return;
-                }
-
-                rgba = new byte[width * height * 4];
-
-                // Track the opaque bounds while copying, so the transparent padding around the
-                // artwork can be cropped at draw time.
-                int minX = width, minY = height, maxX = -1, maxY = -1;
-
-                image.ProcessPixelRows(accessor =>
-                {
-                    for (int y = 0; y < accessor.Height; y++)
-                    {
-                        var row = accessor.GetRowSpan(y);
-                        for (int x = 0; x < row.Length; x++)
-                        {
-                            var p = row[x];
-                            int o = (y * width + x) * 4;
-                            rgba[o] = p.R;
-                            rgba[o + 1] = p.G;
-                            rgba[o + 2] = p.B;
-                            rgba[o + 3] = p.A;
-
-                            if (p.A <= AlphaThreshold)
-                                continue;
-
-                            if (x < minX) minX = x;
-                            if (x > maxX) maxX = x;
-                            if (y < minY) minY = y;
-                            if (y > maxY) maxY = y;
-                        }
-                    }
-                });
-
-                if (maxX >= minX && maxY >= minY)
-                {
-                    _uvMin = new Vector2(minX / (float)width, minY / (float)height);
-                    _uvMax = new Vector2((maxX + 1) / (float)width, (maxY + 1) / (float)height);
-                    _size = new Vector2(maxX - minX + 1, maxY - minY + 1);
-                }
-                else
-                {
-                    // Fully transparent image: nothing sensible to crop to.
-                    _uvMin = Vector2.Zero;
-                    _uvMax = Vector2.One;
-                    _size = new Vector2(width, height);
-                }
+                MarseyLogger.Warn("[Logo] Embedded image decoded to zero size.");
+                _failed = true;
+                return;
             }
 
             var handle = GCHandle.Alloc(rgba, GCHandleType.Pinned);
@@ -244,5 +192,67 @@ public static class RobustaImGuiLogo
             MarseyLogger.Warn($"[Logo] Failed to load embedded logo: {ex.GetType().Name}: {ex.Message}");
             _failed = true;
         }
+    }
+
+    // Isolated behind NoInlining so EnsureLoaded's try/catch runs even if SixLabors.ImageSharp fails to resolve at JIT time.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool TryDecodeLogoPng(Stream stream, out byte[] rgba, out int width, out int height)
+    {
+        using var image = Image.Load<Rgba32>(stream);
+        int w = image.Width;
+        int h = image.Height;
+        if (w <= 0 || h <= 0)
+        {
+            width = w;
+            height = h;
+            rgba = [];
+            return false;
+        }
+
+        width = w;
+        height = h;
+        rgba = new byte[w * h * 4];
+        int minX = w, minY = h, maxX = -1, maxY = -1;
+        var pixels = rgba;
+
+        image.ProcessPixelRows(accessor =>
+        {
+            for (int y = 0; y < accessor.Height; y++)
+            {
+                var row = accessor.GetRowSpan(y);
+                for (int x = 0; x < row.Length; x++)
+                {
+                    var p = row[x];
+                    int o = (y * w + x) * 4;
+                    pixels[o] = p.R;
+                    pixels[o + 1] = p.G;
+                    pixels[o + 2] = p.B;
+                    pixels[o + 3] = p.A;
+
+                    if (p.A <= AlphaThreshold)
+                        continue;
+
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+        });
+
+        if (maxX >= minX && maxY >= minY)
+        {
+            _uvMin = new Vector2(minX / (float)w, minY / (float)h);
+            _uvMax = new Vector2((maxX + 1) / (float)w, (maxY + 1) / (float)h);
+            _size = new Vector2(maxX - minX + 1, maxY - minY + 1);
+        }
+        else
+        {
+            _uvMin = Vector2.Zero;
+            _uvMax = Vector2.One;
+            _size = new Vector2(w, h);
+        }
+
+        return true;
     }
 }

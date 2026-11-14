@@ -238,6 +238,97 @@ public class RobustaConfigSaveTests : IDisposable
             ResetDirty();
         }
     }
+
+    [Fact]
+    public void Save_WithMalformedExternalEdit_StillSavesInMemoryState()
+    {
+        var originalNoRecoil = RobustaConfig.NoRecoilEnabled;
+        try
+        {
+            RobustaConfig.NoRecoilEnabled = false;
+            RobustaConfig.Save();
+
+            File.WriteAllText(RobustaConfig.ConfigPath, "{ invalid json");
+
+            RobustaConfig.NoRecoilEnabled = true;
+            RobustaConfig.MarkDirty();
+            RobustaConfig.SaveIfDirty();
+
+            IsDirty().Should().BeFalse();
+            var saved = JsonNode.Parse(File.ReadAllText(RobustaConfig.ConfigPath))!.AsObject();
+            saved[nameof(RobustaConfig.NoRecoilEnabled)]!.GetValue<bool>().Should().BeTrue();
+        }
+        finally
+        {
+            RobustaConfig.NoRecoilEnabled = originalNoRecoil;
+            ResetDirty();
+        }
+    }
+
+    [Fact]
+    public void Load_WithNullEspSubConfig_InitializesSubConfigAndAvoidsNullAnyEnabled()
+    {
+        var originalEsp = RobustaConfig.Esp;
+        try
+        {
+            var dir = Path.GetDirectoryName(_tempConfigPath)!;
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(_tempConfigPath, """
+                {
+                  "Esp": {
+                    "Players": null,
+                    "Mobs": { "Enabled": false }
+                  }
+                }
+                """);
+
+            RobustaConfig.Load();
+
+            RobustaConfig.Esp.Players.Should().NotBeNull();
+            RobustaConfig.Esp.Mobs.Enabled.Should().BeFalse();
+            _ = RobustaConfig.Esp.AnyEnabled;
+
+            var partial = new RobustaConfig.EspSettings { Players = null! };
+            partial.AnyEnabled.Should().BeTrue("other features remain enabled by default");
+        }
+        finally
+        {
+            RobustaConfig.Esp = originalEsp;
+            ResetDirty();
+        }
+    }
+
+    [Fact]
+    public void Load_MigratesLegacyOverlaysDisableAndEspEnabled()
+    {
+        var originalOverlays = RobustaConfig.DisableVisualOverlays;
+        var originalEsp = RobustaConfig.Esp;
+        try
+        {
+            RobustaConfig.DisableVisualOverlays = false;
+            RobustaConfig.Esp = new RobustaConfig.EspSettings();
+
+            var dir = Path.GetDirectoryName(_tempConfigPath)!;
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(_tempConfigPath, """
+                {
+                  "OverlaysDisable": true,
+                  "EspEnabled": false
+                }
+                """);
+
+            RobustaConfig.Load();
+
+            RobustaConfig.DisableVisualOverlays.Should().BeTrue();
+            RobustaConfig.Esp.AnyEnabled.Should().BeFalse();
+        }
+        finally
+        {
+            RobustaConfig.DisableVisualOverlays = originalOverlays;
+            RobustaConfig.Esp = originalEsp;
+            ResetDirty();
+        }
+    }
 }
 
 
@@ -381,6 +472,16 @@ public class RobustaKeybindTests
 
         RobustaKeybind.TryParse(text, out var reparsed).Should().BeTrue();
         reparsed.Should().Be(captured);
+    }
+
+    [Fact]
+    public void FromCapture_WithSystemModifier_IncludesSystem()
+    {
+        var bind = RobustaKeybind.FromCapture(Keyboard.Key.H, shift: false, control: false, alt: false, system: true);
+
+        bind.Mod1.Should().Be(Keyboard.Key.LSystem);
+        RobustaKeybind.TryParse(bind.ToString(), out var reparsed).Should().BeTrue();
+        reparsed.Should().Be(bind);
     }
 
     [Theory]

@@ -94,9 +94,9 @@ public readonly record struct RobustaKeybind
 
     /// <summary>
     /// Builds a combination from a captured key press. Modifiers are collected in
-    /// Shift/Control/Alt order; <see cref="RobustaKeybind"/> sorts them canonically on construction.
+    /// Shift/Control/Alt/System order; <see cref="RobustaKeybind"/> sorts them canonically on construction.
     /// </summary>
-    public static RobustaKeybind FromCapture(Keyboard.Key key, bool shift, bool control, bool alt)
+    public static RobustaKeybind FromCapture(Keyboard.Key key, bool shift, bool control, bool alt, bool system = false)
     {
         var mod1 = Keyboard.Key.Unknown;
         var mod2 = Keyboard.Key.Unknown;
@@ -112,6 +112,7 @@ public readonly record struct RobustaKeybind
         if (shift) AddMod(Keyboard.Key.Shift);
         if (control) AddMod(Keyboard.Key.Control);
         if (alt) AddMod(Keyboard.Key.Alt);
+        if (system) AddMod(Keyboard.Key.LSystem);
 
         return new RobustaKeybind(key, mod1, mod2, mod3);
     }

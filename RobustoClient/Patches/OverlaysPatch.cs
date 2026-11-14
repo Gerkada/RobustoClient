@@ -6,6 +6,7 @@ using Content.Client.Eye.Blinding;
 using Content.Client.Flash;
 using Content.Client.Overlays;
 using Content.Client.StatusIcon;
+using Content.Shared.Eye.Blinding.Components;
 using Content.Shared.Mobs.Components;
 using Content.Shared.StatusIcon;
 using HarmonyLib;
@@ -59,17 +60,40 @@ internal static class OverlaysPatch
     }
 
     [HarmonyPrefix]
-    private static bool Prefix() => !RobustaConfig.DisableVisualOverlays;
+    private static bool Prefix(Overlay __instance, ref bool __result)
+    {
+        if (!RobustaConfig.DisableVisualOverlays)
+            return true;
+
+        // BlindOverlay clears _lightManager.Enabled in Draw and relies on BeforeDraw to restore it.
+        if (__instance is BlindOverlay)
+            RestoreBlindLightSetup();
+
+        __result = false;
+        return false;
+    }
+
+    private static void RestoreBlindLightSetup()
+    {
+        if (SelfOverlayFilter.LocalPlayer is not { } player)
+            return;
+
+        var entities = IoCManager.Resolve<IEntityManager>();
+        if (!entities.TryGetComponent<BlindableComponent>(player, out var blind) || !blind.LightSetup)
+            return;
+
+        IoCManager.Resolve<ILightManager>().Enabled = true;
+        blind.LightSetup = false;
+        blind.GraceFrame = false;
+    }
 }
 
 /// <summary>State the self-overlay patches share: which entity is the local player.</summary>
 internal static class SelfOverlayFilter
 {
-    private static IPlayerManager? _players;
-
     /// <summary>Local player entity, or null when no session is attached.</summary>
     internal static EntityUid? LocalPlayer =>
-        (_players ??= IoCManager.Resolve<IPlayerManager>()).LocalSession?.AttachedEntity;
+        IoCManager.Resolve<IPlayerManager>().LocalSession?.AttachedEntity;
 }
 
 /// <summary>Skips the health bar the local player would draw on itself while the Health ESP switch is on.</summary>

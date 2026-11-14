@@ -135,6 +135,7 @@ public sealed unsafe class ImGuiGl3Renderer : IDisposable
             return ImTextureID.Null;
 
         int lastUnpackRowLength = GetInteger(GL_UNPACK_ROW_LENGTH);
+        uint lastTexture = (uint)GetInteger(GL_TEXTURE_BINDING_2D);
         _glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
         _glBindTexture(GL_TEXTURE_2D, tex);
@@ -145,6 +146,7 @@ public sealed unsafe class ImGuiGl3Renderer : IDisposable
 
         _glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
 
+        _glBindTexture(GL_TEXTURE_2D, lastTexture);
         _glPixelStorei(GL_UNPACK_ROW_LENGTH, lastUnpackRowLength);
 
         return new ImTextureID(tex);

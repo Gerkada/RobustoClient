@@ -58,6 +58,8 @@ public static unsafe partial class RobustaImGuiTheme
             FontBold = FontRegular;
         if (FontTitle.IsNull)
             FontTitle = FontBold;
+
+        io.FontDefault = FontRegular;
     }
 
     /// <summary>Points the public font fields at the faces the active theme selected.</summary>

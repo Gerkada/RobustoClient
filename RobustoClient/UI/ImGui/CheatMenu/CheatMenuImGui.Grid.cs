@@ -72,7 +72,7 @@ public sealed partial class CheatMenuImGui
         var min = new Vector2(x, rowMin.Y);
         var max = min + new Vector2(size, rowHeight);
 
-        bool hovered = IsMouseHoveringRect(min, max);
+        bool hovered = IsWindowHovered() && IsMouseHoveringRect(min, max);
         var drawList = GetWindowDrawList();
 
         if (hovered)

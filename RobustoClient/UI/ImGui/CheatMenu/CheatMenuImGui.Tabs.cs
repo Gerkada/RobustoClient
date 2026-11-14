@@ -113,9 +113,10 @@ public sealed partial class CheatMenuImGui
     [
         new WidgetCard("##UtilityMove", "MOVEMENT", () =>
         {
-            if (RobustaImGuiWidgets.ToggleSwitch("No Slip", ref RobustaConfig.AntiSlipEnabled))
+            bool antiSlip = RobustaConfig.AntiSlipEnabled;
+            if (RobustaImGuiWidgets.ToggleSwitch("No Slip", ref antiSlip))
             {
-                CheatMenuActions.SetAntiSlip(RobustaConfig.AntiSlipEnabled);
+                CheatMenuActions.SetAntiSlip(antiSlip);
                 MarkConfigDirty();
             }
 

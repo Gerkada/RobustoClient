@@ -20,12 +20,10 @@ public sealed partial class CheatMenuImGui
         // LogoScale past the point where the art fills the row would silently stop having any effect.
         if (RobustaImGuiLogo.IsAvailable)
         {
-            float logoHeight = RobustaImGuiLogo.FittedSize(RobustaImGuiScale.LogoBox).Y;
-
             // Pixel-perfect drawing uses whole multiples, which can be taller than the fitted size.
             var source = RobustaImGuiLogo.SourceSize;
             int multiple = RobustaImGuiLogo.PixelPerfectMultiple(RobustaImGuiScale.LogoBox);
-            logoHeight = source.Y * multiple;
+            float logoHeight = source.Y * multiple;
 
             titleRowHeight = MathF.Max(titleRowHeight, logoHeight + m.ItemInnerSpacingY * 2f);
         }
@@ -72,7 +70,7 @@ public sealed partial class CheatMenuImGui
         var dragMin = titleRowMin;
         var dragMax = new Vector2(MathF.Max(dragMin.X, controlsLeft), titleRowMax.Y);
 
-        if (IsMouseHoveringRect(dragMin, dragMax) && IsMouseDragging(ImGuiMouseButton.Left, 3f))
+        if (IsWindowHovered() && !IsAnyItemActive() && IsMouseHoveringRect(dragMin, dragMax) && IsMouseDragging(ImGuiMouseButton.Left, 3f))
         {
             SetWindowPos(GetWindowPos() + GetIO().MouseDelta);
             SetMouseCursor(ImGuiMouseCursor.Hand);

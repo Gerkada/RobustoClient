@@ -170,8 +170,32 @@ public static partial class RobustaConfig
 
         /// <summary>Cheap early-out for the overlay: nothing to draw when every feature is off.</summary>
         [JsonIgnore] public bool AnyEnabled =>
-            Players.Enabled || Mobs.Enabled || HeldItems.Enabled || Syndicate.Enabled ||
-            Contraband.Enabled || Health.Enabled || Icons.Enabled;
+            (Players?.Enabled ?? false) || (Mobs?.Enabled ?? false) || (HeldItems?.Enabled ?? false) ||
+            (Syndicate?.Enabled ?? false) || (Contraband?.Enabled ?? false) || (Health?.Enabled ?? false) ||
+            (Icons?.Enabled ?? false);
+
+        internal void EnsureDefaults()
+        {
+            Players ??= new();
+            Mobs ??= new();
+            HeldItems ??= new();
+            Syndicate ??= new();
+            Contraband ??= new();
+            Health ??= new();
+            Icons ??= new();
+        }
+
+        internal void SetAllEnabled(bool enabled)
+        {
+            EnsureDefaults();
+            Players.Enabled = enabled;
+            Mobs.Enabled = enabled;
+            HeldItems.Enabled = enabled;
+            Syndicate.Enabled = enabled;
+            Contraband.Enabled = enabled;
+            Health.Enabled = enabled;
+            Icons.Enabled = enabled;
+        }
 
         /// <summary>
         /// Colour for a feature: the hex override when one is set and parseable, otherwise the

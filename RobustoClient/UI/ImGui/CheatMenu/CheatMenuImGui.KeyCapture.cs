@@ -34,7 +34,7 @@ public sealed partial class CheatMenuImGui
         if (RobustaKeybind.IsModifierOrIgnoredKey(ev.Key))
             return true;
 
-        ApplyBind(_activeListeningTarget, RobustaKeybind.FromCapture(ev.Key, ev.Shift, ev.Control, ev.Alt));
+        ApplyBind(_activeListeningTarget, RobustaKeybind.FromCapture(ev.Key, ev.Shift, ev.Control, ev.Alt, ev.System));
         StopListening();
         return true;
     }

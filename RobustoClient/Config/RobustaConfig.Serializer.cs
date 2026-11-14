@@ -1,7 +1,9 @@
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace RobustoClient;
 
@@ -11,6 +13,7 @@ public static partial class RobustaConfig
 
     private const BindingFlags ConfigFieldFlags = BindingFlags.Public | BindingFlags.Static;
 
+    private static readonly object ConfigLock = new();
     private static bool _dirty;
 
     /// <summary>
@@ -33,45 +36,55 @@ public static partial class RobustaConfig
     /// Records that the in-memory config no longer matches disk. Does not write; persistence happens
     /// at defined boundaries (menu close, explicit flush, process exit) rather than on a timer.
     /// </summary>
-    public static void MarkDirty() => _dirty = true;
+    public static void MarkDirty()
+    {
+        lock (ConfigLock)
+            _dirty = true;
+    }
 
     /// <summary>Writes the config to disk if <see cref="MarkDirty"/> was called since the last save.</summary>
     public static void SaveIfDirty()
     {
-        if (!_dirty)
-            return;
+        lock (ConfigLock)
+        {
+            if (!_dirty)
+                return;
 
-        Save();
+            Save();
+        }
     }
 
     public static void Save()
     {
-        try
+        lock (ConfigLock)
         {
-            // The whole file is rebuilt from memory, so anything edited on disk since the last read
-            // or write has to be folded in first.
-            AdoptExternalEdits();
-
-            var file = ConfigPath;
-            var dir = Path.GetDirectoryName(file);
-            if (!string.IsNullOrEmpty(dir))
-                Directory.CreateDirectory(dir);
-
-            var root = new JsonObject();
-            foreach (var field in ConfigFields())
+            try
             {
-                // Explicit field type keeps enum/HashSet encoding identical to the previous hand-written DTO.
-                root[field.Name] = JsonSerializer.SerializeToNode(field.GetValue(null), field.FieldType, JsonOptions);
-            }
+                // The whole file is rebuilt from memory, so anything edited on disk since the last read
+                // or write has to be folded in first.
+                AdoptExternalEdits();
 
-            var text = root.ToJsonString(JsonOptions);
-            File.WriteAllText(file, text);
-            _lastFileContents = text;
-            _dirty = false;
-        }
-        catch (Exception ex)
-        {
-            MarseyLogger.Warn($"Failed to save config.json: {ex.Message}");
+                var file = ConfigPath;
+                var dir = Path.GetDirectoryName(file);
+                if (!string.IsNullOrEmpty(dir))
+                    Directory.CreateDirectory(dir);
+
+                var root = new JsonObject();
+                foreach (var field in ConfigFields())
+                {
+                    // Explicit field type keeps enum/HashSet encoding identical to the previous hand-written DTO.
+                    root[field.Name] = JsonSerializer.SerializeToNode(field.GetValue(null), field.FieldType, JsonOptions);
+                }
+
+                var text = root.ToJsonString(JsonOptions);
+                File.WriteAllText(file, text);
+                _lastFileContents = text;
+                _dirty = false;
+            }
+            catch (Exception ex)
+            {
+                MarseyLogger.Warn($"Failed to save config.json: {ex.Message}");
+            }
         }
     }
 
@@ -101,8 +114,20 @@ public static partial class RobustaConfig
         if (onDisk == _lastFileContents)
             return;
 
-        var previous = JsonNode.Parse(_lastFileContents) as JsonObject;
-        if (JsonNode.Parse(onDisk) is not JsonObject changed)
+        JsonObject? previous;
+        JsonObject? changed;
+        try
+        {
+            previous = JsonNode.Parse(_lastFileContents) as JsonObject;
+            changed = JsonNode.Parse(onDisk) as JsonObject;
+        }
+        catch (JsonException ex)
+        {
+            MarseyLogger.Warn($"config.json has invalid JSON ({ex.Message}); overwriting with in-memory values.");
+            return;
+        }
+
+        if (changed == null)
         {
             MarseyLogger.Warn("config.json was edited but is not a JSON object; keeping it as written.");
             return;
@@ -128,53 +153,80 @@ public static partial class RobustaConfig
             }
         }
 
+        (Esp ??= new()).EnsureDefaults();
+
         if (adopted.Count > 0)
             MarseyLogger.Info($"Adopted externally edited config keys: {string.Join(", ", adopted)}.");
     }
 
     public static void Load()
     {
-        try
+        lock (ConfigLock)
         {
-            var file = ConfigPath;
-            if (!File.Exists(file))
+            try
             {
-                // First run: write the compiled-in defaults so there is a file to edit.
-                Save();
-                if (File.Exists(file))
-                    MarseyLogger.Info($"Created default config at {file}");
-                return;
+                var file = ConfigPath;
+                if (!File.Exists(file))
+                {
+                    // First run: write the compiled-in defaults so there is a file to edit.
+                    Save();
+                    if (File.Exists(file))
+                        MarseyLogger.Info($"Created default config at {file}");
+                    return;
+                }
+
+                var text = File.ReadAllText(file);
+                if (JsonNode.Parse(text) is not JsonObject root)
+                    return;
+
+                _lastFileContents = text;
+
+                foreach (var field in ConfigFields())
+                {
+                    // Missing and explicit-null keys keep the compiled-in default, so old files stay loadable.
+                    if (root[field.Name] is not { } node)
+                        continue;
+
+                    // Isolate failures so one malformed value cannot discard the rest of the config.
+                    try
+                    {
+                        field.SetValue(null, node.Deserialize(field.FieldType, JsonOptions));
+                    }
+                    catch (JsonException ex)
+                    {
+                        MarseyLogger.Warn($"Ignored invalid value for '{field.Name}' in config.json: {ex.Message}");
+                    }
+                }
+
+                MigrateLegacyKeys(root);
+                (Esp ??= new()).EnsureDefaults();
             }
-
-            var text = File.ReadAllText(file);
-            if (JsonNode.Parse(text) is not JsonObject root)
-                return;
-
-            _lastFileContents = text;
-
-            foreach (var field in ConfigFields())
+            catch (Exception ex)
             {
-                // Missing and explicit-null keys keep the compiled-in default, so old files stay loadable.
-                if (root[field.Name] is not { } node)
-                    continue;
-
-                // Isolate failures so one malformed value cannot discard the rest of the config.
-                try
-                {
-                    field.SetValue(null, node.Deserialize(field.FieldType, JsonOptions));
-                }
-                catch (JsonException ex)
-                {
-                    MarseyLogger.Warn($"Ignored invalid value for '{field.Name}' in config.json: {ex.Message}");
-                }
+                MarseyLogger.Warn($"Failed to load config.json: {ex.Message}");
             }
         }
-        catch (Exception ex)
+    }
+
+    private static void MigrateLegacyKeys(JsonObject root)
+    {
+        if (root[nameof(DisableVisualOverlays)] is null && root["OverlaysDisable"] is JsonValue oldOverlay &&
+            oldOverlay.TryGetValue<bool>(out var overlaysDisabled))
         {
-            MarseyLogger.Warn($"Failed to load config.json: {ex.Message}");
+            DisableVisualOverlays = overlaysDisabled;
+        }
+
+        if (root[nameof(Esp)] is null && root["EspEnabled"] is JsonValue oldEsp &&
+            oldEsp.TryGetValue<bool>(out var espEnabled) && !espEnabled)
+        {
+            (Esp ??= new()).SetAllEnabled(false);
         }
     }
 
     /// <summary>Public static fields of <see cref="RobustaConfig"/>; the whole persisted schema.</summary>
-    private static FieldInfo[] ConfigFields() => typeof(RobustaConfig).GetFields(ConfigFieldFlags);
+    private static FieldInfo[] ConfigFields() =>
+        typeof(RobustaConfig)
+            .GetFields(ConfigFieldFlags)
+            .Where(f => !f.IsDefined(typeof(JsonIgnoreAttribute), false))
+            .ToArray();
 }

@@ -14,8 +14,10 @@ public static partial class RobustaImGuiTheme
         var c = Current.Colors;
         var style = GetStyle();
 
-        style.WindowPadding = new Vector2(RobustaImGuiScale.WindowPadding, RobustaImGuiScale.WindowPadding);
         style.FramePadding = new Vector2(m.FramePaddingX, m.FramePaddingY);
+        // ApplyStyle runs outside PushFont, so compute frame height from RegularSize rather than GetFrameHeight().
+        float windowPadding = (Current.Typography.RegularSize + m.FramePaddingY * 2f) * m.WindowPaddingScale;
+        style.WindowPadding = new Vector2(windowPadding, windowPadding);
         style.CellPadding = new Vector2(m.CellPaddingX, m.CellPaddingY);
         style.ItemSpacing = new Vector2(m.ItemSpacingX, m.ItemSpacingY);
         style.ItemInnerSpacing = new Vector2(m.ItemInnerSpacingX, m.ItemInnerSpacingY);

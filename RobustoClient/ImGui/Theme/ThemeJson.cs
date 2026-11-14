@@ -39,7 +39,7 @@ public static class ThemeJson
             if (!File.Exists(path))
                 return fallback;
 
-            return Parse(File.ReadAllText(path), fallback);
+            return Parse(File.ReadAllText(path), fallback, isUserTheme: true);
         }
         catch (Exception ex)
         {
@@ -52,7 +52,10 @@ public static class ThemeJson
     /// Parses a theme document onto <paramref name="fallback"/>. Unknown tokens are ignored with a
     /// warning; missing tokens keep the fallback value.
     /// </summary>
-    public static RobustaThemePalette Parse(string json, RobustaThemePalette fallback)
+    public static RobustaThemePalette Parse(string json, RobustaThemePalette fallback) =>
+        Parse(json, fallback, isUserTheme: false);
+
+    private static RobustaThemePalette Parse(string json, RobustaThemePalette fallback, bool isUserTheme)
     {
         JsonObject? root;
         try
@@ -71,18 +74,19 @@ public static class ThemeJson
             return fallback;
         }
 
-        var name = root["name"]?.GetValue<string>() ?? fallback.Name;
+        var name = ReadString(root, "name") ?? fallback.Name;
 
         return new RobustaThemePalette
         {
             Name = name,
             Colors = ReadColors(root["colors"] as JsonObject, fallback.Colors),
-            Metrics = ReadSection(root["metrics"] as JsonObject, fallback.Metrics),
-            Typography = ReadSection(root["typography"] as JsonObject, fallback.Typography),
+            Metrics = ReadSection(root["metrics"] as JsonObject, fallback.Metrics.Copy()),
+            Typography = ReadSection(root["typography"] as JsonObject, fallback.Typography.Copy()),
             DefaultWindowSize = ReadVector2(root, "defaultWindowSize", fallback.DefaultWindowSize),
             MinWindowSize = ReadVector2(root, "minWindowSize", fallback.MinWindowSize),
             TitleFont = ReadFontKey(root, "titleFont", fallback.TitleFont),
-            TextFont = ReadFontKey(root, "textFont", fallback.TextFont)
+            TextFont = ReadFontKey(root, "textFont", fallback.TextFont),
+            IsUserTheme = isUserTheme
         };
     }
 
@@ -90,9 +94,12 @@ public static class ThemeJson
     /// Reads a font key. An unknown key is kept as written rather than rejected here, so a theme can
     /// name a face that a newer build will add; resolution falls back at load time.
     /// </summary>
+    private static string? ReadString(JsonObject root, string key) =>
+        root[key] is JsonValue val && val.TryGetValue<string>(out var text) ? text : null;
+
     private static string ReadFontKey(JsonObject root, string key, string fallback)
     {
-        var value = root[key]?.GetValue<string>();
+        var value = ReadString(root, key);
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
     }
 

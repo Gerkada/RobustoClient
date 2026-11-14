@@ -29,6 +29,7 @@ public class LocalPlayerOverlayFilterTests
         // The prefix fakes a null result, which is what makes the draw loop skip the entity.
         ((MethodInfo)target).ReturnType.Should().Be(typeof((float, bool)?));
         target.GetParameters().Should().Contain(p => p.Name == "uid");
+        AssertAboveInlineThreshold(target);
     }
 
     [Fact]
@@ -40,6 +41,29 @@ public class LocalPlayerOverlayFilterTests
         // The postfix clears the returned list in place, so the return type must be a mutable list.
         ((MethodInfo)target).ReturnType.Should().Be(typeof(List<Content.Shared.StatusIcon.StatusIconData>));
         target.GetParameters().Should().Contain(p => p.Name == "uid");
+        AssertAboveInlineThreshold(target);
+    }
+
+    [Fact]
+    public void OverlaysPatchTargets_ResolveAndExceedInlineThreshold()
+    {
+        var targetMethods = ((IEnumerable)AccessTools.Method(typeof(OverlaysPatch), "TargetMethods")!.Invoke(null, null)!)
+            .Cast<MethodBase>()
+            .ToArray();
+
+        targetMethods.Should().HaveCount(5, "all five suppressed upstream overlays must resolve");
+        foreach (var target in targetMethods)
+        {
+            target.Name.Should().Be("BeforeDraw");
+            AssertAboveInlineThreshold(target);
+        }
+    }
+
+    private static void AssertAboveInlineThreshold(MethodBase target)
+    {
+        var il = target.GetMethodBody()?.GetILAsByteArray();
+        il.Should().NotBeNull();
+        il!.Length.Should().BeGreaterThan(32, $"{target.DeclaringType?.Name}.{target.Name} must stay above RyuJIT's 32B inline threshold");
     }
 
     private static MethodBase SingleTarget(Type patchType)

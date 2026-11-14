@@ -32,17 +32,11 @@ public static class RobustaImGuiWidgets
         float padY = MathF.Max(1f, (rowHeight - lineHeight) * 0.5f);
         var drawList = GetWindowDrawList();
 
-        // Show the override when there is one, otherwise the category's own colour.
-        var display = Theme.ThemeHex.TryParse(hexColor, out var parsed) ? parsed : fallbackColor;
-
-        // Off or disabled reads as a dimmed chip rather than a separate indicator.
-        if (!enabled || disabled)
-            display = Vector4.Lerp(display, RobustaImGuiTheme.BgControl, 0.65f);
+        // Keep the true colour intact so editing while dimmed never writes the dimmed shade back.
+        var editColor = Theme.ThemeHex.TryParse(hexColor, out var parsed) ? parsed : fallbackColor;
 
         bool colorChanged = false;
         bool enabledChanged = false;
-
-        var chipPos = GetCursorScreenPos();
 
         PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(0f, padY));
         SetNextItemWidth(chipSize);
@@ -50,26 +44,29 @@ public static class RobustaImGuiWidgets
 
         if (ColorEdit4(
                 $"##espcolor_{label}",
-                ref display,
+                ref editColor,
                 ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel |
                 ImGuiColorEditFlags.NoAlpha | ImGuiColorEditFlags.NoDragDrop))
         {
             if (!disabled)
             {
-                hexColor = Theme.ThemeHex.Format(display);
+                hexColor = Theme.ThemeHex.Format(editColor);
                 colorChanged = true;
             }
         }
 
         PopStyleVar();
 
-        // Dim overlay so a disabled row cannot be mistaken for an active one.
-        if (disabled)
+        // Overlay the dim wash post-render so off/disabled rows still look muted without corrupting editColor.
+        if (!enabled || disabled)
         {
+            var dimTint = disabled
+                ? new Vector4(0f, 0f, 0f, 0.45f)
+                : new Vector4(RobustaImGuiTheme.BgControl.X, RobustaImGuiTheme.BgControl.Y, RobustaImGuiTheme.BgControl.Z, 0.65f);
             drawList.AddRectFilled(
-                chipPos,
-                chipPos + new Vector2(chipSize, chipSize),
-                RobustaImGuiTheme.ColU32(new Vector4(0f, 0f, 0f, 0.45f)),
+                GetItemRectMin(),
+                GetItemRectMax(),
+                RobustaImGuiTheme.ColU32(dimTint),
                 RobustaImGuiTheme.Metrics.FrameRounding);
         }
 
@@ -235,7 +232,6 @@ public static class RobustaImGuiWidgets
 
         CardTitle(title);
 
-        Separator();
         Spacing();
     }
 
@@ -404,7 +400,7 @@ public static class RobustaImGuiWidgets
         Vector4 hoverFill,
         Vector4 hoverText)
     {
-        bool hovered = IsMouseHoveringRect(screenPos, screenPos + size);
+        bool hovered = IsWindowHovered() && IsMouseHoveringRect(screenPos, screenPos + size);
         bool pressed = hovered && IsMouseClicked(ImGuiMouseButton.Left);
 
         var drawList = GetWindowDrawList();

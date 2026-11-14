@@ -64,7 +64,7 @@ public sealed partial class CheatMenuImGui
             // While the header is collapsed nothing is selected: the content area is not on screen,
             // so a highlighted tab would claim a state the window is not in.
             bool selected = !_headerCollapsed && _activeTab == tab;
-            bool hovered = IsMouseHoveringRect(tabMin, tabMax);
+            bool hovered = IsWindowHovered() && IsMouseHoveringRect(tabMin, tabMax);
 
             if (selected)
             {

@@ -189,7 +189,7 @@ public sealed partial class CheatMenuImGui
         }
     }
 
-    private void ApplyBind(DiscoveredBind target, RobustaKeybind bind)
+    private void ApplyBind(DiscoveredBind target, RobustaKeybind bind, bool save = true)
     {
         target.Field.SetValue(null, bind);
         target.EditBuffer = Format(bind);
@@ -197,9 +197,9 @@ public sealed partial class CheatMenuImGui
 
         RegisterCommand(target.Attribute.Command, bind);
 
-        // A bind is one deliberate action, not a drag, so it is persisted straight away instead of at
-        // the next lifecycle boundary. The registry and the file therefore never disagree.
-        RobustaConfig.Save();
+        // A bind is one deliberate action, not a drag, so single edits persist right away.
+        if (save)
+            RobustaConfig.Save();
     }
 
     /// <summary>
@@ -267,9 +267,9 @@ public sealed partial class CheatMenuImGui
 
     private void ResetAllBinds()
     {
-        // Each bind persists as it is applied, so a reset writes the file once per row and needs no
-        // trailing flush.
         foreach (var item in _discoveredBinds)
-            ApplyBind(item, DefaultBind(item));
+            ApplyBind(item, DefaultBind(item), save: false);
+
+        RobustaConfig.Save();
     }
 }

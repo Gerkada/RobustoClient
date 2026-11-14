@@ -59,7 +59,10 @@ public static partial class RobustaImGuiTheme
     /// </remarks>
     public static void ApplyPalette(RobustaThemePalette palette)
     {
-        Current = palette.IsUserTheme ? palette : palette.Copy();
+        // Re-applying Current on every editor drag tick must not re-clone the active object graph.
+        if (!ReferenceEquals(palette, Current))
+            Current = palette.IsUserTheme ? palette : palette.Copy();
+
         StyleDirty = true;
 
         // Fonts are already baked, so a theme switch only repoints the active faces.
@@ -91,6 +94,26 @@ public static partial class RobustaImGuiTheme
         "Themes");
 
     /// <summary>
+    /// File path for a theme name inside <see cref="ThemesDirectory"/>, or null when blank/dot-only.
+    /// Rejects path separators so config/input strings cannot traverse out of the themes folder.
+    /// </summary>
+    internal static string? ResolveThemeFilePath(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        var invalid = Path.GetInvalidFileNameChars();
+        var clean = new string(name.Trim()
+            .Select(ch => ch == '/' || ch == '\\' || invalid.Contains(ch) ? '_' : ch)
+            .ToArray());
+
+        if (string.IsNullOrWhiteSpace(clean) || clean is "." or "..")
+            return null;
+
+        return Path.Combine(ThemesDirectory, clean + ".json");
+    }
+
+    /// <summary>
     /// Applies the theme named by <see cref="RobustaConfig.DefaultTheme"/>: the user file when one
     /// exists, otherwise the built-in theme of that name.
     /// </summary>
@@ -100,8 +123,7 @@ public static partial class RobustaImGuiTheme
         if (string.IsNullOrWhiteSpace(name))
             return;
 
-        var path = Path.Combine(ThemesDirectory, name + ".json");
-        if (File.Exists(path))
+        if (ResolveThemeFilePath(name) is { } path && File.Exists(path))
             ApplyPalette(ThemeJson.LoadFile(path, Current));
         else
             SetTheme(name);

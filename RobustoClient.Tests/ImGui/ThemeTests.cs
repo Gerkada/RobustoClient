@@ -890,6 +890,67 @@ public class ThemeJsonTests
 
         parsed.Colors.Card.Should().Be(fallback.Colors.Card);
     }
+
+    [Fact]
+    public void Parse_DoesNotMutateFallbackMetricsOrTypography()
+    {
+        var fallback = ThemeDefaults.Dark();
+        float originalRounding = fallback.Metrics.WindowRounding;
+        float originalFontSize = fallback.Typography.RegularSize;
+        var json = """{ "metrics": { "windowRounding": 24 }, "typography": { "regularSize": 22 } }""";
+
+        var parsed = ThemeJson.Parse(json, fallback);
+
+        parsed.Metrics.WindowRounding.Should().Be(24f);
+        parsed.Typography.RegularSize.Should().Be(22f);
+        fallback.Metrics.WindowRounding.Should().Be(originalRounding);
+        fallback.Typography.RegularSize.Should().Be(originalFontSize);
+    }
+
+    [Fact]
+    public void Parse_NonStringMetadata_KeepsFallback()
+    {
+        var fallback = ThemeDefaults.Dark();
+        var json = """{ "name": 123, "titleFont": [], "textFont": {} }""";
+
+        var parsed = ThemeJson.Parse(json, fallback);
+
+        parsed.Name.Should().Be(fallback.Name);
+        parsed.TitleFont.Should().Be(fallback.TitleFont);
+        parsed.TextFont.Should().Be(fallback.TextFont);
+    }
+
+    [Fact]
+    public void ResolveThemeFilePath_SanitizesSeparatorsAndRejectsTraversal()
+    {
+        RobustaImGuiTheme.ResolveThemeFilePath("..").Should().BeNull();
+        RobustaImGuiTheme.ResolveThemeFilePath(".").Should().BeNull();
+        RobustaImGuiTheme.ResolveThemeFilePath("   ").Should().BeNull();
+
+        var resolved = RobustaImGuiTheme.ResolveThemeFilePath("../../evil");
+        resolved.Should().NotBeNull();
+        Path.GetDirectoryName(resolved!).Should().Be(RobustaImGuiTheme.ThemesDirectory);
+    }
+
+    [Fact]
+    public void LoadFile_SetsIsUserTheme()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "RobustoClient.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "custom.json");
+        try
+        {
+            File.WriteAllText(path, """{ "name": "Custom" }""");
+            var loaded = ThemeJson.LoadFile(path, ThemeDefaults.Dark());
+            loaded.IsUserTheme.Should().BeTrue();
+            loaded.Name.Should().Be("Custom");
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, recursive: true);
+        }
+    }
 }
 
 
