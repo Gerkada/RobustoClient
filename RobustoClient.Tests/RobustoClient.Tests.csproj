@@ -22,6 +22,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\RobustoClient\RobustoClient.csproj" />
+        <ProjectReference Include="..\space-station-14\Content.Client\Content.Client.csproj" />
         <ProjectReference Include="..\space-station-14\Content.Shared\Content.Shared.csproj" />
         <ProjectReference Include="..\space-station-14\RobustToolbox\Robust.Shared\Robust.Shared.csproj" />
         <ProjectReference Include="..\space-station-14\RobustToolbox\Robust.Client\Robust.Client.csproj" />

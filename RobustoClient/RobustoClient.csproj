@@ -15,6 +15,9 @@
     <ItemGroup>
         <PackageReference Include="JetBrains.Annotations" Version="2024.2.0" />
         <PackageReference Include="Lib.Harmony" Version="2.3.6" />
+        <!-- Transitive via Robust.Client; declared directly because the logo loader decodes PNGs.
+             Version tracks upstream's pin to avoid NU1605. -->
+        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" PrivateAssets="all" />
         <PackageReference Include="Hexa.NET.ImGui" Version="2.2.9" PrivateAssets="all" GeneratePathProperty="true" />
         <PackageReference Include="HexaGen.Runtime" Version="1.1.21" PrivateAssets="all" GeneratePathProperty="true" />
     </ItemGroup>
@@ -37,6 +40,18 @@
             <EmbeddedResource Include="$(PkgHexa_NET_ImGui)/runtimes/osx-arm64/native/cimgui.dylib"
                               LogicalName="RobustoClient.Embedded.osx-arm64.cimgui.dylib"
                               Condition="Exists('$(PkgHexa_NET_ImGui)/runtimes/osx-arm64.cimgui.dylib')" />
+
+            <!-- Built-in themes travel inside the mod assembly: MarseyLoader ships a single .dll,
+                 so loose JSON would never reach the client. -->
+            <EmbeddedResource Include="ImGui/Theme/Builtin/Dark.json"
+                              LogicalName="RobustoClient.Theme.Dark.json" />
+
+            <!-- Header logo. Embedded rather than read from the game VFS so it cannot fail at
+                 runtime because of resource-path or load-order differences.
+                 Sprite: Resources/Textures/Clothing/Mask/clown.rsi/icon.png
+                 CC-BY-SA-3.0, taken from tgstation (commit 4f6190e); see that RSI's meta.json. -->
+            <EmbeddedResource Include="ImGui/Assets/ClownLogo.png"
+                              LogicalName="RobustoClient.Assets.ClownLogo.png" />
         </ItemGroup>
     </Target>
 
