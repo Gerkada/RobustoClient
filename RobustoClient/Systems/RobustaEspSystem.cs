@@ -14,8 +14,5 @@ public sealed class RobustaEspSystem : EntitySystem
 
         if (!_overlayManager.HasOverlay<RobustaEspOverlay>())
             _overlayManager.AddOverlay(new RobustaEspOverlay());
-
-        if (!_overlayManager.HasOverlay<RobustaItemSearchOverlay>())
-            _overlayManager.AddOverlay(new RobustaItemSearchOverlay());
     }
 }

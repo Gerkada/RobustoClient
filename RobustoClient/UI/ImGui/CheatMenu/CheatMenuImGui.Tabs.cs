@@ -84,11 +84,6 @@ public sealed partial class CheatMenuImGui
         EspColorRow("Held Items", EspFeature.HeldItems, "#FFA500");
         EspColorRow("Syndicate", EspFeature.Syndicate, "#FF0000");
         EspColorRow("Contraband", EspFeature.Contraband, "#FFA500");
-
-        Spacing();
-        RobustaImGuiWidgets.ToggleSwitch("Highlight Searched Items", ref RobustaConfig.ItemSearchEnabled);
-        SetNextItemWidth(-1f);
-        InputTextWithHint("##ItemSearch", "Item Search Query...", ref RobustaConfig.ItemSearchQuery, 128);
     }
 
     /// <summary>

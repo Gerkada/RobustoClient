@@ -217,12 +217,4 @@ public static partial class RobustaConfig
     public static HashSet<string> FriendsSet = [];
 
     #endregion
-
-    #region Session only (never persisted)
-
-    [JsonIgnore] public static bool ItemSearchEnabled = false;
-
-    [JsonIgnore] public static string ItemSearchQuery = "";
-
-    #endregion
 }
