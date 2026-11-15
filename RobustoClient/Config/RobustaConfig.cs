@@ -185,18 +185,6 @@ public static partial class RobustaConfig
             Icons ??= new();
         }
 
-        internal void SetAllEnabled(bool enabled)
-        {
-            EnsureDefaults();
-            Players.Enabled = enabled;
-            Mobs.Enabled = enabled;
-            HeldItems.Enabled = enabled;
-            Syndicate.Enabled = enabled;
-            Contraband.Enabled = enabled;
-            Health.Enabled = enabled;
-            Icons.Enabled = enabled;
-        }
-
         /// <summary>
         /// Colour for a feature: the hex override when one is set and parseable, otherwise the
         /// category's own colour from esp.yml.
