@@ -299,7 +299,7 @@ public class RobustaConfigSaveTests : IDisposable
     }
 
     [Fact]
-    public void Load_MigratesLegacyOverlaysDisableAndEspEnabled()
+    public void Load_MigratesLegacyOverlaysDisableAndKeepsEspEnabled()
     {
         var originalOverlays = RobustaConfig.DisableVisualOverlays;
         var originalEsp = RobustaConfig.Esp;
@@ -320,7 +320,10 @@ public class RobustaConfigSaveTests : IDisposable
             RobustaConfig.Load();
 
             RobustaConfig.DisableVisualOverlays.Should().BeTrue();
-            RobustaConfig.Esp.AnyEnabled.Should().BeFalse();
+            RobustaConfig.Esp.Health.Enabled.Should().BeTrue();
+            RobustaConfig.Esp.Icons.Enabled.Should().BeTrue();
+            RobustaConfig.Esp.Players.Enabled.Should().BeTrue();
+            RobustaConfig.Esp.AnyEnabled.Should().BeTrue();
         }
         finally
         {

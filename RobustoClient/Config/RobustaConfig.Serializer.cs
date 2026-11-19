@@ -215,12 +215,6 @@ public static partial class RobustaConfig
         {
             DisableVisualOverlays = overlaysDisabled;
         }
-
-        if (root[nameof(Esp)] is null && root["EspEnabled"] is JsonValue oldEsp &&
-            oldEsp.TryGetValue<bool>(out var espEnabled) && !espEnabled)
-        {
-            (Esp ??= new()).SetAllEnabled(false);
-        }
     }
 
     /// <summary>Public static fields of <see cref="RobustaConfig"/>; the whole persisted schema.</summary>
