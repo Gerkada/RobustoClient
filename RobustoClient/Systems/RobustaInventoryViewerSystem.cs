@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Content.Shared.Body;
 using Content.Shared.Mobs.Components;
 using Content.Shared.Verbs;
 using Robust.Shared.Containers;
@@ -130,6 +131,9 @@ public sealed class RobustaInventoryViewerSystem : EntitySystem
             return;
 
         if (!TryComp<MetaDataComponent>(uid, out var meta))
+            return;
+
+        if (HasComp<OrganComponent>(uid))
             return;
 
         var protoId = meta.EntityPrototype?.ID ?? "";
