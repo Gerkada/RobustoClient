@@ -1,6 +1,7 @@
 using System.Reflection;
 using Robust.Client.Input;
 using Robust.Shared.ContentPack;
+using RobustoClient.UI.ImGui.Radial;
 
 // Based on the original Arabica client by noverd. Massive thanks for the foundational framework.
 namespace RobustoClient;
@@ -40,10 +41,14 @@ public sealed class EntryPoint : GameShared
                 continue;
 
             var bind = (RobustaKeybind)field.GetValue(null)!;
-            if (bind.IsValid && bind.BaseKey != Keyboard.Key.Unknown)
-            {
-                RegisterCommand(attr.Command, bind);
-            }
+            if (!bind.IsValid || bind.BaseKey == Keyboard.Key.Unknown)
+                continue;
+
+            // A wheel owns its key, registering the command too would fire both on key-down.
+            if (RadialMenuImGui.OwnsKey(bind))
+                continue;
+
+            RegisterCommand(attr.Command, bind);
         }
     }
 

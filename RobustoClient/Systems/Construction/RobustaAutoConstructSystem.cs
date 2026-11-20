@@ -18,7 +18,7 @@ public sealed partial class RobustaAutoConstructSystem : EntitySystem
 {
     [Dependency] private readonly IPlayerManager _player = default!;
     [Dependency] private readonly IInputManager _input = default!;
-    [Dependency] private readonly IEyeManager _eye = default!;
+    [Dependency] private readonly MouseUtilitySystem _mouse = default!;
     [Dependency] private readonly IPrototypeManager _protoMan = default!;
     [Dependency] private readonly EntityLookupSystem _lookup = default!;
     [Dependency] private readonly SharedTransformSystem _transform = default!;

@@ -23,14 +23,13 @@ public static unsafe partial class RobustaImGuiTheme
     private const float MaxBakeSize = 40f;
 
     /// <summary>
-    /// Builds the font atlas. Sizes are only defaults here — the draw path passes
-    /// <see cref="ThemeTypography"/> sizes to every <c>PushFont</c>, so changing a size does not
-    /// require rebuilding this atlas.
+    /// Builds the font atlas. Sizes here are only defaults, the draw path passes
+    /// <see cref="ThemeTypography"/> sizes to every <c>PushFont</c>.
     /// </summary>
     /// <remarks>
     /// Every catalogue face is baked once, at the largest size any theme can ask for, so switching
-    /// themes only repoints the active pointers. Rebuilding the atlas on a theme switch would mean
-    /// re-uploading textures mid-session, which is what the 1.92 dynamic-texture path exists to avoid.
+    /// themes only repoints the active pointers. Rebuilding the atlas would mean re-uploading textures
+    /// mid-session, which the 1.92 dynamic-texture path exists to avoid.
     /// </remarks>
     private static void LoadFonts()
     {
@@ -64,9 +63,8 @@ public static unsafe partial class RobustaImGuiTheme
 
     /// <summary>Points the public font fields at the faces the active theme selected.</summary>
     /// <remarks>
-    /// Safe to call before the atlas exists: it returns early while nothing is baked, and
-    /// <see cref="LoadFonts"/> resolves again once it has. Each role falls back to RobotoMono and then
-    /// to whatever is already set, so an unknown key in a theme file degrades instead of blanking.
+    /// Safe before the atlas exists: it returns early while nothing is baked. Each role falls back to
+    /// RobotoMono and then to whatever is already set, so an unknown key degrades instead of blanking.
     /// </remarks>
     public static void ResolveFonts()
     {
@@ -146,7 +144,7 @@ public static unsafe partial class RobustaImGuiTheme
         }
     }
 
-    /// <summary>Parses a hex colour into an ImGui colour vector.</summary>
+    /// <summary>Parses a hex color into an ImGui color vector.</summary>
     public static uint ColU32(Vector4 color) => ColorConvertFloat4ToU32(color);
 
     // ---------------------------------------------------------------------------------------

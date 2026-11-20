@@ -179,7 +179,7 @@ public class RobustaConfigSaveTests : IDisposable
     public void Save_AdoptsAnEditMadeWhileTheProcessWasRunning()
     {
         // The exit save rewrites the whole file from memory. An edit made in a text editor while the
-        // client is open used to be replaced by the stale in-memory value; it has to be folded in.
+        // client is open used to be replaced by the stale in-memory value, it has to be folded in.
         var originalKey = RobustaConfig.ViewInvKey;
         try
         {
@@ -303,10 +303,11 @@ public class RobustaConfigSaveTests : IDisposable
     {
         var originalOverlays = RobustaConfig.DisableVisualOverlays;
         var originalEsp = RobustaConfig.Esp;
+        var originalEspOverlayEnabled = RobustaConfig.EspOverlayEnabled;
         try
         {
             RobustaConfig.DisableVisualOverlays = false;
-            RobustaConfig.Esp = new RobustaConfig.EspSettings();
+            RobustaConfig.EspOverlayEnabled = true;
 
             var dir = Path.GetDirectoryName(_tempConfigPath)!;
             Directory.CreateDirectory(dir);
@@ -320,15 +321,108 @@ public class RobustaConfigSaveTests : IDisposable
             RobustaConfig.Load();
 
             RobustaConfig.DisableVisualOverlays.Should().BeTrue();
+
+            // Upstream's guarantee: an upgrade must not silently blank the ESP categories.
             RobustaConfig.Esp.Health.Enabled.Should().BeTrue();
             RobustaConfig.Esp.Icons.Enabled.Should().BeTrue();
             RobustaConfig.Esp.Players.Enabled.Should().BeTrue();
             RobustaConfig.Esp.AnyEnabled.Should().BeTrue();
+
+            // The retired legacy key is inert: it must not reach the global overlay switch, or an
+            // upgrade would leave a user staring at a blank ESP with no idea why.
+            RobustaConfig.EspOverlayEnabled.Should().BeTrue();
         }
         finally
         {
             RobustaConfig.DisableVisualOverlays = originalOverlays;
             RobustaConfig.Esp = originalEsp;
+            RobustaConfig.EspOverlayEnabled = originalEspOverlayEnabled;
+            ResetDirty();
+        }
+    }
+
+    [Fact]
+    public void GlobalEspSwitch_DoesNotClearThePerCategorySelection()
+    {
+        var originalEsp = RobustaConfig.Esp;
+        var originalEspOverlayEnabled = RobustaConfig.EspOverlayEnabled;
+        try
+        {
+            RobustaConfig.Esp = new RobustaConfig.EspSettings();
+            RobustaConfig.Esp.Mobs.Enabled = false;
+
+            RobustaConfig.EspOverlayEnabled = false;
+            RobustaConfig.EspOverlayEnabled = true;
+
+            // Turning ESP back on restores the selection that was already there.
+            RobustaConfig.Esp.Mobs.Enabled.Should().BeFalse();
+            RobustaConfig.Esp.Players.Enabled.Should().BeTrue();
+        }
+        finally
+        {
+            RobustaConfig.Esp = originalEsp;
+            RobustaConfig.EspOverlayEnabled = originalEspOverlayEnabled;
+            ResetDirty();
+        }
+    }
+
+    [Fact]
+    public void Radials_RoundTripThroughSaveAndLoad()
+    {
+        var original = RobustaConfig.Radials;
+        try
+        {
+            RobustaConfig.Radials =
+            [
+                new()
+                {
+                    Name = "Combat",
+                    Key = new RobustaKeybind(Keyboard.Key.F9),
+                    Actions = ["robusta.hack", "robusta.auto_construct", "", ""]
+                }
+            ];
+
+            RobustaConfig.Save();
+
+            RobustaConfig.Radials = new();
+            RobustaConfig.Load();
+
+            RobustaConfig.Radials.Should().ContainSingle();
+            var settings = RobustaConfig.Radials[0];
+            settings.Name.Should().Be("Combat");
+            settings.Key.Should().Be(new RobustaKeybind(Keyboard.Key.F9));
+            settings.ActiveCount.Should().Be(2);
+            settings.ActiveAt(0).Should().Be("robusta.hack");
+            settings.ActiveAt(1).Should().Be("robusta.auto_construct");
+        }
+        finally
+        {
+            RobustaConfig.Radials = original;
+            ResetDirty();
+        }
+    }
+
+    [Fact]
+    public void Radials_NullEntry_IsDroppedOnLoad()
+    {
+        var original = RobustaConfig.Radials;
+        try
+        {
+            var dir = Path.GetDirectoryName(_tempConfigPath)!;
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(_tempConfigPath, """
+                {
+                  "Radials": [ null ]
+                }
+                """);
+
+            RobustaConfig.Load();
+
+            RobustaConfig.Radials.Should().BeEmpty();
+        }
+        finally
+        {
+            RobustaConfig.Radials = original;
             ResetDirty();
         }
     }
@@ -396,23 +490,14 @@ public class RobustaKeybindTests
     [Theory]
     [InlineData("ctrl+H", Keyboard.Key.Control)]
     [InlineData("Ctrl+H", Keyboard.Key.Control)]
-    public void Parse_CtrlAlias_MapsToControl(string text, Keyboard.Key expectedMod)
+    [InlineData("cmd+H", Keyboard.Key.LSystem)]
+    [InlineData("win+H", Keyboard.Key.LSystem)]
+    public void Parse_ModifierAliases_MapToTheirKey(string text, Keyboard.Key expectedMod)
     {
         RobustaKeybind.TryParse(text, out var bind).Should().BeTrue();
 
         bind.BaseKey.Should().Be(Keyboard.Key.H);
         bind.Mod1.Should().Be(expectedMod);
-    }
-
-    [Theory]
-    [InlineData("cmd+H")]
-    [InlineData("win+H")]
-    public void Parse_CmdAndWinAliases_MapToLSystem(string text)
-    {
-        RobustaKeybind.TryParse(text, out var bind).Should().BeTrue();
-
-        bind.BaseKey.Should().Be(Keyboard.Key.H);
-        bind.Mod1.Should().Be(Keyboard.Key.LSystem);
     }
 
     [Theory]

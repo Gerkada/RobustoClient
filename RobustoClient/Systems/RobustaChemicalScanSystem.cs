@@ -9,11 +9,14 @@ using Content.Shared.Verbs;
 using Robust.Shared.Utility;
 using Robust.Client.Player;
 using Content.Client.Examine;
+using RobustoClient.Reflection;
 
 namespace RobustoClient.Systems;
 
-// We no longer use LocalPlayerAddCompSystem for the Shared-component
-// to avoid synchronization conflicts (flickering).
+/// <summary>
+/// Client-side solution analysis. The shared-component approach flickered because it is net-synced,
+/// so this reads the replicated solution instead of adding a component.
+/// </summary>
 public sealed class RobustaChemicalScanSystem : EntitySystem
 {
     [Dependency] private readonly IEntityManager _entMan = default!;
@@ -28,33 +31,17 @@ public sealed class RobustaChemicalScanSystem : EntitySystem
     public override void Initialize()
     {
         base.Initialize();
-        
-        // 1. Always allow solution scanning on client
+
         SubscribeLocalEvent<SolutionScanEvent>(OnSolutionScan);
-        
-        // 2. Add analysis button (client verb)
         SubscribeLocalEvent<GetVerbsEvent<ExamineVerb>>(OnGetExamineVerbs);
 
-        // 3. INTERCEPT SERVER MESSAGES
-        // To prevent server from overwriting our examine window with "empty" data
+        // Intercept the response so the server's own (empty) solution text does not overwrite ours.
         SubscribeNetworkEvent<ExamineSystemMessages.ExamineInfoResponseMessage>(OnExamineInfoResponse);
     }
 
     private void OnSolutionScan(SolutionScanEvent args)
     {
-        args.CanScan = true; // Always allow scanning
-    }
-
-    private static object? GetMemberValue(object? obj, string name)
-    {
-        if (obj == null) return null;
-        var type = obj.GetType();
-        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-        var prop = type.GetProperty(name, flags);
-        if (prop != null) return prop.GetValue(obj);
-        var field = type.GetField(name, flags);
-        if (field != null) return field.GetValue(obj);
-        return null;
+        args.CanScan = true;
     }
 
     private void EnsureReflection(SharedSolutionContainerSystem solutionSystem)
@@ -62,10 +49,8 @@ public sealed class RobustaChemicalScanSystem : EntitySystem
         if (_reflectionInitialized) return;
         _reflectionInitialized = true;
 
-        _solutionManagerType = typeof(SharedSolutionContainerSystem).Assembly
-            .GetType("Content.Shared.Chemistry.Components.SolutionManager.SolutionManagerComponent")
-            ?? typeof(SharedSolutionContainerSystem).Assembly
-            .GetType("Content.Shared.Chemistry.Components.SolutionContainerManagerComponent");
+        _solutionManagerType = Reflect.FindType("Content.Shared.Chemistry.Components.SolutionManager.SolutionManagerComponent")
+            ?? Reflect.FindType("Content.Shared.Chemistry.Components.SolutionContainerManagerComponent");
 
         if (_solutionManagerType == null) return;
 
@@ -78,8 +63,7 @@ public sealed class RobustaChemicalScanSystem : EntitySystem
                                  m.GetParameters()[0].ParameterType.IsGenericType &&
                                  m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(Entity<>));
 
-        _getSolutionExamineMethod = sysType.GetMethod("GetSolutionExamine",
-            BindingFlags.Instance | BindingFlags.NonPublic);
+        _getSolutionExamineMethod = Reflect.GetMethod(sysType, "GetSolutionExamine", ReflectOptions.Any);
     }
 
     private bool TryBuildSolutionExamineMessage(EntityUid uid, out FormattedMessage? chemMsg)
@@ -97,7 +81,7 @@ public sealed class RobustaChemicalScanSystem : EntitySystem
         }
         if (component == null) return false;
 
-        var solutionName = GetMemberValue(component, "Solution") as string ?? "default";
+        var solutionName = Reflect.GetString(component, "Solution") ?? "default";
         var solutionSystem = _entMan.System<SharedSolutionContainerSystem>();
         EnsureReflection(solutionSystem);
 

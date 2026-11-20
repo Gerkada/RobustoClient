@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using RobustoClient.UI.ImGui.Radial;
 
 namespace RobustoClient;
 
@@ -16,10 +17,7 @@ public static partial class RobustaConfig
     private static readonly object ConfigLock = new();
     private static bool _dirty;
 
-    /// <summary>
-    /// Text of the file as this process last read or wrote it. Compared against the file before each
-    /// save so an edit made outside the game is adopted instead of being overwritten.
-    /// </summary>
+    /// <summary>File text as this process last read or wrote it, so an outside edit is adopted.</summary>
     private static string? _lastFileContents;
     internal static string? ConfigPathOverride { get; set; }
 
@@ -32,10 +30,7 @@ public static partial class RobustaConfig
         "Configs",
         "config.json");
 
-    /// <summary>
-    /// Records that the in-memory config no longer matches disk. Does not write; persistence happens
-    /// at defined boundaries (menu close, explicit flush, process exit) rather than on a timer.
-    /// </summary>
+    /// <summary>Marks the in-memory config as differing from disk. Does not write.</summary>
     public static void MarkDirty()
     {
         lock (ConfigLock)
@@ -89,10 +84,9 @@ public static partial class RobustaConfig
     }
 
     /// <summary>
-    /// Applies every key whose on-disk value differs from the value this process last read or wrote.
-    /// Without this, editing config.json while the client is running loses the edit at the next save,
-    /// because the file is written from memory in full. A key changed both in game and on disk
-    /// resolves to the on-disk value: the file is the deliberate act.
+    /// Folds in every key whose on-disk value differs from what this process last read or wrote. The
+    /// file is rewritten from memory in full, so without this an outside edit is lost at the next save.
+    /// A key changed both in game and on disk resolves to the on-disk value.
     /// </summary>
     private static void AdoptExternalEdits()
     {
@@ -123,13 +117,13 @@ public static partial class RobustaConfig
         }
         catch (JsonException ex)
         {
-            MarseyLogger.Warn($"config.json has invalid JSON ({ex.Message}); overwriting with in-memory values.");
+            MarseyLogger.Warn($"config.json has invalid JSON ({ex.Message}), overwriting with in-memory values.");
             return;
         }
 
         if (changed == null)
         {
-            MarseyLogger.Warn("config.json was edited but is not a JSON object; keeping it as written.");
+            MarseyLogger.Warn("config.json was edited but is not a JSON object, keeping it as written.");
             return;
         }
 
@@ -154,6 +148,7 @@ public static partial class RobustaConfig
         }
 
         (Esp ??= new()).EnsureDefaults();
+        RadialMenuImGui.Ensure();
 
         if (adopted.Count > 0)
             MarseyLogger.Info($"Adopted externally edited config keys: {string.Join(", ", adopted)}.");
@@ -200,6 +195,7 @@ public static partial class RobustaConfig
 
                 MigrateLegacyKeys(root);
                 (Esp ??= new()).EnsureDefaults();
+                RadialMenuImGui.Ensure();
             }
             catch (Exception ex)
             {
@@ -217,7 +213,7 @@ public static partial class RobustaConfig
         }
     }
 
-    /// <summary>Public static fields of <see cref="RobustaConfig"/>; the whole persisted schema.</summary>
+    /// <summary>Public static fields of <see cref="RobustaConfig"/>, the whole persisted schema.</summary>
     private static FieldInfo[] ConfigFields() =>
         typeof(RobustaConfig)
             .GetFields(ConfigFieldFlags)

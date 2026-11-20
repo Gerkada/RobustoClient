@@ -155,6 +155,7 @@ public unsafe class ImGuiInputBridgeTests : IDisposable
         RobustaImGuiManager.Radar.IsOpen = false;
         RobustaImGuiManager.InventoryViewer.IsOpen = false;
         RobustaImGuiManager.AutoChem.IsOpen = false;
+        RobustaImGuiManager.RadialMenu.Cancel();
     }
 
     private static void SetupHeadlessImGuiContext()
@@ -208,7 +209,7 @@ public unsafe class ImGuiInputBridgeTests : IDisposable
     {
         SetupHeadlessImGuiContext();
 
-        // Close flushes at most once; reopening must not flush again.
+        // Close flushes at most once, reopening must not flush again.
         RobustaImGuiManager.CheatMenu.IsOpen = false;
 
         var dirtyField = typeof(RobustaConfig).GetField("_dirty", BindingFlags.NonPublic | BindingFlags.Static)!;
@@ -218,5 +219,48 @@ public unsafe class ImGuiInputBridgeTests : IDisposable
         ImGuiInputBridge.OnWindowVisibilityChanged(true);
 
         dirtyField.GetValue(null).Should().Be(false, "opening the menu must not queue a config write");
+    }
+
+    [Fact]
+    public void UnwindFrame_ClosesAWindowLeftOpenByAThrowingDraw()
+    {
+        SetupHeadlessImGuiContext();
+
+        // This is why the frame loop unwinds on a draw failure: ImGui asserts "Missing End()" when a
+        // window is still open at Render(), and that assertion kills the process.
+        Hexa.NET.ImGui.ImGui.NewFrame();
+        var depth = RobustaImGuiManager.CurrentStackDepthForTests();
+
+        Hexa.NET.ImGui.ImGui.Begin("ThrowingWin");
+        RobustaImGuiManager.UnwindFrame(depth);
+
+        // Render() would abort the host here if the window were still open.
+        Hexa.NET.ImGui.ImGui.Render();
+
+        // The next frame must start cleanly.
+        Hexa.NET.ImGui.ImGui.NewFrame();
+        Hexa.NET.ImGui.ImGui.Render();
+    }
+
+    [Fact]
+    public void UnwindFrame_RestoresTheFontStackToItsRecordedDepth()
+    {
+        SetupHeadlessImGuiContext();
+
+        Hexa.NET.ImGui.ImGui.NewFrame();
+        var depth = RobustaImGuiManager.CurrentStackDepthForTests();
+        var font = Hexa.NET.ImGui.ImGui.GetFont();
+
+        Hexa.NET.ImGui.ImGui.PushFont(font, 16f);
+        Hexa.NET.ImGui.ImGui.PushFont(font, 20f);
+
+        RobustaImGuiManager.UnwindFrame(depth);
+
+        // Unwinding to the recorded depth leaves exactly the frame's own font pushed. Popping past it
+        // asserts "Calling PopFont() too many times!".
+        RobustaImGuiManager.CurrentStackDepthForTests().Fonts.Should().Be(depth.Fonts);
+
+        // Render() would abort on an unbalanced font stack.
+        Hexa.NET.ImGui.ImGui.Render();
     }
 }

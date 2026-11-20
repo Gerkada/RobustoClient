@@ -1,23 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using Content.Shared.Inventory;
-using Content.Shared.Hands.Components;
-using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Mobs.Components;
 using Content.Shared.Verbs;
-using Robust.Client.GameObjects;
-using Robust.Client.Graphics;
-using Robust.Client.Input;
-using Robust.Client.Player;
-using Robust.Client.UserInterface;
 using Robust.Shared.Containers;
 using Robust.Shared.GameObjects;
-using Robust.Shared.IoC;
-using Robust.Shared.Map;
-using Robust.Shared.Player;
 using Robust.Shared.Utility;
-using RobustoClient.UI;
+using RobustoClient.Systems.Abstract;
 using RobustoClient.UI.ImGui;
 
 namespace RobustoClient.Systems;
@@ -35,9 +23,6 @@ public sealed class InventoryEntry
 
 public sealed class RobustaInventoryViewerSystem : EntitySystem
 {
-    [Dependency] private readonly IPlayerManager _player = default!;
-    [Dependency] private readonly SharedHandsSystem _hands = default!;
-    [Dependency] private readonly InventorySystem _inventory = default!;
     [Dependency] private readonly SharedContainerSystem _containers = default!;
     [Dependency] private readonly RobustaSyndicateDetectorSystem _syndi = default!;
 
@@ -92,34 +77,10 @@ public sealed class RobustaInventoryViewerSystem : EntitySystem
             return;
         }
 
-        var aim = EntityManager.System<RobustaAimSystem>();
-        if (aim.LockedTarget.HasValue && EntityManager.EntityExists(aim.LockedTarget.Value))
+        if (EntityManager.System<MouseUtilitySystem>()
+            .TryResolveTarget(out var target, whitelist: [typeof(MobStateComponent)]))
         {
-            OpenInventoryWindow(aim.LockedTarget.Value);
-            return;
-        }
-
-        var input = IoCManager.Resolve<IInputManager>();
-        var eye = IoCManager.Resolve<IEyeManager>();
-        var mousePos = eye.ScreenToMap(input.MouseScreenPosition);
-
-        if (mousePos.MapId != MapId.Nullspace)
-        {
-            var lookup = EntityManager.System<EntityLookupSystem>();
-            var entities = lookup.GetEntitiesInRange(mousePos, 1.0f);
-
-            var mob = entities.FirstOrDefault(e => HasComp<MobStateComponent>(e));
-            if (mob != default && EntityManager.EntityExists(mob))
-            {
-                OpenInventoryWindow(mob);
-                return;
-            }
-        }
-
-        var localPlayer = _player.LocalSession?.AttachedEntity;
-        if (localPlayer.HasValue && EntityManager.EntityExists(localPlayer.Value))
-        {
-            OpenInventoryWindow(localPlayer.Value);
+            OpenInventoryWindow(target);
         }
     }
 
@@ -136,47 +97,32 @@ public sealed class RobustaInventoryViewerSystem : EntitySystem
         var results = new List<InventoryEntry>();
         var scanned = new HashSet<EntityUid>();
 
-        // 1. Hands
-        if (TryComp<HandsComponent>(target, out var hands))
+        // Every container the mob owns, which is the same set the state layer's carried walk sees.
+        // A fixed slot list cannot do this: it misses jumpsuit and any slot a downstream build adds,
+        // and those blind spots were reported by the detector but never listed here.
+        if (!TryComp<ContainerManagerComponent>(target, out var containers))
+            return results;
+
+        foreach (var (containerId, container) in containers.Containers)
         {
-            foreach (var handName in hands.Hands.Keys)
-            {
-                EntityUid? held = null;
+            if (!ShouldListContainer(containerId))
+                continue;
 
-                var type = _hands.GetType();
-                var method3 = type.GetMethod("GetHeldItem", new[] { typeof(Entity<HandsComponent>), typeof(string), typeof(bool) });
-                if (method3 != null)
-                    held = (EntityUid?)method3.Invoke(_hands, new object?[] { new Entity<HandsComponent>(target, hands), handName, false });
-                else
-                {
-                    var method2 = type.GetMethod("GetHeldItem", new[] { typeof(Entity<HandsComponent>), typeof(string) });
-                    if (method2 != null)
-                        held = (EntityUid?)method2.Invoke(_hands, new object?[] { new Entity<HandsComponent>(target, hands), handName });
-                }
+            var label = Capitalize(containerId);
 
-                if (held != null && held.Value.IsValid())
-                {
-                    AddItem(held.Value, $"Hand ({handName})", results, scanned, 0);
-                }
-            }
-        }
-
-        // 2. Inventory slots
-        if (TryComp<InventoryComponent>(target, out _))
-        {
-            string[] slots = { "id", "belt", "back", "pocket1", "pocket2", "suitstorage", "outerClothing", "gloves", "shoes", "head", "mask", "eyes", "ears", "neck" };
-
-            foreach (var slot in slots)
-            {
-                if (_inventory.TryGetSlotEntity(target, slot, out var slotEnt) && slotEnt.HasValue)
-                {
-                    AddItem(slotEnt.Value, Capitalize(slot), results, scanned, 0);
-                }
-            }
+            foreach (var contained in container.ContainedEntities)
+                AddItem(contained, label, results, scanned, 0);
         }
 
         return results;
     }
+
+    /// <summary>
+    /// Whether a container holds possessions rather than UI. The action bar is a set of button
+    /// entities, so listing it would fill the window with actions. Pure so it is testable.
+    /// </summary>
+    internal static bool ShouldListContainer(string containerId) =>
+        !containerId.Equals("actions", StringComparison.OrdinalIgnoreCase);
 
     private void AddItem(EntityUid uid, string containerName, List<InventoryEntry> results, HashSet<EntityUid> scanned, int depth)
     {
@@ -195,44 +141,17 @@ public sealed class RobustaInventoryViewerSystem : EntitySystem
             meta.EntityName == "VIRTUAL ITEM YOU SHOULD NOT SEE THIS")
             return;
 
-        // 1. Check ContrabandComponent severity directly on THIS item
+        // 1. Contraband severity comes straight off the item.
         string severity = "";
         if (TryComp<Content.Shared.Contraband.ContrabandComponent>(uid, out var contra))
-        {
             severity = contra.Severity.ToString();
-        }
 
-        // 2. Check if THIS item is a disguised Uplink
-        var status = _syndi.CheckPlayerStatus(uid);
+        // 2. Whether the item counts as syndicate gear is the detector's call, so the viewer and the
+        //    player flags cannot drift apart on what "syndicate gear" means.
+        bool isSyndi = _syndi.IsSyndicateGear(uid);
 
-        var protoLower = protoId.ToLowerInvariant();
-        bool isEmag = protoLower.StartsWith("emag") || protoLower.Contains("_emag") || protoLower.Contains("emag_") || protoLower == "emag";
-
-        // Exclude specific structures/props from being treated as Syndicate contraband
-        bool isExcluded = protoLower.Contains("airlocksyndicateglass") ||
-                          protoLower.Contains("poster") ||
-                          protoLower.Contains("toy") ||
-                          protoLower.Contains("plushie");
-
-        if (isExcluded && severity.Equals("Syndicate", StringComparison.OrdinalIgnoreCase))
-        {
-            severity = "";
-        }
-
-        var isSyndi = false;
-        if (!isExcluded && (
-            status.Uplink ||
-            severity.Equals("Syndicate", StringComparison.OrdinalIgnoreCase) ||
-            isEmag ||
-            protoLower.Contains("esword") ||
-            protoLower.Contains("c4") ||
-            protoLower.Contains("syndicate") ||
-            protoLower.Contains("stealthbox")))
-        {
-            isSyndi = true;
-            if (string.IsNullOrEmpty(severity))
-                severity = "Syndicate";
-        }
+        if (isSyndi && string.IsNullOrEmpty(severity))
+            severity = "Syndicate";
 
         results.Add(new InventoryEntry
         {

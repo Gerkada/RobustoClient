@@ -6,16 +6,20 @@ namespace RobustoClient.UI.ImGui;
 
 public sealed partial class CheatMenuImGui
 {
-    public void StopListening() => _activeListeningTarget = null;
+    public void StopListening()
+    {
+        _captureSink = null;
+        _captureOwner = null;
+    }
 
     /// <summary>
-    /// Consumes key events while a bind is being captured. Returns true when the event was handled
-    /// and must not reach the game; <see cref="RobustaKeybind.IsModifierOrIgnoredKey"/> are swallowed
-    /// but do not end the capture, so modifier presses can be part of the combination.
+    /// Consumes key events while a bind or a wheel key is being captured. Returns true when the event
+    /// was handled and must not reach the game, <see cref="RobustaKeybind.IsModifierOrIgnoredKey"/>
+    /// are swallowed but do not end the capture, so modifier presses can be part of the combination.
     /// </summary>
     public bool TryHandleKeybindListening(KeyEventArgs ev)
     {
-        if (_activeListeningTarget == null)
+        if (_captureSink == null)
             return false;
 
         switch (ev.Key)
@@ -26,7 +30,7 @@ public sealed partial class CheatMenuImGui
 
             case Keyboard.Key.BackSpace:
             case Keyboard.Key.Delete:
-                ApplyBind(_activeListeningTarget, new RobustaKeybind(Keyboard.Key.Unknown));
+                _captureSink(new RobustaKeybind(Keyboard.Key.Unknown));
                 StopListening();
                 return true;
         }
@@ -34,7 +38,7 @@ public sealed partial class CheatMenuImGui
         if (RobustaKeybind.IsModifierOrIgnoredKey(ev.Key))
             return true;
 
-        ApplyBind(_activeListeningTarget, RobustaKeybind.FromCapture(ev.Key, ev.Shift, ev.Control, ev.Alt, ev.System));
+        _captureSink(RobustaKeybind.FromCapture(ev.Key, ev.Shift, ev.Control, ev.Alt, ev.System));
         StopListening();
         return true;
     }

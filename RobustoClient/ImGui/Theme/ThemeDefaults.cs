@@ -6,7 +6,7 @@ namespace RobustoClient.ImGui.Theme;
 /// <summary>
 /// Compiled-in palettes used when the embedded JSON is missing, unreadable or incomplete.
 /// A malformed theme file must never produce an unusable UI, so every token has a safe value here.
-/// Keep in sync with <c>Builtin/Dark.json</c>; the round-trip test
+/// Keep in sync with <c>Builtin/Dark.json</c>, the round-trip test
 /// asserts the two agree.
 /// </summary>
 public static class ThemeDefaults
@@ -58,6 +58,18 @@ public static class ThemeDefaults
             SeverityRestricted = Hex("#F7F7F7"),
             SeverityMinor = Hex("#B0B0B0"),
             SeverityUnknown = Hex("#E090FF"),
+            AntagonistNinja = Hex("#BF5FFF"),
+            AntagonistDragon = Hex("#FF3333"),
+            AntagonistChangeling = Hex("#FB502B"),
+            AntagonistClone = Hex("#8FD8FF"),
+            AntagonistRatKing = Hex("#A0522D"),
+            AntagonistNukie = Hex("#FF1744"),
+            AntagonistThief = Hex("#C9A227"),
+            AntagonistZombie = Hex("#6BAF6B"),
+            AntagonistInitialInfected = Hex("#9ACD32"),
+            AntagonistHeadRev = Hex("#E03C3C"),
+            AntagonistRev = Hex("#FF8C69"),
+            AntagonistWizard = Hex("#BF5FFF"),
             ScrollbarBg = Hex("#24232399"),
             ScrollbarGrab = Hex("#272626"),
             ScrollbarGrabHovered = Hex("#2C2C2C")

@@ -16,7 +16,7 @@ public sealed partial class CheatMenuImGui
 
     /// <summary>
     /// Headings of the THEMES tab's own sections. Kept here so a test can prove they stay distinct
-    /// from the colour section names: a duplicate label is also a duplicate ImGui id, which makes two
+    /// from the color section names: a duplicate label is also a duplicate ImGui id, which makes two
     /// sections open and close as one.
     /// </summary>
     internal static readonly string[] FixedThemeSections =
@@ -48,7 +48,7 @@ public sealed partial class CheatMenuImGui
 
     /// <summary>
     /// Title and text face pickers. Both keys are stored on the palette, so they export with the
-    /// theme and apply immediately; the atlas already holds every face.
+    /// theme and apply immediately, the atlas already holds every face.
     /// </summary>
     private void DrawThemeFontSection()
     {
@@ -69,7 +69,7 @@ public sealed partial class CheatMenuImGui
         {
             Spacing();
             RobustaImGuiWidgets.MutedText(
-                "This text face covers Latin only; other scripts will render as boxes.");
+                "This text face covers Latin only, other scripts will render as boxes.");
         }
 
         Spacing();
@@ -240,36 +240,44 @@ public sealed partial class CheatMenuImGui
 
     private void DrawThemeColorSections()
     {
-        var colors = RobustaImGuiTheme.Current.Colors;
-
         foreach (var (section, tokens) in ThemeColorTokens.Sections)
         {
             if (!CollapsingHeader(section))
                 continue;
 
-            // Edits are previewed live but never written until the user exports or saves.
-            foreach (var token in tokens)
+            DrawColorTokenRows(tokens);
+            Spacing();
+        }
+    }
+
+    /// <summary>
+    /// One color picker per token. Shared by the THEMES tab and the VISUALS tab's antagonist card,
+    /// so both write through the same live-palette contract.
+    /// </summary>
+    private static void DrawColorTokenRows(string[] tokens)
+    {
+        var colors = RobustaImGuiTheme.Current.Colors;
+
+        // Edits are previewed live but never written until the user exports or saves.
+        foreach (var token in tokens)
+        {
+            if (!ThemeColorTokens.TryGetProperty(token, out var prop))
+                continue;
+
+            var value = (Vector4)prop.GetValue(colors)!;
+            if (ColorEdit4($"##{token}", ref value, ImGuiColorEditFlags.NoInputs))
             {
-                if (!ThemeColorTokens.TryGetProperty(token, out var prop))
-                    continue;
+                prop.SetValue(colors, value);
 
-                var value = (Vector4)prop.GetValue(colors)!;
-                if (ColorEdit4($"##{token}", ref value, ImGuiColorEditFlags.NoInputs))
-                {
-                    prop.SetValue(colors, value);
-
-                    // Same contract as DrawFloatSetting: mutate the live palette, then mark the style
-                    // dirty so RenderFrameCore re-applies it next frame. Without this, any colour that
-                    // reaches the screen through an ImGuiCol slot stays stale until something else
-                    // happens to dirty the style.
-                    RobustaImGuiTheme.ApplyPalette(RobustaImGuiTheme.Current);
-                }
-
-                SameLine();
-                RobustaImGuiWidgets.MutedText(token);
+                // Same contract as DrawFloatSetting: mutate the live palette, then mark the style
+                // dirty so RenderFrameCore re-applies it next frame. Without this, any color that
+                // reaches the screen through an ImGuiCol slot stays stale until something else
+                // happens to dirty the style.
+                RobustaImGuiTheme.ApplyPalette(RobustaImGuiTheme.Current);
             }
 
-            Spacing();
+            SameLine();
+            RobustaImGuiWidgets.MutedText(token);
         }
     }
 
@@ -378,7 +386,7 @@ public sealed partial class CheatMenuImGui
             ImportTheme();
 
         Spacing();
-        RobustaImGuiWidgets.MutedText("Edits are preview-only. Export writes them to disk; closing the menu discards them.");
+        RobustaImGuiWidgets.MutedText("Edits are preview-only. Export writes them to disk, closing the menu discards them.");
     }
 
     private void ExportCurrentTheme()

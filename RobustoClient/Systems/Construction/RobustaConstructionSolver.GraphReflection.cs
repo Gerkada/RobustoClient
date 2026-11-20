@@ -1,8 +1,8 @@
 using System.Collections;
-using System.Reflection;
 using Content.Shared.Construction;
 using Content.Shared.Construction.Prototypes;
 using Robust.Shared.Prototypes;
+using RobustoClient.Reflection;
 
 namespace RobustoClient.Systems.Construction;
 
@@ -56,86 +56,9 @@ public sealed partial class RobustaConstructionSolver
 
     private string? GetRawNodeEntityId(ConstructionGraphNode node, EntityUid? uid)
     {
-        var entityObj = GetMemberValue(node, "Entity") ?? GetMemberValue(node, "_entity");
-        if (entityObj == null)
-            return null;
-
-        if (entityObj is string str)
-            return string.IsNullOrEmpty(str) ? null : str;
-
-        var directId = GetStringMember(entityObj, "Id") ?? GetStringMember(entityObj, "Prototype");
-        if (!string.IsNullOrEmpty(directId))
-            return directId;
-
-        var getIdMethod = entityObj.GetType().GetMethod("GetId", BindingFlags.Public | BindingFlags.Instance);
-        if (getIdMethod != null)
-        {
-            try
-            {
-                var parameters = getIdMethod.GetParameters();
-                var args = new object?[parameters.Length];
-                for (int i = 0; i < parameters.Length; i++)
-                {
-                    var pType = parameters[i].ParameterType;
-                    if (pType == typeof(EntityUid?) || pType == typeof(EntityUid))
-                        args[i] = uid;
-                    else if (pType == typeof(IEntityManager))
-                        args[i] = _entMan;
-                    else if (pType == typeof(IPrototypeManager))
-                        args[i] = _protoMan;
-                    else if (pType == typeof(IComponentFactory))
-                        args[i] = _compFactory;
-                    else if (pType.Name == "GraphNodeEntityArgs")
-                        args[i] = CreateGraphNodeEntityArgs(pType, uid);
-                    else
-                        args[i] = null;
-                }
-
-                var res = getIdMethod.Invoke(entityObj, args)?.ToString();
-                if (!string.IsNullOrEmpty(res))
-                    return res;
-            }
-            catch
-            {
-                // Ignore if node entity requires server-only state
-            }
-        }
-
-        return null;
-    }
-
-    private object? CreateGraphNodeEntityArgs(Type pType, EntityUid? uid)
-    {
-        foreach (var ctor in pType.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
-        {
-            var cParams = ctor.GetParameters();
-            var cArgs = new object?[cParams.Length];
-            bool ok = true;
-            for (int i = 0; i < cParams.Length; i++)
-            {
-                var t = cParams[i].ParameterType;
-                if (t == typeof(EntityUid?) || t == typeof(EntityUid))
-                    cArgs[i] = uid ?? EntityUid.Invalid;
-                else if (t == typeof(IEntityManager))
-                    cArgs[i] = _entMan;
-                else if (t == typeof(IPrototypeManager))
-                    cArgs[i] = _protoMan;
-                else if (t == typeof(IComponentFactory))
-                    cArgs[i] = _compFactory;
-                else if (t.IsValueType)
-                    cArgs[i] = Activator.CreateInstance(t);
-                else
-                {
-                    ok = false;
-                    break;
-                }
-            }
-
-            if (ok)
-                return ctor.Invoke(cArgs);
-        }
-
-        return pType.IsValueType ? Activator.CreateInstance(pType) : null;
+        // Board nodes need a live uid, so they return null at cache-build time and are mapped by prototype id elsewhere.
+        var id = node.Entity.GetId(uid, uid, new GraphNodeEntityArgs(_entMan));
+        return string.IsNullOrEmpty(id) ? null : id;
     }
 
     private IComponent? FindComponentByName(EntityUid uid, string componentTypeName)
@@ -151,36 +74,11 @@ public sealed partial class RobustaConstructionSolver
         return null;
     }
 
-    private static object? GetMemberValue(object? obj, string name)
-    {
-        if (obj == null)
-            return null;
+    private static object? GetMemberValue(object? obj, string name) =>
+        Reflect.Get(obj, name, ReflectOptions.Any);
 
-        var type = obj.GetType();
-        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase;
-
-        var prop = type.GetProperty(name, flags);
-        if (prop != null)
-            return prop.GetValue(obj);
-
-        var field = type.GetField(name, flags) ?? type.GetField("_" + name, flags);
-        if (field != null)
-            return field.GetValue(obj);
-
-        return null;
-    }
-
-    private static string? GetStringMember(object? obj, string name)
-    {
-        var val = GetMemberValue(obj, name);
-        if (val == null)
-            return null;
-        if (val is string s)
-            return s;
-        if (GetMemberValue(val, "Id") is string idStr)
-            return idStr;
-        return val.ToString();
-    }
+    private static string? GetStringMember(object? obj, string name) =>
+        ReflectConvert.TryGetId(GetMemberValue(obj, name));
 
     private static int GetIntMember(object? obj, string name, int defaultValue = 0)
     {

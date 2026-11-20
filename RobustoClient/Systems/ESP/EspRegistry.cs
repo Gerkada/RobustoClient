@@ -16,7 +16,7 @@ public sealed class EspRegistry
     public IReadOnlyCollection<EspCategoryDefinition> Categories => _categories.Values;
 
     internal const string DefaultConfig = @"
-# rob-esp-version: 2
+# rob-esp-version: 8
 - id: OocName
   priority: 5
   color: ""#FFFFFF""
@@ -44,6 +44,16 @@ public sealed class EspRegistry
   conditions:
     hasComponent: [ ""Ghost"" ]
 
+- id: JobCommand
+  priority: 85
+  color: ""#FFD700""
+  textFormat: ""[{JobTitle}] {EntityName}""
+  group: ""ICName""
+  dock: Top
+  conditions:
+    customRule: [ ""IsCommand"" ]
+    hasNotComponent: [ ""PAI"" ]
+
 - id: JobSecurity
   priority: 80
   color: ""#7070FF""
@@ -51,7 +61,7 @@ public sealed class EspRegistry
   group: ""ICName""
   dock: Top
   conditions:
-    jobContains: [ ""Security"", ""Officer"", ""Warden"", ""Captain"" ]
+    customRule: [ ""IsSecurity"" ]
     hasNotComponent: [ ""PAI"" ]
 
 - id: JobMedical
@@ -102,6 +112,34 @@ public sealed class EspRegistry
   conditions:
     customRule: [ ""IsAntag"" ]
 
+- id: AntagonistKindTag
+  priority: 91
+  color: ""#FF0000""
+  colorFrom: ""AntagonistColor""
+  textFormat: ""{Antagonist}""
+  feature: Syndicate
+  dock: Right
+  conditions:
+    customRule: [ ""IsDetectedAntag"" ]
+
+- id: CloneTag
+  priority: 95
+  color: ""#8FD8FF""
+  textFormat: ""[CLONE?]""
+  feature: Syndicate
+  dock: Right
+  conditions:
+    customRule: [ ""IsClone"" ]
+
+- id: ThiefTag
+  priority: 92
+  color: ""#C9A227""
+  textFormat: ""[THIEF]""
+  feature: Syndicate
+  dock: Right
+  conditions:
+    customRule: [ ""IsThief"" ]
+
 - id: ContrabandTag
   priority: 80
   color: ""#FFA500""
@@ -129,12 +167,8 @@ public sealed class EspRegistry
     customRule: [ ""HasHeldItems"" ]
 ";
 
-    /// <summary>
-    /// Version of <see cref="DefaultConfig"/>. A file on disk without this stamp, or with an older one,
-    /// is rewritten from the default so a shipped category change reaches an existing install. The
-    /// rewrite discards local edits to esp.yml, which is intended: there is no editor for the file.
-    /// </summary>
-    private const int ConfigVersion = 2;
+    /// <summary>Version of <see cref="DefaultConfig"/>, an older file on disk is rewritten from the default.</summary>
+    internal const int ConfigVersion = 8;
 
     private const string ConfigVersionKey = "# rob-esp-version:";
 
@@ -219,6 +253,9 @@ public sealed class EspRegistry
         if (mapping.TryGet("color", out ValueDataNode? colorNode))
             def.Color = Color.FromHex(colorNode.Value, Color.White);
 
+        if (mapping.TryGet("colorFrom", out ValueDataNode? colorFromNode))
+            def.ColorFrom = colorFromNode.Value;
+
         if (mapping.TryGet("textFormat", out ValueDataNode? textNode))
             def.TextFormat = textNode.Value;
 
@@ -236,7 +273,7 @@ public sealed class EspRegistry
             if (Enum.TryParse<EspFeature>(featureNode.Value, true, out var feature))
                 def.Feature = feature;
             else
-                MarseyLogger.Warn($"[ESP] Unknown feature '{featureNode.Value}' on '{def.Id}'; using Players.");
+                MarseyLogger.Warn($"[ESP] Unknown feature '{featureNode.Value}' on '{def.Id}', using Players.");
         }
 
         if (mapping.TryGet("conditions", out MappingDataNode? condMapping))

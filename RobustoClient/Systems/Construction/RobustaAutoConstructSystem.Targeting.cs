@@ -16,7 +16,7 @@ public sealed partial class RobustaAutoConstructSystem
         outOfRangeDist = 0f;
 
         var playerPos = _transform.GetMapCoordinates(player);
-        var nearby = _lookup.GetEntitiesInRange(cursorMapCoords, 0.65f, LookupFlags.Uncontained);
+        var nearby = _mouse.GetEntitiesNearCursor(cursorMapCoords, 0.65f);
 
         // 1. Check for a ConstructionGhostComponent first
         EntityUid? bestGhost = null;

@@ -1,12 +1,14 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using Hexa.NET.ImGui;
+using static Hexa.NET.ImGui.ImGui;
 using Robust.Client.Graphics;
 using Robust.Client.Input;
 using Robust.Client.UserInterface;
 using Robust.Shared.IoC;
 using Robust.Shared.Timing;
 using RobustoClient.ImGui;
+using RobustoClient.UI.ImGui.Radial;
 
 namespace RobustoClient.UI.ImGui;
 
@@ -23,11 +25,14 @@ public static unsafe class RobustaImGuiManager
 
     public static CheatMenuImGui CheatMenu { get; } = new();
     public static RadarImGui Radar { get; } = new();
+    public static RadarInfoImGui RadarInfo { get; } = new();
     public static InventoryViewerImGui InventoryViewer { get; } = new();
     public static AutoChemImGui AutoChem { get; } = new();
+    public static RadialMenuImGui RadialMenu { get; } = new();
 
     public static bool AnyWindowVisible =>
-        CheatMenu.IsOpen || Radar.IsOpen || InventoryViewer.IsOpen || AutoChem.IsOpen;
+        CheatMenu.IsOpen || Radar.IsOpen || RadarInfo.IsOpen ||
+        InventoryViewer.IsOpen || AutoChem.IsOpen || RadialMenu.IsActive;
 
     public static bool TryResolve<T>([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? instance) where T : class
     {
@@ -43,16 +48,16 @@ public static unsafe class RobustaImGuiManager
         if (IsInitialized)
             return;
 
-        var ctx = Hexa.NET.ImGui.ImGui.CreateContext();
+        var ctx = CreateContext();
         _context = (nint)ctx.Handle;
-        Hexa.NET.ImGui.ImGui.SetCurrentContext(ctx);
+        SetCurrentContext(ctx);
 
-        var io = Hexa.NET.ImGui.ImGui.GetIO();
+        var io = GetIO();
         io.IniFilename = null;
         io.LogFilename = null;
 
         // Trickling reorders queued events within a frame and breaks the click registration the
-        // input bridge relies on. Set once here; nothing else should touch it.
+        // input bridge relies on. Set once here, nothing else should touch it.
         io.ConfigInputTrickleEventQueue = false;
 
         _renderer = new ImGuiGl3Renderer();
@@ -69,7 +74,7 @@ public static unsafe class RobustaImGuiManager
     internal static void EnsureCurrentContext()
     {
         if (_context != 0)
-            Hexa.NET.ImGui.ImGui.SetCurrentContext(new ImGuiContextPtr((ImGuiContext*)_context));
+            SetCurrentContext(new ImGuiContextPtr((ImGuiContext*)_context));
     }
 
     public static void RenderFrame()
@@ -90,14 +95,18 @@ public static unsafe class RobustaImGuiManager
         }
 
         EnsureInitialized(clyde);
-        Hexa.NET.ImGui.ImGui.SetCurrentContext(new ImGuiContextPtr((ImGuiContext*)_context));
+        SetCurrentContext(new ImGuiContextPtr((ImGuiContext*)_context));
 
-        // Palette edits from the Themes tab arrive as a dirty flag; re-applying is cheap struct writes.
+        // Palette edits from the Themes tab arrive as a dirty flag, re-applying is cheap struct writes.
         if (RobustaImGuiTheme.StyleDirty)
         {
             RobustaImGuiTheme.ApplyStyle();
             RobustaImGuiTheme.ClearStyleDirty();
         }
+
+        // The radial arms and commits before the visibility gate: while nothing is visible this
+        // method returns before NewFrame, so a held bind would otherwise never be seen.
+        RadialMenu.PollHold(inputMan, uiMan);
 
         bool anyVisible = AnyWindowVisible;
         if (!anyVisible && !_wasAnyWindowVisible)
@@ -110,16 +119,80 @@ public static unsafe class RobustaImGuiManager
         }
 
         ImGuiInputBridge.UpdateBeforeNewFrame(clyde, timing, inputMan, uiMan);
-        Hexa.NET.ImGui.ImGui.NewFrame();
+        NewFrame();
 
-        if (!RobustaImGuiTheme.FontRegular.IsNull)
-            Hexa.NET.ImGui.ImGui.PushFont(RobustaImGuiTheme.FontRegular, RobustaImGuiTheme.Typography.RegularSize);
+        // A throw between NewFrame and Render leaves the frame open, and the next NewFrame trips a
+        // native assertion that kills the process. Draw failures are contained and the frame is
+        // unwound, so one bad window cannot take the client down.
+        var depthBefore = CurrentStackDepth();
+        try
+        {
+            if (!RobustaImGuiTheme.FontRegular.IsNull)
+                PushFont(RobustaImGuiTheme.FontRegular, RobustaImGuiTheme.Typography.RegularSize);
 
+            DrawWindows();
+
+            if (!RobustaImGuiTheme.FontRegular.IsNull)
+                PopFont();
+        }
+        catch (Exception e)
+        {
+            MarseyLogger.Warn($"[ImGui] A window threw while drawing, unwinding the frame: {e}");
+            UnwindFrame(depthBefore);
+        }
+
+        Render();
+        if (anyVisible)
+            _renderer!.RenderDrawData(GetDrawData());
+
+        // One-shot: only the first frame after reopening sees this as true.
+        ImGuiInputBridge.ConsumeVisibilityEdge();
+    }
+
+    /// <summary>Window and font stack sizes, in one value, so an unwind can restore exactly this.</summary>
+    internal readonly record struct FrameStackDepth(int Windows, int Fonts);
+
+    /// <summary>Reads the current stack depth, so tests can drive the unwind the way the frame loop does.</summary>
+    internal static FrameStackDepth CurrentStackDepthForTests() => CurrentStackDepth();
+
+    private static FrameStackDepth CurrentStackDepth()
+    {
+        var context = GetCurrentContext();
+        return context.Handle == null
+            ? new FrameStackDepth(0, 0)
+            : new FrameStackDepth(context.Handle->CurrentWindowStack.Size, context.Handle->FontStack.Size);
+    }
+
+    /// <summary>
+    /// Restores the stacks to their depth at the start of the frame. ImGui asserts on a window or font
+    /// stack left unbalanced, so this must run before <c>Render()</c>. It unwinds to the recorded
+    /// depth rather than popping everything: a draw can throw after its own <c>PopFont</c>, and
+    /// popping again asserts "Calling PopFont() too many times!".
+    /// </summary>
+    internal static void UnwindFrame(FrameStackDepth depth)
+    {
+        var context = GetCurrentContext();
+        if (context.Handle == null)
+            return;
+
+        while (context.Handle->CurrentWindowStack.Size > depth.Windows)
+            End();
+
+        while (context.Handle->FontStack.Size > depth.Fonts)
+            PopFont();
+    }
+
+    /// <summary>Draws every open window. Split out so the caller can guarantee <c>Render()</c> runs.</summary>
+    private static void DrawWindows()
+    {
         if (CheatMenu.IsOpen)
             CheatMenu.Draw();
 
         if (Radar.IsOpen)
             Radar.Draw();
+
+        if (RadarInfo.IsOpen)
+            RadarInfo.Draw();
 
         if (InventoryViewer.IsOpen)
             InventoryViewer.Draw();
@@ -127,14 +200,7 @@ public static unsafe class RobustaImGuiManager
         if (AutoChem.IsOpen)
             AutoChem.Draw();
 
-        if (!RobustaImGuiTheme.FontRegular.IsNull)
-            Hexa.NET.ImGui.ImGui.PopFont();
-
-        Hexa.NET.ImGui.ImGui.Render();
-        if (anyVisible)
-            _renderer!.RenderDrawData(Hexa.NET.ImGui.ImGui.GetDrawData());
-
-        // One-shot: only the first frame after reopening sees this as true.
-        ImGuiInputBridge.ConsumeVisibilityEdge();
+        if (RadialMenu.IsActive)
+            RadialMenu.Draw();
     }
 }

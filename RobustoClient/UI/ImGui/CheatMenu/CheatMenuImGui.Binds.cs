@@ -6,6 +6,7 @@ using Robust.Client.Input;
 using Robust.Shared.Input;
 using Robust.Shared.IoC;
 using RobustoClient.ImGui;
+using RobustoClient.Systems.Abstract;
 
 namespace RobustoClient.UI.ImGui;
 
@@ -46,8 +47,7 @@ public sealed partial class CheatMenuImGui
             SyncBindBuffers();
 
         RobustaImGuiWidgets.BeginSectionCard("##BindsCard", "KEYBINDINGS");
-        RobustaImGuiWidgets.MutedText(
-            "Click 'Bind' to capture keys (Backspace/Delete clears, Escape cancels), or edit the keybind text directly.");
+        RobustaImGuiWidgets.MutedText("Click 'Bind' to capture keys, or edit the keybind text directly.");
         Spacing();
 
         if (BeginTable(
@@ -55,7 +55,7 @@ public sealed partial class CheatMenuImGui
                 4,
                 ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
         {
-            // Action gets the bulk of the width so long names fit; the key, capture and reset columns
+            // Action gets the bulk of the width so long names fit, the key, capture and reset columns
             // are pushed right and kept narrow, since their content is short.
             TableSetupColumn("Action", ImGuiTableColumnFlags.WidthStretch, 2.6f);
             TableSetupColumn("Key Combination", ImGuiTableColumnFlags.WidthStretch, 1.5f);
@@ -78,12 +78,14 @@ public sealed partial class CheatMenuImGui
         }
 
         RobustaImGuiWidgets.EndSectionCard();
+
+        DrawRadialsCard();
     }
 
     private void DrawBindRow(DiscoveredBind item)
     {
         var current = (RobustaKeybind)item.Field.GetValue(null)!;
-        bool isListening = _activeListeningTarget == item;
+        bool isListening = IsCapturing(item);
 
         TableNextRow();
 
@@ -171,7 +173,7 @@ public sealed partial class CheatMenuImGui
         if (isListening)
             StopListening();
         else
-            _activeListeningTarget = item;
+            BeginCapture(item, bind => ApplyBind(item, bind));
     }
 
     private static RobustaKeybind DefaultBind(DiscoveredBind item) =>
@@ -197,9 +199,65 @@ public sealed partial class CheatMenuImGui
 
         RegisterCommand(target.Attribute.Command, bind);
 
+        // One key combination has one owner: a wheel holding this key loses it.
+        ClearOtherKeyOwners(bind, target.Field.Name, null);
+
         // A bind is one deliberate action, not a drag, so single edits persist right away.
         if (save)
             RobustaConfig.Save();
+    }
+
+    /// <summary>
+    /// Enforces one owner per key combination: every other direct bind and every wheel that already
+    /// holds <paramref name="bind"/> is unbound. The caller keeps the key.
+    /// </summary>
+    private void ClearOtherKeyOwners(RobustaKeybind bind, string? keepField, RobustaConfig.RadialMenuSettings? keepRadial)
+    {
+        var (fields, radials) = FindKeyOwners(bind, keepField, keepRadial);
+
+        foreach (var fieldName in fields)
+        {
+            if (_discoveredBinds.FirstOrDefault(item => item.Field.Name == fieldName) is { } other)
+                ApplyBind(other, new RobustaKeybind(Keyboard.Key.Unknown), save: false);
+        }
+
+        foreach (var radial in radials)
+            radial.Key = new RobustaKeybind(Keyboard.Key.Unknown);
+    }
+
+    /// <summary>
+    /// Direct-bind fields and wheels that already own <paramref name="key"/>, excluding the caller.
+    /// A key combination has one owner: the newest assignment wins and the older one is unbound.
+    /// </summary>
+    internal static (List<string> Fields, List<RobustaConfig.RadialMenuSettings> Radials) FindKeyOwners(
+        RobustaKeybind key,
+        string? keepField,
+        RobustaConfig.RadialMenuSettings? keepRadial)
+    {
+        var fields = new List<string>();
+        var radials = new List<RobustaConfig.RadialMenuSettings>();
+
+        if (!key.IsValid)
+            return (fields, radials);
+
+        foreach (var field in typeof(RobustaConfig).GetFields(BindingFlags.Public | BindingFlags.Static))
+        {
+            if (field.FieldType != typeof(RobustaKeybind) || field.Name == keepField)
+                continue;
+
+            if ((RobustaKeybind)field.GetValue(null)! != key)
+                continue;
+
+            fields.Add(field.Name);
+        }
+
+        foreach (var radial in RobustaConfig.Radials ?? [])
+        {
+            if (radial != null && !ReferenceEquals(radial, keepRadial) && radial.Key == key)
+                radials.Add(radial);
+        }
+
+        return (fields, radials);
     }
 
     /// <summary>

@@ -11,14 +11,12 @@ public static class RobustaMapOpener
     {
         var entMan = IoCManager.Resolve<IEntityManager>();
         var playerMan = IoCManager.Resolve<IPlayerManager>();
-        
-        // Get player position
         var player = playerMan.LocalSession?.AttachedEntity;
         
         if (player == null || !player.Value.IsValid())
             return;
 
-        // Get transform component to determine which grid (station) we are on
+        // The grid the player stands on is the station to centre on.
         if (!entMan.TryGetComponent(player.Value, out TransformComponent? xform))
             return;
 
@@ -30,11 +28,9 @@ public static class RobustaMapOpener
         if (entMan.TryGetComponent(grid.Value, out MetaDataComponent? meta))
             stationName = meta.EntityName;
 
-        // Create map window (new one on each click to avoid closing bugs)
+        // A fresh window per click, reusing one hit a close bug.
         var window = new StationMapWindow();
-        window.Title = "Robusta GPS"; // Title can be anything
-
-        // Pass station name, grid, and character to the map for centering
+        window.Title = "Robusta GPS";
         window.Set(stationName, grid.Value, player.Value);
         window.OpenCentered();
     }

@@ -1,5 +1,6 @@
 using System.Numerics;
 using Hexa.NET.ImGui;
+using static Hexa.NET.ImGui.ImGui;
 using Robust.Client.Graphics;
 using Robust.Client.Input;
 using Robust.Client.UserInterface;
@@ -28,13 +29,13 @@ public static class ImGuiInputBridge
             return;
 
         RobustaImGuiManager.EnsureCurrentContext();
-        var io = Hexa.NET.ImGui.ImGui.GetIO();
+        var io = GetIO();
         io.ClearEventsQueue();
         io.ClearInputKeys();
         _mouseButtonQueuedThisFrame = false;
         JustBecameVisible = anyVisible;
 
-        // A widget can still hold focus from before the overlay was hidden; the input queues above do
+        // A widget can still hold focus from before the overlay was hidden, the input queues above do
         // not touch that. A focus-loss event is the public way to drop it, so a text box does not
         // resume mid-edit when the window reopens.
         io.AddFocusEvent(false);
@@ -53,7 +54,7 @@ public static class ImGuiInputBridge
         IUserInterfaceManager uiManager)
     {
         RobustaImGuiManager.EnsureCurrentContext();
-        var io = Hexa.NET.ImGui.ImGui.GetIO();
+        var io = GetIO();
 
         var screenSize = clyde.ScreenSize;
         io.DisplaySize = new Vector2(Math.Max(1, screenSize.X), Math.Max(1, screenSize.Y));
@@ -105,7 +106,7 @@ public static class ImGuiInputBridge
             return;
 
         RobustaImGuiManager.EnsureCurrentContext();
-        var io = Hexa.NET.ImGui.ImGui.GetIO();
+        var io = GetIO();
         io.AddMousePosEvent(ev.Position.Position.X, ev.Position.Position.Y);
     }
 
@@ -122,7 +123,7 @@ public static class ImGuiInputBridge
             return false;
 
         RobustaImGuiManager.EnsureCurrentContext();
-        var io = Hexa.NET.ImGui.ImGui.GetIO();
+        var io = GetIO();
         if (_hasMousePos)
             io.AddMousePosEvent(_lastMousePos.X, _lastMousePos.Y);
         io.AddMouseWheelEvent(ev.Delta.X, ev.Delta.Y);
@@ -137,7 +138,7 @@ public static class ImGuiInputBridge
             return false;
 
         RobustaImGuiManager.EnsureCurrentContext();
-        var io = Hexa.NET.ImGui.ImGui.GetIO();
+        var io = GetIO();
 
         if (ev.Key.IsMouseKey())
         {
@@ -195,7 +196,7 @@ public static class ImGuiInputBridge
             return false;
 
         RobustaImGuiManager.EnsureCurrentContext();
-        var io = Hexa.NET.ImGui.ImGui.GetIO();
+        var io = GetIO();
 
         if (ev.Key.IsMouseKey())
         {
@@ -243,7 +244,7 @@ public static class ImGuiInputBridge
             return false;
 
         RobustaImGuiManager.EnsureCurrentContext();
-        var io = Hexa.NET.ImGui.ImGui.GetIO();
+        var io = GetIO();
         if (!string.IsNullOrEmpty(ev.Text))
             io.AddInputCharactersUTF8(ev.Text);
 

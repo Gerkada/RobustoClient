@@ -3,9 +3,10 @@ using System.Numerics;
 namespace RobustoClient.ImGui.Theme;
 
 /// <summary>
-/// Every colour used by any Robusta window. Grouped by role so a theme author can reason about
+/// Every color used by any Robusta window. Grouped by role so a theme author can reason about
 /// the palette without reading drawing code.
 /// </summary>
+/// <remarks> Uses Vector4 ~ R,G,B,A </remarks>
 public sealed class ThemeColors
 {
     // Surfaces, from furthest back to closest
@@ -29,7 +30,7 @@ public sealed class ThemeColors
     public Vector4 Border { get; init; }
     public Vector4 Outline { get; init; }
 
-    // Primary accent: split because a colour dark enough for white text is too dark to read as text.
+    // Primary accent: split because a color dark enough for white text is too dark to read as text.
     public Vector4 Primary { get; init; }
     public Vector4 PrimaryHover { get; init; }
     public Vector4 PrimaryText { get; init; }
@@ -70,6 +71,20 @@ public sealed class ThemeColors
     public Vector4 SeverityRestricted { get; init; }
     public Vector4 SeverityMinor { get; init; }
     public Vector4 SeverityUnknown { get; init; }
+
+    // Antagonist identification: a blip color that names the mob, not the threat level
+    public Vector4 AntagonistNinja { get; init; }
+    public Vector4 AntagonistDragon { get; init; }
+    public Vector4 AntagonistChangeling { get; init; }
+    public Vector4 AntagonistClone { get; init; }
+    public Vector4 AntagonistRatKing { get; init; }
+    public Vector4 AntagonistNukie { get; init; }
+    public Vector4 AntagonistThief { get; init; }
+    public Vector4 AntagonistZombie { get; init; }
+    public Vector4 AntagonistInitialInfected { get; init; }
+    public Vector4 AntagonistHeadRev { get; init; }
+    public Vector4 AntagonistRev { get; init; }
+    public Vector4 AntagonistWizard { get; init; }
 
     // Scrollbar
     public Vector4 ScrollbarBg { get; init; }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Content.Shared.Movement.Components;
 using Content.Shared.Slippery;
 using Content.Shared.StepTrigger.Components;
@@ -23,6 +24,16 @@ public sealed class RobustaAntiSlipSystem : EntitySystem
     private bool _changed;
 
     private bool _forcePressWalk;
+
+    /// <summary>Reused query buffer, this check runs on the frame path.</summary>
+    private readonly HashSet<EntityUid> _nearby = new();
+
+    /// <summary>Frames between scans. A slip trigger does not appear and vanish between frames, and
+    /// the broadphase query is the only real cost here.</summary>
+    private const int ScanInterval = 3;
+
+    private int _scanCounter = ScanInterval;
+    private bool _lastOnSoap;
 
     public void SetEnabled(bool enabled)
     {
@@ -89,8 +100,19 @@ public sealed class RobustaAntiSlipSystem : EntitySystem
 
     private bool IsPlayerOnSoap(EntityUid player)
     {
-        var entities = _lookup.GetEntitiesInRange(player, 1f, LookupFlags.Uncontained);
-        foreach (var entity in entities)
+        if (_scanCounter++ < ScanInterval)
+            return _lastOnSoap;
+
+        _scanCounter = 0;
+        return _lastOnSoap = ScanForSoap(player);
+    }
+
+    private bool ScanForSoap(EntityUid player)
+    {
+        _nearby.Clear();
+        _lookup.GetEntitiesInRange(player, 1f, _nearby, LookupFlags.Uncontained);
+
+        foreach (var entity in _nearby)
         {
             if (!HasComp<SlipperyComponent>(entity)) continue;
             if (!TryComp<StepTriggerComponent>(entity, out var triggerComponent)) continue;

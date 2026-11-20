@@ -6,6 +6,7 @@ using Robust.Client.Placement;
 using Robust.Client.ResourceManagement;
 using Robust.Shared.Enums;
 using Robust.Shared.Map.Components;
+using RobustoClient.Systems.Abstract;
 
 namespace RobustoClient.Systems.Construction.Blueprints;
 
@@ -84,7 +85,7 @@ public sealed class BlueprintPlacementOverlay : Overlay
     {
         // 1. Draw 2-click area export selection preview if active
         if (bpManager.IsSelectingArea &&
-            bpManager.TryGetCursorGridTile(out var curGridUid, out var c2) &&
+            _entMan.System<MouseUtilitySystem>().TryGetCursorGridTile(out var curGridUid, out var c2) &&
             _entMan.TryGetComponent<MapGridComponent>(curGridUid, out var selGrid))
         {
             var c1 = (bpManager.FirstSelectionCorner is { } first && bpManager.SelectionGridUid == curGridUid)
@@ -108,7 +109,7 @@ public sealed class BlueprintPlacementOverlay : Overlay
 
         // 2. Draw active BlueprintPlacementHijack preview around cursor
         if (activeHijack != null &&
-            bpManager.TryGetCursorGridTile(out var gridUid, out var baseTile) &&
+            _entMan.System<MouseUtilitySystem>().TryGetCursorGridTile(out var gridUid, out var baseTile) &&
             _entMan.TryGetComponent<MapGridComponent>(gridUid, out var grid))
         {
             var worldMatrix = _transform.GetWorldMatrix(gridUid);
@@ -191,7 +192,7 @@ public sealed class BlueprintPlacementOverlay : Overlay
             int yOffset = 34;
             foreach (var item in activeHijack.GetFilteredAndOrderedItems())
             {
-                if (!bpManager.TryGetCursorGridTile(out var gridUid, out var baseTile) ||
+                if (!_entMan.System<MouseUtilitySystem>().TryGetCursorGridTile(out var gridUid, out var baseTile) ||
                     !_entMan.TryGetComponent<MapGridComponent>(gridUid, out var grid))
                     break;
 

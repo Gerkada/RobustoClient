@@ -29,10 +29,7 @@ public sealed class KeybindConfigAttribute : Attribute
     }
 }
 
-/// <summary>
-/// Holds all configuration settings for the RobustoClient.
-/// Uses "RobustaKeybind" to support multi-bounded keys.
-/// </summary>
+/// <summary>All configuration settings for RobustoClient.</summary>
 public static partial class RobustaConfig
 {
     #region Keybinds
@@ -58,8 +55,20 @@ public static partial class RobustaConfig
     [KeybindConfig("View Inventory", command: "robusta.view_inv")]
     public static RobustaKeybind ViewInvKey = new(Keyboard.Key.Unknown);
 
+    [KeybindConfig("View Player Info", command: "robusta.player_info")]
+    public static RobustaKeybind ViewPlayerInfoKey = new(Keyboard.Key.Unknown);
+
     [KeybindConfig("Toggle Forced Zoom", command: "robusta.auto_zoom.toggle")]
     public static RobustaKeybind ToggleZoomKey = new(Keyboard.Key.Unknown);
+
+    [KeybindConfig("Toggle Melee Aimbot", command: "robusta.melee_aimbot.toggle")]
+    public static RobustaKeybind ToggleMeleeAimbotKey = new(Keyboard.Key.Unknown);
+
+    [KeybindConfig("Toggle Ranged Aimbot", command: "robusta.ranged_aimbot.toggle")]
+    public static RobustaKeybind ToggleRangedAimbotKey = new(Keyboard.Key.Unknown);
+
+    [KeybindConfig("Toggle ESP", command: "robusta.esp.toggle")]
+    public static RobustaKeybind ToggleEspKey = new(Keyboard.Key.Unknown);
 
     #endregion
 
@@ -77,18 +86,25 @@ public static partial class RobustaConfig
 
     public static bool NoRecoilEnabled = false;
 
-    public static bool UsePrediction = false; // Toggles prediction
+    public static bool UsePrediction = false;
 
     public static bool FOVDisable = true;
 
-    /// <summary>
-    /// Hides the upstream visual effects (flash, blindness, blurry vision, drunk, rainbow)
-    /// </summary>
+    /// <summary>Hides upstream visual effects: flash, blindness, blurry vision, drunk, rainbow.</summary>
     public static bool DisableVisualOverlays = false;
 
     public static bool FullbrightEnabled = false;
 
     public static bool AntiSlipEnabled = true;
+
+    /// <summary>
+    /// Global ESP switch. Off hides every category without forgetting which ones were on.
+    /// </summary>
+    /// <remarks>
+    /// Not named <c>EspEnabled</c>: that was a retired config key, and reusing the name would make an
+    /// old file silently drive this switch on upgrade.
+    /// </remarks>
+    public static bool EspOverlayEnabled = true;
 
     #endregion
 
@@ -96,20 +112,20 @@ public static partial class RobustaConfig
 
     public static float SpinBotDegreesPerSecond = 1440f;
 
-    // Radius (FOV) where aimbot searches for target (in meters/tiles from cursor)
     public static float AimRadius = 5f;
 
-    // Maximum distance at which Target Lock continues to hold the target (so that lock resets if target goes off-screen)
+    /// <summary>Distance past which Target Lock drops the target.</summary>
     public static float MaxLockDistance = 15f;
 
     public static float RangedAimbotRadius = 2f;
 
-    public static float AimFovPixels = 100f; // Aimbot capture radius in pixels (Screen FOV)
+    /// <summary>Aimbot capture radius, in screen pixels.</summary>
+    public static float AimFovPixels = 100f;
 
-    // Average speed of a thrown item (needed for prediction)
+    /// <summary>Average thrown-item speed, used for prediction.</summary>
     public static float DefaultThrowSpeed = 11f;
 
-    // Default bullet speed for prediction (40.0 is standard for most firearms in current build)
+    /// <summary>Bullet speed used for prediction, 40 is the standard for most firearms.</summary>
     public static float DefaultProjectileSpeed = 40f;
 
     #endregion
@@ -122,12 +138,16 @@ public static partial class RobustaConfig
 
     #endregion
 
+    #region Radar
+
+    /// <summary>Backdrop opacity of the radar window, 0 to 1.</summary>
+    public static float RadarWindowOpacity = 1f;
+
+    #endregion
+
     #region ESP
 
-    /// <summary>
-    /// Per-feature ESP switch. Colours are hex overrides: an empty string means "use the colour
-    /// declared in esp.yml", so the YAML stays authoritative and the picker is an override.
-    /// </summary>
+    /// <summary>Per-feature ESP switch, an empty Color means use the color from esp.yml.</summary>
     public sealed class EspFeatureConfig
     {
         public bool Enabled { get; set; } = true;
@@ -135,11 +155,6 @@ public static partial class RobustaConfig
         public string Color { get; set; } = "";
     }
 
-    /// <summary>
-    /// One switch per user-facing ESP feature. Properties rather than fields because
-    /// <see cref="RobustaConfig"/> serializes each static field with System.Text.Json, which ignores
-    /// public fields by default; a field-based type would persist as an empty object.
-    /// </summary>
     public sealed class EspSettings
     {
         public EspFeatureConfig Players { get; set; } = new();
@@ -150,10 +165,45 @@ public static partial class RobustaConfig
         public EspFeatureConfig Health { get; set; } = new();
         public EspFeatureConfig Icons { get; set; } = new();
 
-        /// <summary>
-        /// Settings for a feature, or null for a value outside <see cref="Systems.ESP.EspFeature"/>.
-        /// Every declared member must map here; <c>EspSettingsTests</c> fails when one does not.
-        /// </summary>
+        /// <summary>Parsed color per feature, keyed on the raw hex.</summary>
+        private readonly Dictionary<Systems.ESP.EspFeature, (string Raw, Robust.Shared.Maths.Color Parsed)> _colorCache = new();
+
+        /// <summary>Blip color per command role, keyed by <see cref="CommandRoles"/>.</summary>
+        public Dictionary<string, string> RoleColors { get; set; } = new();
+
+        /// <summary>Command roles the radar can color, with label and default color.</summary>
+        public static readonly (string Key, string Label, string DefaultHex)[] CommandRoles =
+        [
+            ("RD", "Research Director", "#800080"),
+            ("HOS", "Head of Security", "#8B0000"),
+            ("QM", "Quartermaster", "#8B4513"),
+            ("CMO", "Chief Medical Officer", "#00008B"),
+            ("CAP", "Captain", "#FFD700"),
+            ("HOP", "Head of Personnel", "#00FFFF"),
+            ("CE", "Chief Engineer", "#FFA500")
+        ];
+
+        /// <summary>Effective color for a role key, or null when the key names no declared role.</summary>
+        public Robust.Shared.Maths.Color? ResolveRoleColor(string role)
+        {
+            foreach (var (key, _, defaultHex) in CommandRoles)
+            {
+                if (!string.Equals(key, role, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (RoleColors.TryGetValue(key, out var hex) &&
+                    Robust.Shared.Maths.Color.TryFromHex(hex, out var parsed))
+                {
+                    return parsed;
+                }
+
+                return Robust.Shared.Maths.Color.TryFromHex(defaultHex, out var fallback) ? fallback : null;
+            }
+
+            return null;
+        }
+
+        /// <summary>Settings for a feature, or null for a value outside <see cref="Systems.ESP.EspFeature"/>.</summary>
         public EspFeatureConfig? For(Systems.ESP.EspFeature feature) => feature switch
         {
             Systems.ESP.EspFeature.Players => Players,
@@ -183,11 +233,12 @@ public static partial class RobustaConfig
             Contraband ??= new();
             Health ??= new();
             Icons ??= new();
+            RoleColors ??= new();
         }
 
         /// <summary>
-        /// Colour for a feature: the hex override when one is set and parseable, otherwise the
-        /// category's own colour from esp.yml.
+        /// color for a feature: the hex override when one is set and parseable, otherwise the
+        /// category's own color from esp.yml.
         /// </summary>
         public Robust.Shared.Maths.Color ResolveColor(
             Systems.ESP.EspFeature feature,
@@ -197,7 +248,15 @@ public static partial class RobustaConfig
             if (config == null || string.IsNullOrWhiteSpace(config.Color))
                 return fallback;
 
-            return Robust.Shared.Maths.Color.TryFromHex(config.Color, out var parsed) ? parsed : fallback;
+            if (_colorCache.TryGetValue(feature, out var cached) &&
+                string.Equals(cached.Raw, config.Color, StringComparison.Ordinal))
+            {
+                return cached.Parsed;
+            }
+
+            var parsed = Robust.Shared.Maths.Color.TryFromHex(config.Color, out var value) ? value : fallback;
+            _colorCache[feature] = (config.Color, parsed);
+            return parsed;
         }
     }
 
@@ -207,8 +266,92 @@ public static partial class RobustaConfig
 
     #region Appearance
 
-    /// <summary>Theme restored at startup. Built-in is "Dark"; user themes live in the Themes folder.</summary>
+    /// <summary>Theme restored at startup. Built-in is "Dark", user themes live in the Themes folder.</summary>
     public static string DefaultTheme = "Dark";
+
+    #endregion
+
+    #region Radial
+
+    /// <summary>
+    /// One hold-to-open wheel: its own key plus up to four ordered sector actions. The number of
+    /// non-empty actions selects the layout.
+    /// </summary>
+    public sealed class RadialMenuSettings
+    {
+        public string Name { get; set; } = "Radial";
+
+        public RobustaKeybind Key { get; set; } = new(Keyboard.Key.Unknown);
+
+        public List<string> Actions { get; set; } = new();
+
+        /// <summary>Number of non-empty actions.</summary>
+        [JsonIgnore]
+        public int ActiveCount
+        {
+            get
+            {
+                int count = 0;
+                foreach (var action in Actions)
+                {
+                    if (!string.IsNullOrWhiteSpace(action))
+                        count++;
+                }
+
+                return count;
+            }
+        }
+
+        /// <summary>The <paramref name="index"/>-th non-empty action, or an empty string.</summary>
+        public string ActiveAt(int index)
+        {
+            int seen = 0;
+            foreach (var action in Actions)
+            {
+                if (string.IsNullOrWhiteSpace(action))
+                    continue;
+
+                if (seen++ == index)
+                    return action;
+            }
+
+            return "";
+        }
+
+        /// <summary>Four editable rows, empty rows are ignored, never reordered.</summary>
+        internal void EnsureDefaults()
+        {
+            Actions ??= new();
+            while (Actions.Count < 4)
+                Actions.Add("");
+            if (Actions.Count > 4)
+                Actions.RemoveRange(4, Actions.Count - 4);
+            for (int i = 0; i < Actions.Count; i++)
+                Actions[i] ??= "";
+        }
+    }
+
+    /// <summary>User-created wheels, in menu order.</summary>
+    public static List<RadialMenuSettings> Radials = new();
+
+    #endregion
+
+    #region Window layout
+
+    /// <summary>
+    /// Where each window was last left, keyed by window id. Restored on the first frame of the next
+    /// session, since ImGui's own persistence is disabled.
+    /// </summary>
+    public static Dictionary<string, WindowPlacement> WindowPlacements = new();
+
+    /// <summary>Position and size of one window, in display pixels.</summary>
+    public sealed class WindowPlacement
+    {
+        public float X { get; set; }
+        public float Y { get; set; }
+        public float Width { get; set; }
+        public float Height { get; set; }
+    }
 
     #endregion
 

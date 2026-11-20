@@ -7,7 +7,7 @@ namespace RobustoClient.ImGui;
 
 public static partial class RobustaImGuiTheme
 {
-    /// <summary>Applies the active palette's colours and metrics to the global ImGui style.</summary>
+    /// <summary>Applies the active palette's colors and metrics to the global ImGui style.</summary>
     public static void ApplyStyle()
     {
         var m = Current.Metrics;
@@ -39,7 +39,7 @@ public static partial class RobustaImGuiTheme
 
         var colors = style.Colors;
 
-        // Every token-to-slot assignment lives in ThemeStyleMap so it can be audited; the only
+        // Every token-to-slot assignment lives in ThemeStyleMap so it can be audited, the only
         // literals below are values that have no theme token (a shadow, two row backgrounds, the
         // modal dim).
         foreach (var (token, slots) in ThemeStyleMap.StyleSlots)

@@ -34,11 +34,21 @@ public sealed partial class CheatMenuImGui
     }
 
     private readonly List<DiscoveredBind> _discoveredBinds = new();
-    private DiscoveredBind? _activeListeningTarget;
+
+    /// <summary>Receives the captured combination, null when no capture session is running.</summary>
+    private Action<RobustaKeybind>? _captureSink;
+
+    /// <summary>Row that started the capture, so only that row shows the listening state.</summary>
+    private object? _captureOwner;
+
     private MenuTab _activeTab = MenuTab.Combat;
 
-    // Last measured cheat-menu size, refreshed at window scope every frame.
+    /// <summary>Window title plus the layout store's id.</summary>
+    private const string WindowTitle = "ROBUSTA##" + WindowLayoutId.Main;
+
+    // Last measured cheat-menu size and position, refreshed at window scope every frame.
     private Vector2 _windowSize;
+    private Vector2 _windowPos;
 
     private bool _isOpen;
 
@@ -61,7 +71,17 @@ public sealed partial class CheatMenuImGui
         }
     }
 
-    public bool IsListeningForKeybind => _activeListeningTarget != null;
+    public bool IsListeningForKeybind => _captureSink != null;
+
+    /// <summary>Starts a capture session for <paramref name="owner"/>, the sink receives the result.</summary>
+    internal void BeginCapture(object owner, Action<RobustaKeybind> sink)
+    {
+        _captureOwner = owner;
+        _captureSink = sink;
+    }
+
+    /// <summary>Whether <paramref name="owner"/> is the row currently capturing a key.</summary>
+    internal bool IsCapturing(object owner) => ReferenceEquals(_captureOwner, owner);
 
     public void Toggle() => IsOpen = !IsOpen;
     public void Initialize() => DiscoverKeybinds();
@@ -77,8 +97,18 @@ public sealed partial class CheatMenuImGui
     {
         var theme = RobustaImGuiTheme.Current;
 
-        // Sized so exactly two widget columns plus padding fit: no horizontal dead space.
-        SetNextWindowSize(theme.DefaultWindowSize, ImGuiCond.FirstUseEver);
+        // A remembered placement replaces the first-run default. FirstUseEver applies it once per
+        // launch, so the window still drags freely for the rest of the session.
+        if (WindowLayout.Get(WindowLayoutId.Main) is { } placement)
+        {
+            SetNextWindowPos(WindowLayout.ClampPosition(placement, GetIO().DisplaySize), ImGuiCond.FirstUseEver);
+            SetNextWindowSize(new Vector2(placement.Width, placement.Height), ImGuiCond.FirstUseEver);
+        }
+        else
+        {
+            // Sized so exactly two widget columns plus padding fit: no horizontal dead space.
+            SetNextWindowSize(theme.DefaultWindowSize, ImGuiCond.FirstUseEver);
+        }
 
         if (_headerCollapsed)
         {
@@ -108,7 +138,7 @@ public sealed partial class CheatMenuImGui
 
         bool open = _isOpen;
         if (!Begin(
-                "ROBUSTA##MainWindow",
+                WindowTitle,
                 ref open,
                 ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoSavedSettings))
         {
@@ -123,13 +153,22 @@ public sealed partial class CheatMenuImGui
         // Captured here, at window scope: GetWindowSize() called from inside a child returns the
         // child's size, which is not what the Themes tab wants to report.
         _windowSize = GetWindowSize();
+        _windowPos = GetWindowPos();
+
+        // A collapsed menu is a header band, not the window's real size, remembering it would reopen
+        // the menu one row tall.
+        if (!_headerCollapsed)
+            WindowLayout.Remember(WindowLayoutId.Main, _windowPos, _windowSize);
+
+        if (IsMouseReleased(ImGuiMouseButton.Left))
+            WindowLayout.FlushIfPending();
 
         // Leaving the Binds tab mid-capture would strand the capture session.
-        if (_activeTab != MenuTab.Binds && _activeListeningTarget != null)
+        if (_activeTab != MenuTab.Binds && IsListeningForKeybind)
             StopListening();
 
         // Window padding stays zero for the whole body so the header and tab strip bleed to the
-        // edges; the content area applies its own padding inside a child.
+        // edges, the content area applies its own padding inside a child.
         DrawHeader();
 
         if (!_headerCollapsed)
@@ -144,7 +183,11 @@ public sealed partial class CheatMenuImGui
         PushStyleVar(
             ImGuiStyleVar.WindowPadding,
             new Vector2(RobustaImGuiScale.WindowPadding, RobustaImGuiScale.WindowPadding));
-        BeginChild("##ContentArea", Vector2.Zero, ImGuiChildFlags.AlwaysUseWindowPadding);
+
+        // Wheel scrolling is handled below rather than by ImGui: every card is an AutoResizeY child
+        // that can never scroll, so a notch over one would otherwise go nowhere.
+        BeginChild("##ContentArea", Vector2.Zero, ImGuiChildFlags.AlwaysUseWindowPadding,
+            ImGuiWindowFlags.NoScrollWithMouse);
 
         switch (_activeTab)
         {
@@ -165,7 +208,25 @@ public sealed partial class CheatMenuImGui
                 break;
         }
 
+        // Anywhere over this child or its cards, so the wheel works over the whole content area.
+        // Skipped while a popup is open: the combo list is drawn later in the frame and handles its
+        // own wheel, so scrolling here as well would move the menu and the list together.
+        if (!IsPopupOpenThisFrame() &&
+            IsWindowHovered(ImGuiHoveredFlags.ChildWindows) &&
+            GetIO().MouseWheel != 0f)
+        {
+            SetScrollY(GetScrollY() - GetIO().MouseWheel * GetTextLineHeightWithSpacing() * 3f);
+        }
+
         EndChild();
         PopStyleVar();
     }
+
+    /// <summary>
+    /// Whether a popup is open, which is the signal that the popup owns the wheel this frame. Read
+    /// from ImGui's own popup stack rather than tracked by hand, so it stays correct for combos opened
+    /// from any window and closes the moment the popup does.
+    /// </summary>
+    private static unsafe bool IsPopupOpenThisFrame() =>
+        GetCurrentContext().OpenPopupStack.Size > 0;
 }

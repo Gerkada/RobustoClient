@@ -1,5 +1,6 @@
 using System.Numerics;
 using Hexa.NET.ImGui;
+using static Hexa.NET.ImGui.ImGui;
 using Robust.Shared.GameObjects;
 using Robust.Shared.IoC;
 using RobustoClient.ImGui;
@@ -9,6 +10,9 @@ namespace RobustoClient.UI.ImGui;
 
 public sealed class InventoryViewerImGui
 {
+    /// <summary>Window title plus the layout store's id.</summary>
+    private const string WindowTitle = "Target Inventory Viewer##" + WindowLayoutId.InventoryViewer;
+
     public bool IsOpen;
 
     private EntityUid _currentTarget;
@@ -46,14 +50,28 @@ public sealed class InventoryViewerImGui
 
     public void Draw()
     {
-        Hexa.NET.ImGui.ImGui.SetNextWindowSize(new Vector2(560f, 520f), ImGuiCond.FirstUseEver);
-        Hexa.NET.ImGui.ImGui.SetNextWindowSizeConstraints(new Vector2(440f, 320f), new Vector2(1200f, 1000f));
-
-        if (!Hexa.NET.ImGui.ImGui.Begin("Target Inventory Viewer##InvViewerWin", ref IsOpen, ImGuiWindowFlags.NoCollapse))
+        if (WindowLayout.Get(WindowLayoutId.InventoryViewer) is { } placement)
         {
-            Hexa.NET.ImGui.ImGui.End();
+            SetNextWindowPos(WindowLayout.ClampPosition(placement, GetIO().DisplaySize), ImGuiCond.FirstUseEver);
+            SetNextWindowSize(new Vector2(placement.Width, placement.Height), ImGuiCond.FirstUseEver);
+        }
+        else
+        {
+            SetNextWindowSize(new Vector2(560f, 520f), ImGuiCond.FirstUseEver);
+        }
+
+        SetNextWindowSizeConstraints(new Vector2(440f, 320f), new Vector2(1200f, 1000f));
+
+        if (!Begin(WindowTitle, ref IsOpen, ImGuiWindowFlags.None))
+        {
+            End();
             return;
         }
+
+        WindowLayout.Remember(WindowLayoutId.InventoryViewer, GetWindowPos(), GetWindowSize());
+
+        if (IsMouseReleased(ImGuiMouseButton.Left))
+            WindowLayout.FlushIfPending();
 
         // Filtered items
         var filtered = _allEntries.AsEnumerable();
@@ -84,96 +102,95 @@ public sealed class InventoryViewerImGui
             _ => filtered.OrderBy(i => i.ContainerName).ThenByDescending(i => GetSeverityWeight(i.ContrabandSeverity)).ThenBy(i => i.ItemName).ToList()
         };
 
-        // Row 1: Header + Refresh/Scan buttons
-        float rightEdge = Hexa.NET.ImGui.ImGui.GetCursorPosX() + Hexa.NET.ImGui.ImGui.GetContentRegionAvail().X;
-        Hexa.NET.ImGui.ImGui.AlignTextToFramePadding();
-        Hexa.NET.ImGui.ImGui.TextColored(RobustaImGuiTheme.AccentCyan, $"Target: {_targetName}");
-        Hexa.NET.ImGui.ImGui.SameLine();
+        // Row 1: header and Refresh/Scan buttons.
+        float rightEdge = GetCursorPosX() + GetContentRegionAvail().X;
+        AlignTextToFramePadding();
+        TextColored(RobustaImGuiTheme.AccentCyan, $"Target: {_targetName}");
+        SameLine();
         string countText = _allEntries.Count == filteredList.Count
             ? $"({_allEntries.Count} items)"
             : $"({filteredList.Count} / {_allEntries.Count} items)";
-        Hexa.NET.ImGui.ImGui.TextColored(RobustaImGuiTheme.TextMuted, countText);
+        RobustaImGuiWidgets.MutedText(countText);
 
-        Hexa.NET.ImGui.ImGui.SameLine(rightEdge - 176f);
+        SameLine(rightEdge - 176f);
         if (RobustaImGuiWidgets.AccentButton("Scan Target", new Vector2(96f, 0f)))
         {
             if (RobustaImGuiManager.TryResolve<IEntityManager>(out var entMan))
                 entMan.System<RobustaInventoryViewerSystem>().OpenForHoverOrTarget();
         }
-        Hexa.NET.ImGui.ImGui.SameLine();
+        SameLine();
         if (RobustaImGuiWidgets.AccentButton("Refresh", new Vector2(72f, 0f)))
         {
             RefreshCurrentTarget();
         }
 
-        // Row 2: Search bar
-        Hexa.NET.ImGui.ImGui.SetNextItemWidth(-1f);
-        Hexa.NET.ImGui.ImGui.InputTextWithHint("##InvSearch", "Search item, container, prototype, or contraband tier...", ref _searchQuery, 128);
+        // Row 2: search bar.
+        SetNextItemWidth(-1f);
+        InputTextWithHint("##InvSearch", "Search item, container, prototype, or contraband tier...", ref _searchQuery, 128);
 
-        // Row 3: Sort & Filter combos
-        float halfW = (Hexa.NET.ImGui.ImGui.GetContentRegionAvail().X - 8f) * 0.5f;
-        Hexa.NET.ImGui.ImGui.SetNextItemWidth(halfW);
-        Hexa.NET.ImGui.ImGui.Combo("##InvSort", ref _selectedSortMode, SortModes, SortModes.Length);
-        Hexa.NET.ImGui.ImGui.SameLine();
-        Hexa.NET.ImGui.ImGui.SetNextItemWidth(halfW);
-        Hexa.NET.ImGui.ImGui.Combo("##InvFilter", ref _selectedTierFilter, TierFilters, TierFilters.Length);
+        // Row 3: sort and filter combos.
+        float halfW = (GetContentRegionAvail().X - 8f) * 0.5f;
+        SetNextItemWidth(halfW);
+        Combo("##InvSort", ref _selectedSortMode, SortModes, SortModes.Length);
+        SameLine();
+        SetNextItemWidth(halfW);
+        Combo("##InvFilter", ref _selectedTierFilter, TierFilters, TierFilters.Length);
 
-        Hexa.NET.ImGui.ImGui.Spacing();
+        Spacing();
 
         if (filteredList.Count == 0)
         {
-            Hexa.NET.ImGui.ImGui.TextColored(
-                RobustaImGuiTheme.TextMuted,
+            RobustaImGuiWidgets.MutedText(
                 _allEntries.Count == 0
                     ? "No items found (or server did not replicate contents)."
                     : "No items match the current filter.");
-            Hexa.NET.ImGui.ImGui.End();
+            End();
             return;
         }
 
-        // Row 4: Item Table
-        if (Hexa.NET.ImGui.ImGui.BeginTable(
+        // Row 4: item table.
+        if (BeginTable(
                 "##InvTable",
                 4,
                 ImGuiTableFlags.ScrollY | ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp))
         {
-            Hexa.NET.ImGui.ImGui.TableSetupScrollFreeze(0, 1);
-            Hexa.NET.ImGui.ImGui.TableSetupColumn("Item Name", ImGuiTableColumnFlags.WidthStretch, 1.4f);
-            Hexa.NET.ImGui.ImGui.TableSetupColumn("Container / Slot", ImGuiTableColumnFlags.WidthStretch, 1.2f);
-            Hexa.NET.ImGui.ImGui.TableSetupColumn("Contraband", ImGuiTableColumnFlags.WidthFixed, 105f);
-            Hexa.NET.ImGui.ImGui.TableSetupColumn("Prototype", ImGuiTableColumnFlags.WidthStretch, 1.0f);
-            Hexa.NET.ImGui.ImGui.TableHeadersRow();
+            TableSetupScrollFreeze(0, 1);
+            TableSetupColumn("Item Name", ImGuiTableColumnFlags.WidthStretch, 1.4f);
+            TableSetupColumn("Container / Slot", ImGuiTableColumnFlags.WidthStretch, 1.2f);
+            TableSetupColumn("Contraband", ImGuiTableColumnFlags.WidthFixed, 105f);
+            TableSetupColumn("Prototype", ImGuiTableColumnFlags.WidthStretch, 1.0f);
+            TableHeadersRow();
 
             foreach (var entry in filteredList)
             {
                 var itemCol = GetSeverityColor(entry.ContrabandSeverity);
-                Hexa.NET.ImGui.ImGui.TableNextRow();
+                TableNextRow();
 
-                Hexa.NET.ImGui.ImGui.TableNextColumn();
-                Hexa.NET.ImGui.ImGui.TextColored(itemCol, entry.ItemName);
-                if (Hexa.NET.ImGui.ImGui.IsItemHovered())
+                TableNextColumn();
+                TextColored(itemCol, entry.ItemName);
+                if (IsItemHovered())
                 {
-                    Hexa.NET.ImGui.ImGui.SetTooltip(
+                    SetTooltip(
                         $"Item: {entry.ItemName}\nContainer: {entry.ContainerName}\nPrototype: {entry.PrototypeId}\nUID: {entry.Uid}");
                 }
 
-                Hexa.NET.ImGui.ImGui.TableNextColumn();
-                Hexa.NET.ImGui.ImGui.TextColored(RobustaImGuiTheme.TextMuted, entry.ContainerName);
+                TableNextColumn();
+                RobustaImGuiWidgets.MutedText(entry.ContainerName);
 
-                Hexa.NET.ImGui.ImGui.TableNextColumn();
+                TableNextColumn();
                 if (!string.IsNullOrEmpty(entry.ContrabandSeverity))
-                    Hexa.NET.ImGui.ImGui.TextColored(itemCol, $"[{FormatSeverity(entry.ContrabandSeverity)}]");
+                    TextColored(itemCol, $"[{FormatSeverity(entry.ContrabandSeverity)}]");
                 else
-                    Hexa.NET.ImGui.ImGui.TextColored(RobustaImGuiTheme.TextMuted, "—");
+                    RobustaImGuiWidgets.MutedText("—");
 
-                Hexa.NET.ImGui.ImGui.TableNextColumn();
-                Hexa.NET.ImGui.ImGui.TextColored(RobustaImGuiTheme.TextMuted, entry.PrototypeId);
+                TableNextColumn();
+                RobustaImGuiWidgets.MutedText(entry.PrototypeId);
             }
 
-            Hexa.NET.ImGui.ImGui.EndTable();
+            EndTable();
         }
 
-        Hexa.NET.ImGui.ImGui.End();
+        End();
     }
 
     private void RefreshCurrentTarget()

@@ -28,9 +28,9 @@ public sealed partial class CheatMenuImGui
             MarkConfigDirty();
     }
 
-    private void Slider(string label, string id, ref float value, float min, float max, string format)
+    private void Slider(string label, string id, ref float value, float min, float max, string format, float step = 0f)
     {
-        if (RobustaImGuiWidgets.SliderRow(label, id, ref value, min, max, format))
+        if (RobustaImGuiWidgets.SliderRow(label, id, ref value, min, max, format, step))
             MarkConfigDirty();
     }
 }
