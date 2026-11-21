@@ -256,7 +256,8 @@ public static class RobustaImGuiWidgets
         BeginChild(
             id,
             new Vector2(0f, height),
-            ImGuiChildFlags.AlwaysUseWindowPadding | (height == 0f ? ImGuiChildFlags.AutoResizeY : ImGuiChildFlags.None));
+            ImGuiChildFlags.AlwaysUseWindowPadding | (height == 0f ? ImGuiChildFlags.AutoResizeY : ImGuiChildFlags.None),
+            height == 0f ? ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse : ImGuiWindowFlags.None);
 
         CardTitle(title);
 
@@ -273,6 +274,14 @@ public static class RobustaImGuiWidgets
     /// <summary>Muted secondary label, used for field captions and hints.</summary>
     public static void MutedText(string text) =>
         TextColored(RobustaImGuiTheme.TextMuted, text);
+
+    /// <summary>Wrapped muted secondary label, so long hints stay inside narrow cards.</summary>
+    public static void MutedTextWrapped(string text)
+    {
+        PushStyleColor(ImGuiCol.Text, RobustaImGuiTheme.TextMuted);
+        TextWrapped(text);
+        PopStyleColor();
+    }
 
     /// <summary>Locates the float specifier in an ImGui-style format string such as <c>"%.1f m"</c>.</summary>
     private static bool TryParseFloatSpec(string format, out int specStart, out int specEnd, out int decimals)

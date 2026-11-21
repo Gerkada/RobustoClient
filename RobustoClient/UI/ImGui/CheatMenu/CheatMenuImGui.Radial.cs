@@ -19,7 +19,7 @@ public sealed partial class CheatMenuImGui
     private void DrawRadialsCard()
     {
         RobustaImGuiWidgets.BeginSectionCard("##RadialsCard", "RADIAL");
-        RobustaImGuiWidgets.MutedText("Allows multi select radials.");
+        RobustaImGuiWidgets.MutedTextWrapped("Allows multi select radials.");
         Spacing();
 
         if (RobustaImGuiWidgets.AccentButton("Create", new Vector2(-1f, RobustaImGuiScale.ButtonRow)))
@@ -59,7 +59,7 @@ public sealed partial class CheatMenuImGui
 
         // Name row: the label is the only identity a wheel has, so it is editable in place.
         string name = radial.Name ?? "";
-        SetNextItemWidth(GetContentRegionAvail().X - DeleteButtonWidth() - RobustaImGuiTheme.Metrics.ItemInnerSpacingX);
+        SetNextItemWidth(MathF.Max(40f, GetContentRegionAvail().X - DeleteButtonWidth() - RobustaImGuiTheme.Metrics.ItemSpacingX));
         if (InputTextWithHint("##radial_name", "Radial name", ref name, 48))
         {
             radial.Name = name;
@@ -73,7 +73,7 @@ public sealed partial class CheatMenuImGui
         DrawRadialKeyRow(radial);
 
         if (radial.ActiveCount < 2)
-            RobustaImGuiWidgets.MutedText("Add a second action, with fewer than two the wheel does nothing.");
+            RobustaImGuiWidgets.MutedTextWrapped("Add a second action, with fewer than two the wheel does nothing.");
 
         for (int i = 0; i < radial.Actions.Count; i++)
             DrawRadialActionRow(radial, i);
@@ -133,7 +133,7 @@ public sealed partial class CheatMenuImGui
         SameLine();
 
         float comboWidth = RobustaImGuiScale.FrameHeightWithSpacing * 4f;
-        SetNextItemWidth(GetContentRegionAvail().X - comboWidth - RobustaImGuiTheme.Metrics.ItemInnerSpacingX);
+        SetNextItemWidth(MathF.Max(40f, GetContentRegionAvail().X - comboWidth - RobustaImGuiTheme.Metrics.ItemSpacingX));
 
         if (InputTextWithHint($"##radial_action_{index}", "(empty)", ref action, 96))
         {
@@ -142,6 +142,7 @@ public sealed partial class CheatMenuImGui
         }
 
         SameLine();
+        SetNextItemWidth(comboWidth);
 
         string preview = string.IsNullOrWhiteSpace(action) ? "Pick" : RadialMenuActions.PickerLabel(action);
         if (!BeginCombo($"##radial_pick_{index}", preview))

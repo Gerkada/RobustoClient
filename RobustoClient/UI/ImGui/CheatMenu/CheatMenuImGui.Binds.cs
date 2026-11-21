@@ -47,7 +47,7 @@ public sealed partial class CheatMenuImGui
             SyncBindBuffers();
 
         RobustaImGuiWidgets.BeginSectionCard("##BindsCard", "KEYBINDINGS");
-        RobustaImGuiWidgets.MutedText("Click 'Bind' to capture keys, or edit the keybind text directly.");
+        RobustaImGuiWidgets.MutedTextWrapped("Click 'Bind' to capture keys, or edit the keybind text directly.");
         Spacing();
 
         if (BeginTable(
@@ -57,10 +57,14 @@ public sealed partial class CheatMenuImGui
         {
             // Action gets the bulk of the width so long names fit, the key, capture and reset columns
             // are pushed right and kept narrow, since their content is short.
+            float cellPad = GetStyle().CellPadding.X * 2f + 4f;
+            float captureWidth = MathF.Max(RobustaImGuiScale.FrameHeightWithSpacing * 2.2f, CalcTextSize("Capture").X + cellPad);
+            float resetWidth = MathF.Max(RobustaImGuiScale.FrameHeightWithSpacing * 1.9f, CalcTextSize("Reset").X + cellPad);
+
             TableSetupColumn("Action", ImGuiTableColumnFlags.WidthStretch, 2.6f);
             TableSetupColumn("Key Combination", ImGuiTableColumnFlags.WidthStretch, 1.5f);
-            TableSetupColumn("Capture", ImGuiTableColumnFlags.WidthFixed, RobustaImGuiScale.FrameHeightWithSpacing * 1.7f);
-            TableSetupColumn("Reset", ImGuiTableColumnFlags.WidthFixed, RobustaImGuiScale.FrameHeightWithSpacing * 1.4f);
+            TableSetupColumn("Capture", ImGuiTableColumnFlags.WidthFixed, captureWidth);
+            TableSetupColumn("Reset", ImGuiTableColumnFlags.WidthFixed, resetWidth);
             TableHeadersRow();
 
             foreach (var item in _discoveredBinds)
