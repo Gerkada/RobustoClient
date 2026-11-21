@@ -87,6 +87,19 @@ public class ReflectTests
         Reflect.GetFirst(new Sample(), "Alpha", "Beta").Should().BeNull();
 
     [Fact]
+    public void GetFirst_ResolvesNonPublicFallbackMember() =>
+        Reflect.GetFirst(new Sample(), "Alpha", "_privateField").Should().Be(9);
+
+    [Fact]
+    public void TrySet_WritesNonPublicFieldWithAnyOptions()
+    {
+        var sample = new Sample();
+
+        Reflect.TrySet(sample, "_privateField", 42, ReflectOptions.Any).Should().BeTrue();
+        Reflect.Get(sample, "_privateField", ReflectOptions.Any).Should().Be(42);
+    }
+
+    [Fact]
     public void TrySet_WritesASettableProperty()
     {
         var sample = new Sample();

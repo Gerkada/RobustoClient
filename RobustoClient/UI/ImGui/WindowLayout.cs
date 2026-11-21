@@ -34,6 +34,7 @@ internal static class WindowLayout
     /// <summary>The saved placement for a window, or null when it has never been placed.</summary>
     internal static RobustaConfig.WindowPlacement? Get(string windowId) =>
         Placements.TryGetValue(windowId, out var placement) &&
+        placement != null &&
         placement.Width > 0f && placement.Height > 0f
             ? placement
             : null;

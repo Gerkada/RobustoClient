@@ -591,4 +591,43 @@ public class FlagValueComparerTests
     {
         FlagValueComparer.Matches("a", FlagComparison.NotEquals, "b").Should().BeTrue();
     }
+
+    [Fact]
+    public void CollectSyndicateImplantTriggers_ReturnsFalseWhenEvidenceAlreadyPopulatedAndNoSyndicateImplantMatches()
+    {
+        var entity = new EntityUid(10);
+        var evidence = new List<PlayerFlagTrigger>
+        {
+            PlayerFlagTrigger.For(FlagTriggerSource.Inventory, "EarlierMatch", entity)
+        };
+        var implants = new List<ImplantInfo>
+        {
+            new("MindShield", "Security")
+        };
+
+        PlayerStateUtility.CollectSyndicateImplantTriggers(entity, implants, evidence).Should().BeFalse();
+        evidence.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void CollectSyndicateImplantTriggers_AppendsAndReturnsTrueOnSyndicateImplant()
+    {
+        var entity = new EntityUid(10);
+        var evidence = new List<PlayerFlagTrigger>();
+        var implants = new List<ImplantInfo>
+        {
+            new("Uplink", "Syndicate")
+        };
+
+        PlayerStateUtility.CollectSyndicateImplantTriggers(entity, implants, evidence).Should().BeTrue();
+        evidence.Should().ContainSingle(t => t.Reason == "Uplink");
+    }
+
+    [Fact]
+    public void IsMatchingContrabandSeverity_RespectsAllowedListAndNull()
+    {
+        PlayerStateUtility.IsMatchingContrabandSeverity(null, null).Should().BeFalse();
+        PlayerStateUtility.IsMatchingContrabandSeverity("Syndicate", ["Major", "Syndicate"]).Should().BeTrue();
+        PlayerStateUtility.IsMatchingContrabandSeverity("Minor", ["Major", "Syndicate"]).Should().BeFalse();
+    }
 }

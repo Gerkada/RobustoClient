@@ -89,12 +89,15 @@ public sealed class RadialMenuImGui
             return;
         }
 
-        if (ui.KeyboardFocused != null || RobustaImGuiManager.CheatMenu.IsListeningForKeybind)
+        if (ui.KeyboardFocused != null ||
+            RobustaImGuiManager.CheatMenu.IsListeningForKeybind ||
+            (RobustaImGuiManager.IsInitialized && GetIO().WantTextInput))
+        {
             return;
+        }
 
         // A plain key also reads as down while a modified form is held, so the most specific match
         // has to win, or a Shift+R wheel never opens while a plain R wheel sits earlier in the list.
-        // TODO: this shiet doesn't even work o algo
         RobustaConfig.RadialMenuSettings? match = null;
         int matchSpecificity = 0;
 
@@ -222,18 +225,18 @@ public sealed class RadialMenuImGui
         // Callers pass a sector, never a full turn: a full turn would have to repeat its first point.
         unsafe void FillAnnulus(float from, float to, uint color, int segments = 16)
         {
-            var points = new Vector2[(segments + 1) * 2];
+            int pointCount = (segments + 1) * 2;
+            Vector2* points = stackalloc Vector2[pointCount];
 
             for (int i = 0; i <= segments; i++)
             {
                 float angle = from + (to - from) * i / segments;
                 var direction = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
                 points[i] = _center + direction * _radius;
-                points[points.Length - 1 - i] = _center + direction * _deadZone;
+                points[pointCount - 1 - i] = _center + direction * _deadZone;
             }
 
-            fixed (Vector2* p = points)
-                drawList.AddConcavePolyFilled(p, points.Length, color);
+            drawList.AddConcavePolyFilled(points, pointCount, color);
         }
     }
 
@@ -296,7 +299,8 @@ public sealed class RadialMenuImGui
         _settings = settings;
         _ownerBind = bind;
         _center = screen.Position;
-        _radius = MathF.Max(MinRadius, GetTextLineHeight() * RadiusPerLine) * WheelScale;
+        float lineHeight = RobustaImGuiTheme.Typography.RegularSize * 1.2f;
+        _radius = MathF.Max(MinRadius, lineHeight * RadiusPerLine) * WheelScale;
         _deadZone = MathF.Max(RobustaImGuiScale.MinTargetSize * 0.5f, _radius * DeadZoneRatio);
         _count = Math.Clamp(settings.ActiveCount, 2, 4);
         _active = true;

@@ -527,18 +527,28 @@ public sealed partial class PlayerStateUtility
                 return true;
 
             case SyndicateSignal.Implants:
-                foreach (var implant in status.Implants)
-                {
-                    if (implant.Category != "Syndicate")
-                        continue;
-
-                    evidence.Add(PlayerFlagTrigger.For(FlagTriggerSource.Implant, implant.Name, uid, implant.Category));
-                }
-
-                return evidence.Count > 0;
+                return CollectSyndicateImplantTriggers(uid, status.Implants, evidence);
         }
 
         return false;
+    }
+
+    internal static bool CollectSyndicateImplantTriggers(
+        EntityUid uid,
+        IReadOnlyList<ImplantInfo> implants,
+        List<PlayerFlagTrigger> evidence)
+    {
+        var matched = false;
+        foreach (var implant in implants)
+        {
+            if (implant.Category != "Syndicate")
+                continue;
+
+            evidence.Add(PlayerFlagTrigger.For(FlagTriggerSource.Implant, implant.Name, uid, implant.Category));
+            matched = true;
+        }
+
+        return matched;
     }
 
     /// <summary>
@@ -554,19 +564,14 @@ public sealed partial class PlayerStateUtility
         if (!ctx.EntMan.TryGetComponent<SolutionComponent>(uid, out var solution))
             return false;
 
+        var matched = false;
         foreach (var reagent in solution.Solution.Contents)
         {
             if (!ctx.Prototypes.TryIndex(reagent.Reagent.Prototype, out ReagentPrototype prototype))
                 continue;
 
-            if (prototype.ContrabandSeverity is not { } severity)
+            if (!IsMatchingContrabandSeverity(prototype.ContrabandSeverity?.Id, check.Severities))
                 continue;
-
-            if (check.Severities is { } allowed &&
-                !allowed.Contains(severity.Id, StringComparer.OrdinalIgnoreCase))
-            {
-                continue;
-            }
 
             // Quantity is a FixedPoint2, which lives in a different assembly on Goob, so it is read
             // reflectively rather than as a typed member.
@@ -579,11 +584,15 @@ public sealed partial class PlayerStateUtility
                 FlagTriggerSource.Chemistry,
                 prototype.LocalizedName,
                 uid,
-                $"{amount}u ({severity.Id})"));
+                $"{amount}u ({prototype.ContrabandSeverity!.Value.Id})"));
+            matched = true;
         }
 
-        return evidence.Count > 0;
+        return matched;
     }
+
+    internal static bool IsMatchingContrabandSeverity(string? severityId, IReadOnlyList<string>? allowed) =>
+        severityId != null && (allowed == null || allowed.Contains(severityId, StringComparer.OrdinalIgnoreCase));
 
     /// <summary>An emag with the interaction flag, i.e. one that actually rewrites a silicon's laws.</summary>
     private static bool MatchesEmagged(EntityUid uid, FlagContext ctx, List<PlayerFlagTrigger> evidence)

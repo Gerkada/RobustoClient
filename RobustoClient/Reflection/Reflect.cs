@@ -14,6 +14,8 @@ public static class Reflect
     private static readonly ConcurrentDictionary<string, Type?> Types = new();
     private static readonly ConcurrentDictionary<string, byte> Warned = new();
 
+    private static readonly ReflectOptions ProbeOptions = ReflectOptions.Any with { WarnOnMissing = false };
+
     // ---- Read ---------------------------------------------------------------------------------
 
     /// <summary>Reads a member path, warning once when a segment is missing.</summary>
@@ -24,29 +26,42 @@ public static class Reflect
             return false;
 
         var opts = options ?? ReflectOptions.Default;
-        object? current = target;
+        if (!member.Contains('.'))
+            return TryGetSegment(target, member, member, opts, out value);
 
+        object? current = target;
         foreach (var segment in member.Split('.'))
         {
-            if (current == null)
+            if (current == null || !TryGetSegment(current, member, segment, opts, out current))
                 return false;
-
-            var info = ResolveMember(current.GetType(), segment, opts);
-            if (info == null)
-            {
-                WarnOnce(current.GetType(), member, segment, opts);
-                return false;
-            }
-
-            current = info switch
-            {
-                PropertyInfo property => property.GetValue(current),
-                FieldInfo field => field.GetValue(current),
-                _ => null
-            };
         }
 
         value = current;
+        return true;
+    }
+
+    private static bool TryGetSegment(
+        object current,
+        string fullPath,
+        string segment,
+        ReflectOptions opts,
+        out object? value)
+    {
+        value = null;
+        var type = current.GetType();
+        var info = ResolveMember(type, segment, opts);
+        if (info == null)
+        {
+            WarnOnce(type, fullPath, segment, opts);
+            return false;
+        }
+
+        value = info switch
+        {
+            PropertyInfo property => property.GetValue(current),
+            FieldInfo field => field.GetValue(current),
+            _ => null
+        };
         return true;
     }
 
@@ -61,11 +76,14 @@ public static class Reflect
         ReflectConvert.TryGetId(Get(target, member, options));
 
     /// <summary>First member in <paramref name="members"/> that exists, for renamed upstream fields.</summary>
-    public static object? GetFirst(object? target, params string[] members)
+    public static object? GetFirst(object? target, params string[] members) =>
+        GetFirst(target, ProbeOptions, members);
+
+    public static object? GetFirst(object? target, ReflectOptions options, params string[] members)
     {
         foreach (var member in members)
         {
-            if (TryGet(target, member, out var value))
+            if (TryGet(target, member, out var value, options))
                 return value;
         }
 
@@ -74,6 +92,9 @@ public static class Reflect
 
     public static T? GetFirst<T>(object? target, params string[] members) =>
         GetFirst(target, members) is T typed ? typed : default;
+
+    public static T? GetFirst<T>(object? target, ReflectOptions options, params string[] members) =>
+        GetFirst(target, options, members) is T typed ? typed : default;
 
     // ---- Write --------------------------------------------------------------------------------
 

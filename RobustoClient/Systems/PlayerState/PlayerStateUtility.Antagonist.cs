@@ -1,6 +1,5 @@
 using System.Collections;
 using Content.Shared.Actions.Components;
-using Content.Shared.Changeling.Components;
 using Content.Shared.Store.Components;
 using Robust.Shared.GameObjects;
 using RobustoClient.Reflection;
@@ -99,7 +98,7 @@ public sealed partial class PlayerStateUtility
         return new ChangelingData(
             triggers,
             GrantedActionIds(entity).ToList(),
-            HasComp<ChangelingFleshClothingAbilityComponent>(entity),
+            detector.HasComponentNamed(entity, "ChangelingFleshClothingAbility"),
             ReadChangelingDna(entity),
             ReadHorrorRemaining(entity));
     }

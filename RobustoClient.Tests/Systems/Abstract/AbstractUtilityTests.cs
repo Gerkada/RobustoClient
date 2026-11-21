@@ -112,4 +112,35 @@ public class MouseUtilityTests
             .PassesFilter(Entity, [typeof(MobStateComponent)], [typeof(MobStateComponent)], has)
             .Should().BeFalse();
     }
+
+    [Fact]
+    public void TryAcceptCapturedEntity_AppliesWhitelistAndExcludeFilters()
+    {
+        var has = (EntityUid _, Type type) => type == typeof(TransformComponent);
+
+        MouseUtilitySystem.TryAcceptCapturedEntity(
+            Entity,
+            _ => true,
+            has,
+            [typeof(MobStateComponent)],
+            null,
+            out _).Should().BeFalse();
+
+        MouseUtilitySystem.TryAcceptCapturedEntity(
+            Entity,
+            _ => true,
+            has,
+            null,
+            [typeof(TransformComponent)],
+            out _).Should().BeFalse();
+
+        MouseUtilitySystem.TryAcceptCapturedEntity(
+            Entity,
+            _ => true,
+            has,
+            [typeof(TransformComponent)],
+            null,
+            out var accepted).Should().BeTrue();
+        accepted.Should().Be(Entity);
+    }
 }

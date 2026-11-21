@@ -69,9 +69,10 @@ internal static class ClydeImGuiInputPatch
     private static Func<object, TArgs>? CreateArgsGetter<TArgs>(string nestedRecordName) where TArgs : class
     {
         var recordType = ClydeType?.GetNestedType(nestedRecordName, BindingFlags.NonPublic);
-        if (Reflect.GetProperty(recordType, "Args", ReflectOptions.Any)?.GetMethod == null)
+        var prop = Reflect.GetProperty(recordType, "Args", ReflectOptions.Any);
+        if (prop?.GetMethod == null)
             return null;
 
-        return obj => Reflect.Get<TArgs>(obj, "Args", ReflectOptions.Any)!;
+        return obj => (TArgs)prop.GetValue(obj)!;
     }
 }

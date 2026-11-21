@@ -183,6 +183,8 @@ public static class ReflectConvert
     public static bool TryToDoublePair(object? left, object? right, out double leftValue, out double rightValue) =>
         TryToDouble(left, out leftValue) & TryToDouble(right, out rightValue);
 
+    private static readonly ReflectOptions OptionalIdOptions = new() { WarnOnMissing = false };
+
     /// <summary>
     /// The identifier behind a <c>ProtoId&lt;T&gt;</c>, <c>EntProtoId</c> or <c>LocId</c>, or the value's own string form.
     /// </summary>
@@ -194,7 +196,7 @@ public static class ReflectConvert
         if (value is string text)
             return text;
 
-        if (Reflect.TryGet(value, "Id", out var id) && id is string idText)
+        if (Reflect.TryGet(value, "Id", out var id, OptionalIdOptions) && id is string idText)
             return idText;
 
         return value.ToString();

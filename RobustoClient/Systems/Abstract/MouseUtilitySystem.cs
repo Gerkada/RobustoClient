@@ -95,7 +95,7 @@ public sealed class MouseUtilitySystem : EntitySystem
     public EntityUid? GetHoveredEntity(float range = DefaultRange, Type[]? whitelist = null, Type[]? exclude = null)
     {
         if (_pointerCaptured)
-            return _capturedHovered;
+            return ResolveCapturedHover(range, whitelist, exclude);
 
         if (!_input.MouseScreenPosition.IsValid)
             return null;
@@ -107,6 +107,35 @@ public sealed class MouseUtilitySystem : EntitySystem
             return null;
 
         return GetClosestToCursor(cursor, range, whitelist, exclude);
+    }
+
+    private EntityUid? ResolveCapturedHover(float range, Type[]? whitelist, Type[]? exclude)
+    {
+        if (TryAcceptCapturedEntity(_capturedHovered, EntityManager.EntityExists, HasComp, whitelist, exclude, out var accepted))
+            return accepted;
+
+        if (range > 0f && _capturedMap is { } cursor && cursor.MapId != MapId.Nullspace)
+            return GetClosestToCursor(cursor, range, whitelist, exclude);
+
+        return null;
+    }
+
+    internal static bool TryAcceptCapturedEntity(
+        EntityUid? captured,
+        Func<EntityUid, bool> exists,
+        Func<EntityUid, Type, bool> hasComp,
+        Type[]? whitelist,
+        Type[]? exclude,
+        out EntityUid accepted)
+    {
+        if (captured is { } cap && exists(cap) && PassesFilter(cap, whitelist, exclude, hasComp))
+        {
+            accepted = cap;
+            return true;
+        }
+
+        accepted = default;
+        return false;
     }
 
     public bool TryGetHoveredEntity(

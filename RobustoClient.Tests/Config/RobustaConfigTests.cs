@@ -426,6 +426,26 @@ public class RobustaConfigSaveTests : IDisposable
             ResetDirty();
         }
     }
+
+    [Fact]
+    public void WindowLayout_NullPlacementEntry_ReturnsNullWithoutThrowing()
+    {
+        var original = RobustaConfig.WindowPlacements;
+        try
+        {
+            RobustaConfig.WindowPlacements = new Dictionary<string, RobustaConfig.WindowPlacement>
+            {
+                [RobustoClient.UI.ImGui.WindowLayoutId.Radar] = null!
+            };
+
+            RobustoClient.UI.ImGui.WindowLayout.Get(RobustoClient.UI.ImGui.WindowLayoutId.Radar)
+                .Should().BeNull();
+        }
+        finally
+        {
+            RobustaConfig.WindowPlacements = original;
+        }
+    }
 }
 
 

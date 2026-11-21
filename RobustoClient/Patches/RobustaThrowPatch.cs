@@ -72,7 +72,7 @@ public static class RobustaThrowPatch
         if (clientMsg == null || fullMsg == null) return;
 
         // Start the exploit only at the moment of click (press)
-        var stateObj = Reflect.Get(clientMsg, "State");
+        var stateObj = Reflect.Get(clientMsg, "State", ReflectOptions.Any);
         if (stateObj == null || stateObj.ToString() != "Down") return;
 
         var playerMan = IoCManager.Resolve<IPlayerManager>();
@@ -93,7 +93,7 @@ public static class RobustaThrowPatch
             var eyeManager = IoCManager.Resolve<IEyeManager>();
             var targetMapPos = target.Value.Position;
 
-            var origCoordsObj = Reflect.Get(clientMsg, "Coordinates");
+            var origCoordsObj = Reflect.Get(clientMsg, "Coordinates", ReflectOptions.Any);
             if (origCoordsObj == null) return;
 
             var origEntityIdObj = Reflect.GetFirst(origCoordsObj, "EntityId", "NetEntity");
@@ -105,10 +105,10 @@ public static class RobustaThrowPatch
             var newScreenCoords = eyeManager.CoordinatesToScreen(newEntityCoords); 
             var newNetCoords = entMan.GetNetCoordinates(newEntityCoords);
 
-            bool c1 = Reflect.TrySet(clientMsg, "Coordinates", newEntityCoords);
-            bool c2 = Reflect.TrySet(clientMsg, "ScreenCoordinates", newScreenCoords);
-            bool c3 = Reflect.TrySet(fullMsg, "Coordinates", newNetCoords);
-            bool c4 = Reflect.TrySet(fullMsg, "ScreenCoordinates", newScreenCoords);
+            bool c1 = Reflect.TrySet(clientMsg, "Coordinates", newEntityCoords, ReflectOptions.Any);
+            bool c2 = Reflect.TrySet(clientMsg, "ScreenCoordinates", newScreenCoords, ReflectOptions.Any);
+            bool c3 = Reflect.TrySet(fullMsg, "Coordinates", newNetCoords, ReflectOptions.Any);
+            bool c4 = Reflect.TrySet(fullMsg, "ScreenCoordinates", newScreenCoords, ReflectOptions.Any);
 
             if (c1 && c3)
             {
