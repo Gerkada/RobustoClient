@@ -40,40 +40,30 @@ public class GunAimOverlay(
         if (mapPos.MapId == MapId.Nullspace)
             return;
 
-        // Only draw in combat mode
         if (!combatModeSystem.IsInCombatMode(playerEntity))
             return;
 
         var mouseScreenPos = input.MouseScreenPosition;
         var mouseWorldPos = eye.PixelToMap(mouseScreenPos);
 
-        // --- MELEE RADIUS LOGIC ---
         if (RobustaConfig.MeleeAimbotEnabled)
         {
-            // Get hands system through EntityManager
             var handsSystem = entManager.System<Content.Shared.Hands.EntitySystems.SharedHandsSystem>();
-            
-            // TryGetActiveItem is the most stable method in the current API. 
-            // It will find the components and return the entity in the active hand.
             if (handsSystem.TryGetActiveItem(playerEntity.Value, out var heldItem))
             {
-                // Check if the item is a melee weapon
                 if (entManager.TryGetComponent<MeleeWeaponComponent>(heldItem, out var melee))
                 {
-                    // Draw an attack radius circle around the player (in world coordinates)
-                    // Use Cyan to visually distinguish from the gun aim radius
+                    // Cyan, so the melee radius reads as distinct from the gun FOV.
                     worldHandle.DrawCircle(mapPos.Position, melee.Range, Color.Cyan.WithAlpha(0.15f), false);
                 }
             }
         }
 
-        // --- RANGED LOGIC ---
         if (RobustaConfig.RangedAimbotEnabled && mapPos.MapId == mouseWorldPos.MapId)
         {
             var aimSystem = entManager.System<RobustaAimSystem>();
             var exclude = new HashSet<EntityUid> { playerEntity.Value };
 
-            // Draw FOV circle (accounting for camera zoom)
             var centerScreen = mouseScreenPos;
             var edgeScreen = new ScreenCoordinates(mouseScreenPos.Position + new Vector2(RobustaConfig.AimFovPixels, 0), mouseScreenPos.Window);
             var centerWorld = eye.PixelToMap(centerScreen).Position;
@@ -85,7 +75,6 @@ public class GunAimOverlay(
             AimOutput? drawTarget = null;
             bool isLocked = false;
 
-            // 1. CHECK LOCK: If the target is locked, use it
             if (aimSystem.LockedTarget.HasValue && entManager.EntityExists(aimSystem.LockedTarget.Value))
             {
                 var lockedEnt = aimSystem.LockedTarget.Value;
@@ -97,22 +86,16 @@ public class GunAimOverlay(
             }
             else
             {
-                // 2. TARGET SEARCH: If there is no lock, search for the closest mob in FOV
                 drawTarget = aimSystem.GetClosestInScreenFov(mouseScreenPos, RobustaConfig.AimFovPixels, exclude);
             }
 
-            // VISUAL DRAWING
             if (drawTarget != null)
             {
                 var targetPos = drawTarget.Value.Position.Position;
-                
-                // Color: Green if target is locked. Red if just in visibility zone.
-                var targetColor = isLocked ? Color.LimeGreen : Color.Red;
-                
-                // Snapline from mouse to target
-                worldHandle.DrawLine(mouseWorldPos.Position, targetPos, targetColor.WithAlpha(0.5f));
 
-                // Crosshair on target
+                // Green while locked, red while merely inside the FOV.
+                var targetColor = isLocked ? Color.LimeGreen : Color.Red;
+                worldHandle.DrawLine(mouseWorldPos.Position, targetPos, targetColor.WithAlpha(0.5f));
                 worldHandle.DrawCircle(targetPos, 0.2f, targetColor, false);
                 worldHandle.DrawLine(targetPos - new Vector2(0.3f, 0), targetPos + new Vector2(0.3f, 0), targetColor);
                 worldHandle.DrawLine(targetPos - new Vector2(0, 0.3f), targetPos + new Vector2(0, 0.3f), targetColor);

@@ -2,12 +2,13 @@ using System.IO;
 using System.Numerics;
 using Hexa.NET.ImGui;
 using RobustoClient.ImGui.Theme;
+using RobustoClient.Systems;
 using static Hexa.NET.ImGui.ImGui;
 
 namespace RobustoClient.ImGui;
 
 /// <summary>
-/// Owns every visual setting for every Robusta window: colours, spacing metrics and font sizes all
+/// Owns every visual setting for every Robusta window: colors, spacing metrics and font sizes all
 /// come from the active <see cref="RobustaThemePalette"/>, which is loaded from JSON.
 /// </summary>
 public static partial class RobustaImGuiTheme
@@ -53,9 +54,9 @@ public static partial class RobustaImGuiTheme
     /// Installs a palette and schedules a style refresh for the next frame.
     /// </summary>
     /// <remarks>
-    /// The palette is copied. <see cref="Builtins"/> hands out shared instances and the theme editor
-    /// mutates whatever palette is active through reflection, so without the copy an edit would
-    /// rewrite the built-in Dark theme in place and re-selecting it would not restore anything.
+    /// The palette is copied: <see cref="Builtins"/> hands out shared instances and the theme editor
+    /// mutates the active palette through reflection, so without the copy an edit would rewrite the
+    /// built-in Dark theme in place.
     /// </remarks>
     public static void ApplyPalette(RobustaThemePalette palette)
     {
@@ -83,7 +84,7 @@ public static partial class RobustaImGuiTheme
             return true;
         }
 
-        MarseyLogger.Warn($"Theme '{name}' not found; keeping '{Current.Name}'.");
+        MarseyLogger.Warn($"Theme '{name}' not found, keeping '{Current.Name}'.");
         return false;
     }
 
@@ -139,4 +140,26 @@ public static partial class RobustaImGuiTheme
         ApplyStyle();
         StyleDirty = false;
     }
+
+    /// <summary>
+    /// Color that names an antagonist, or null when the kind has none of its own. The radar blip,
+    /// its tag and the ESP tag all read this, so the three cannot drift apart.
+    /// </summary>
+    public static Vector4? AntagonistColor(AntagonistKind kind) => kind switch
+    {
+        AntagonistKind.Ninja => Colors.AntagonistNinja,
+        AntagonistKind.Dragon => Colors.AntagonistDragon,
+        AntagonistKind.Carp => Colors.AntagonistDragon,
+        AntagonistKind.Changeling => Colors.AntagonistChangeling,
+        AntagonistKind.Clone => Colors.AntagonistClone,
+        AntagonistKind.RatKing => Colors.AntagonistRatKing,
+        AntagonistKind.NukeOperative => Colors.AntagonistNukie,
+        AntagonistKind.Thief => Colors.AntagonistThief,
+        AntagonistKind.Zombie => Colors.AntagonistZombie,
+        AntagonistKind.InitialInfected => Colors.AntagonistInitialInfected,
+        AntagonistKind.HeadRevolutionary => Colors.AntagonistHeadRev,
+        AntagonistKind.Revolutionary => Colors.AntagonistRev,
+        AntagonistKind.Wizard => Colors.AntagonistWizard,
+        _ => null
+    };
 }

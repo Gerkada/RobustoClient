@@ -24,6 +24,7 @@ using Robust.Shared.Log;
 using Robust.Shared.Map;
 using Robust.Shared.Prototypes;
 using Robust.Shared.Timing;
+using RobustoClient.Reflection;
 
 namespace RobustoClient.Systems.Abstract;
 
@@ -77,7 +78,7 @@ public sealed class ItemUtilitySystem : EntitySystem
     [Dependency] private readonly InventorySystem _inventory = default!;
     [Dependency] private readonly SharedContainerSystem _container = default!;
 
-    public const float StepDelay = 0.25f;
+    public const float StepDelay = 0.15f;
     public const float DefaultVicinityRange = 2f;
 
     private static readonly string[] InventorySlotsToScan =
@@ -87,30 +88,6 @@ public sealed class ItemUtilitySystem : EntitySystem
     private readonly Dictionary<EntityUid, (ItemSource Source, string? SlotOrHand, EntityUid? StorageEntity)> _itemOrigins = new();
     private float _wait;
     private ISawmill _sawmill = default!;
-
-    // --- Cross-version EntityPrototype.Components reflection (avoids ComponentRegistryEntry struct/class TypeLoadException) ---
-    private static readonly PropertyInfo? ProtoComponentsProp =
-        typeof(EntityPrototype).GetProperty("Components", BindingFlags.Public | BindingFlags.Instance);
-    private static PropertyInfo? _entryComponentProp;
-    private static FieldInfo? _entryComponentField;
-    private static bool _entryReflected;
-
-    // --- Cross-version StackComponent.StackTypeId reflection (handles string vs ProtoId<StackPrototype>) ---
-    private static readonly PropertyInfo? StackTypeIdProp =
-        typeof(StackComponent).GetProperty("StackTypeId", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-    private static readonly FieldInfo? StackTypeIdField =
-        typeof(StackComponent).GetField("StackTypeId", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-
-    private static string? GetStackTypeIdString(StackComponent stack)
-    {
-        var raw = StackTypeIdProp?.GetValue(stack) ?? StackTypeIdField?.GetValue(stack);
-        return raw?.ToString();
-    }
-
-    // --- Cross-version SharedHandsSystem.GetHeldItem reflection ---
-    private MethodInfo? _getHeldItemMethod3;
-    private MethodInfo? _getHeldItemMethod2;
-    private bool _handsReflected;
 
     public bool IsBusy => _steps.Count > 0 || _wait > 0f;
 
@@ -182,21 +159,18 @@ public sealed class ItemUtilitySystem : EntitySystem
         }));
     }
 
-    // --- Cross-version Prototype Component Inspection ---
-
-    private static IDictionary? GetProtoComponentsDict(EntityPrototype proto)
-        => ProtoComponentsProp?.GetValue(proto) as IDictionary;
-
+    // Upstream's Components dictionary is keyed by component name, reading it reflectively avoids a
+    // TypeLoadException on the ComponentRegistryEntry struct/class split between versions.
     public bool HasPrototypeComponent(EntityPrototype proto, string compName)
     {
-        var dict = GetProtoComponentsDict(proto);
+        var dict = Reflect.Get(proto, "Components") as IDictionary;
         return dict != null && dict.Contains(compName);
     }
 
     public bool TryGetPrototypeComponent<T>(EntityPrototype proto, string compName, out T? component) where T : class
     {
         component = null;
-        var dict = GetProtoComponentsDict(proto);
+        var dict = Reflect.Get(proto, "Components") as IDictionary;
         if (dict == null || !dict.Contains(compName))
             return false;
 
@@ -204,21 +178,9 @@ public sealed class ItemUtilitySystem : EntitySystem
         if (entry == null)
             return false;
 
-        if (!_entryReflected)
-        {
-            var entryType = entry.GetType();
-            const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-            _entryComponentProp = entryType.GetProperty("Component", flags);
-            _entryComponentField = entryType.GetField("Component", flags);
-            _entryReflected = true;
-        }
-
-        var compObj = _entryComponentProp?.GetValue(entry) ?? _entryComponentField?.GetValue(entry);
-        component = compObj as T;
+        component = Reflect.Get(entry, "Component", ReflectOptions.Any) as T;
         return component != null;
     }
-
-    // --- Prototype Hierarchy ---
 
     public HashSet<string> GetDescendantIds(string parentProtoId)
     {
@@ -269,7 +231,7 @@ public sealed class ItemUtilitySystem : EntitySystem
             {
                 if (!TryComp<StackComponent>(uid, out var stack))
                     return false;
-                if (!string.Equals(GetStackTypeIdString(stack), requiredStackType, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(Reflect.GetString(stack, "StackTypeId", ReflectOptions.Any), requiredStackType, StringComparison.OrdinalIgnoreCase))
                     return false;
                 if (allowedProtos != null && string.IsNullOrEmpty(query.StackType))
                     return true;
@@ -297,7 +259,7 @@ public sealed class ItemUtilitySystem : EntitySystem
         if (!TryGetPrototypeComponent<StackComponent>(proto, "Stack", out var stackComp) || stackComp == null)
             return false;
 
-        var resolvedId = GetStackTypeIdString(stackComp);
+        var resolvedId = Reflect.GetString(stackComp, "StackTypeId", ReflectOptions.Any);
         if (string.IsNullOrEmpty(resolvedId))
             return false;
 
@@ -313,20 +275,30 @@ public sealed class ItemUtilitySystem : EntitySystem
     private int GetStackCount(EntityUid uid)
         => TryComp<StackComponent>(uid, out var stack) ? stack.Count : 1;
 
-    private EntityUid? GetHeldInHand(EntityUid player, HandsComponent hands, string handName)
+    /// <summary>
+    /// The item in a hand, or null. Probes both <c>GetHeldItem</c> overloads because upstream adds a
+    /// <c>hideVirtualItems</c> parameter that GoobStation does not have. A direct call cannot work:
+    /// an optional parameter is baked into the call site, so even the two-argument form emits a
+    /// three-argument reference and throws on the build without it.
+    /// </summary>
+    public EntityUid? GetHeldInHand(EntityUid player, HandsComponent hands, string handName)
     {
-        if (!_handsReflected)
+        var entity = new Entity<HandsComponent>(player, hands);
+
+        // Upstream has both overloads across versions, so probe the longer one first.
+        if (Reflect.TryInvoke(_hands, "GetHeldItem",
+                [typeof(Entity<HandsComponent>), typeof(string), typeof(bool)],
+                out var result, entity, handName, false) && result is EntityUid threeArg)
         {
-            var handsType = _hands.GetType();
-            _getHeldItemMethod3 = handsType.GetMethod("GetHeldItem", [typeof(Entity<HandsComponent>), typeof(string), typeof(bool)]);
-            _getHeldItemMethod2 = handsType.GetMethod("GetHeldItem", [typeof(Entity<HandsComponent>), typeof(string)]);
-            _handsReflected = true;
+            return threeArg;
         }
 
-        if (_getHeldItemMethod3 != null)
-            return (EntityUid?)_getHeldItemMethod3.Invoke(_hands, [new Entity<HandsComponent>(player, hands), handName, false]);
-        if (_getHeldItemMethod2 != null)
-            return (EntityUid?)_getHeldItemMethod2.Invoke(_hands, [new Entity<HandsComponent>(player, hands), handName]);
+        if (Reflect.TryInvoke(_hands, "GetHeldItem",
+                [typeof(Entity<HandsComponent>), typeof(string)],
+                out result, entity, handName) && result is EntityUid twoArg)
+        {
+            return twoArg;
+        }
 
         if (_container.TryGetContainer(player, handName, out var container) && container.ContainedEntities.Count > 0)
             return container.ContainedEntities[0];
@@ -523,7 +495,7 @@ public sealed class ItemUtilitySystem : EntitySystem
             return false;
         }
 
-        // Prefer a single stack/item that already satisfies `needed` (prefer belt over backpack when both satisfy)
+        // Prefer one stack that already satisfies `needed`, belt before backpack.
         var singleMatch = candidates
             .Where(c => c.StackCount >= needed)
             .OrderBy(c => c.Source)
@@ -553,7 +525,7 @@ public sealed class ItemUtilitySystem : EntitySystem
             return true;
         }
 
-        // Multi-stack merge: gather multiple smaller stacks up to `needed`
+        // Multi-stack merge: gather smaller stacks up to `needed`.
         int accumulated = 0;
         ItemLocation? baseStack = candidates.FirstOrDefault(c => c.Source == ItemSource.Hand);
 
@@ -618,8 +590,8 @@ public sealed class ItemUtilitySystem : EntitySystem
         if (heldInActive == null)
             return true;
 
-        // If active hand holds a tool or an item we previously fetched (and not the container we're pulling from),
-        // stow it back before taking the next item so we never fill up both hands with tools.
+        // Stow a tool or previously fetched item before taking the next one, so both hands never fill
+        // with tools.
         if (heldInActive.Value != incomingTarget?.StorageEntity &&
             (_itemOrigins.ContainsKey(heldInActive.Value) || IsToolOrWelder(heldInActive.Value)))
         {
@@ -643,7 +615,7 @@ public sealed class ItemUtilitySystem : EntitySystem
 
     private void EnqueueStowHeldItem(EntityUid player, EntityUid heldUid, bool allowHandSwitchFallback)
     {
-        // 1. Extinguish lit welder first so its ItemSize shrinks back to Small before storage insertion
+        // 1. Extinguish a lit welder so its ItemSize shrinks back to Small before insertion.
         _steps.Enqueue((0f, () =>
         {
             if (Exists(heldUid) && IsWelderLit(heldUid))
@@ -653,9 +625,9 @@ public sealed class ItemUtilitySystem : EntitySystem
             }
         }));
 
-        // 2. Determine target storage entity: return to origin storage if recorded; otherwise prefer "belt" first, then "back".
-        // IMPORTANT: We stow via ClickEntity(player, storageEntity) instead of UseSlotNetworkMessage(slot),
-        // because UseSlotNetworkMessage unequips the belt/backpack if the active hand is empty on the server!
+        // 2. Target storage: the origin storage if recorded, else "belt", then "back".
+        // Stow via ClickEntity, not UseSlotNetworkMessage: the latter unequips the belt or backpack
+        // when the server sees an empty active hand.
         EntityUid? primaryStorage = null;
         string? primarySlot = null;
 
@@ -728,8 +700,8 @@ public sealed class ItemUtilitySystem : EntitySystem
             }));
         }
 
-        // 3. Zero-delay verification: if active hand is STILL holding an item (e.g. belt rejected a material stack or was full),
-        // fall back cleanly using ClickEntity on the alternate storage container so the belt/backpack is NEVER unequipped.
+        // 3. Verify at zero delay: if the hand still holds the item (belt rejected it or was full),
+        // fall back to ClickEntity on the alternate container so the belt is never unequipped.
         _steps.Enqueue((0f, () =>
         {
             if (!Exists(player) || !TryComp<HandsComponent>(player, out var h))
@@ -747,7 +719,7 @@ public sealed class ItemUtilitySystem : EntitySystem
                 return;
             }
 
-            // Try alternate storage container if primaryStorage couldn't accept the item (e.g. Steel stack in hand when belt only accepts tools)
+            // Alternate container, for when the primary rejects the item (a steel stack into a belt).
             var fallbackSlot = primarySlot == "belt" ? "back" : "belt";
             if (_inventory.TryGetSlotEntity(player, fallbackSlot, out var fbEnt) &&
                 fbEnt.HasValue &&
@@ -772,7 +744,7 @@ public sealed class ItemUtilitySystem : EntitySystem
             }
         }));
 
-        // 4. Second check in case Step 3 extinguished a lagging welder or fallback storage also couldn't fit it
+        // 4. Re-check, in case step 3 extinguished a lagging welder or the fallback also did not fit.
         _steps.Enqueue((0f, () =>
         {
             if (!Exists(player) || !TryComp<HandsComponent>(player, out var h))
@@ -836,16 +808,12 @@ public sealed class ItemUtilitySystem : EntitySystem
             if (name.Equals("WelderComponent", StringComparison.OrdinalIgnoreCase))
             {
                 isWelder = true;
-                var enabledProp = comp.GetType().GetProperty("Enabled", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                var enabledField = comp.GetType().GetField("Enabled", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                if ((enabledProp?.GetValue(comp) ?? enabledField?.GetValue(comp)) is true)
+                if (Reflect.Get(comp, "Enabled", ReflectOptions.Any) is true)
                     isActivated = true;
             }
             else if (name.Equals("ItemToggleComponent", StringComparison.OrdinalIgnoreCase))
             {
-                var actProp = comp.GetType().GetProperty("Activated", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                var actField = comp.GetType().GetField("Activated", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                if ((actProp?.GetValue(comp) ?? actField?.GetValue(comp)) is true)
+                if (Reflect.Get(comp, "Activated", ReflectOptions.Any) is true)
                     isActivated = true;
             }
         }
@@ -903,7 +871,8 @@ public sealed class ItemUtilitySystem : EntitySystem
                         if (!Exists(itemUid) || !Exists(storageUid))
                             return;
 
-                        // Final guard: if active hand is still not empty, switch to an empty hand so StorageInteractWithItemEvent picks up instead of interacting
+                        // Final guard: switch to an empty hand so StorageInteractWithItemEvent fires
+                        // instead of a plain interaction.
                         if (TryComp<HandsComponent>(player, out var h))
                         {
                             var curActive = _hands.GetActiveHand(player);

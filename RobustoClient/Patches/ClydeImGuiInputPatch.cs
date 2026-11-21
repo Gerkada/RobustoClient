@@ -2,6 +2,7 @@ using System.Reflection;
 using HarmonyLib;
 using Robust.Client.Input;
 using RobustoClient.ImGui;
+using RobustoClient.Reflection;
 
 namespace RobustoClient.Patches;
 
@@ -68,7 +69,7 @@ internal static class ClydeImGuiInputPatch
     private static Func<object, TArgs>? CreateArgsGetter<TArgs>(string nestedRecordName) where TArgs : class
     {
         var recordType = ClydeType?.GetNestedType(nestedRecordName, BindingFlags.NonPublic);
-        var prop = recordType?.GetProperty("Args", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        var prop = Reflect.GetProperty(recordType, "Args", ReflectOptions.Any);
         if (prop?.GetMethod == null)
             return null;
 

@@ -3,8 +3,8 @@ using Hexa.NET.ImGui;
 namespace RobustoClient.ImGui.Theme;
 
 /// <summary>
-/// Declares where every colour token is consumed. <see cref="StyleSlots"/> is applied to the global
-/// ImGui style; <see cref="DrawOnly"/> tokens are read straight from <c>Colors</c> by drawing code
+/// Declares where every color token is consumed. <see cref="StyleSlots"/> is applied to the global
+/// ImGui style, <see cref="DrawOnly"/> tokens are read straight from <c>Colors</c> by drawing code
 /// and therefore update immediately.
 /// </summary>
 /// <remarks>
@@ -77,6 +77,18 @@ public static class ThemeStyleMap
         ThemeColorTokens.SeverityMajor,
         ThemeColorTokens.SeverityRestricted,
         ThemeColorTokens.SeverityMinor,
-        ThemeColorTokens.SeverityUnknown
+        ThemeColorTokens.SeverityUnknown,
+        ThemeColorTokens.AntagonistNinja,
+        ThemeColorTokens.AntagonistDragon,
+        ThemeColorTokens.AntagonistChangeling,
+        ThemeColorTokens.AntagonistClone,
+        ThemeColorTokens.AntagonistRatKing,
+        ThemeColorTokens.AntagonistNukie,
+        ThemeColorTokens.AntagonistThief,
+        ThemeColorTokens.AntagonistZombie,
+        ThemeColorTokens.AntagonistInitialInfected,
+        ThemeColorTokens.AntagonistHeadRev,
+        ThemeColorTokens.AntagonistRev,
+        ThemeColorTokens.AntagonistWizard
     ];
 }

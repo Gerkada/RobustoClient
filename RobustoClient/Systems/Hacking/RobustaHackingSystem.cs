@@ -1,12 +1,11 @@
 using Content.Shared.Interaction;
 using Content.Shared.Wires;
-using Robust.Client.Graphics;
-using Robust.Client.Input;
 using Robust.Client.Player;
 using Robust.Shared.GameObjects;
 using Robust.Shared.IoC;
 using Robust.Shared.Log;
 using Robust.Shared.Map;
+using RobustoClient.Systems.Abstract;
 
 namespace RobustoClient.Systems.Hacking;
 
@@ -17,11 +16,9 @@ public sealed class RobustaHackingSystem : EntitySystem
 {
     private const float CursorSearchRange = 0.65f;
 
-    [Dependency] private readonly IInputManager _input = default!;
     [Dependency] private readonly IPlayerManager _player = default!;
-    [Dependency] private readonly IEyeManager _eye = default!;
-    [Dependency] private readonly EntityLookupSystem _lookup = default!;
     [Dependency] private readonly SharedTransformSystem _transform = default!;
+    [Dependency] private readonly MouseUtilitySystem _mouse = default!;
     [Dependency] private readonly RobustaWiresSolver _wiresSolver = default!;
 
     private ISawmill _log = default!;
@@ -47,8 +44,7 @@ public sealed class RobustaHackingSystem : EntitySystem
         if (_player.LocalEntity is not { } player || !Exists(player))
             return;
 
-        var cursorMapCoordinates = _eye.PixelToMap(_input.MouseScreenPosition);
-        if (cursorMapCoordinates.MapId == MapId.Nullspace ||
+        if (!_mouse.TryGetMouseMapCoordinates(out var cursorMapCoordinates) ||
             _transform.GetMapCoordinates(player).MapId != cursorMapCoordinates.MapId)
             return;
 
@@ -95,9 +91,12 @@ public sealed class RobustaHackingSystem : EntitySystem
         var bestCursorDistance = float.MaxValue;
         var bestOutOfRangeCursorDist = float.MaxValue;
 
-        foreach (var uid in _lookup.GetEntitiesInRange(cursorMapCoordinates, CursorSearchRange, LookupFlags.Uncontained))
+        foreach (var uid in _mouse.GetEntitiesNearCursor(
+            cursorMapCoordinates, 
+            CursorSearchRange, 
+            whitelist: [typeof(WiresPanelComponent)]))
         {
-            if (uid == player || !Exists(uid) || !HasComp<WiresPanelComponent>(uid))
+            if (uid == player || !Exists(uid))
                 continue;
 
             var targetMapCoordinates = _transform.GetMapCoordinates(uid);

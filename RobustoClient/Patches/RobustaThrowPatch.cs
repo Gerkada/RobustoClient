@@ -8,6 +8,7 @@ using Robust.Client.Player;
 using Robust.Shared.GameObjects;
 using Content.Shared.CombatMode;
 using RobustoClient.Systems;
+using RobustoClient.Reflection;
 using Robust.Shared.Log;
 using Robust.Client.Graphics;
 
@@ -71,7 +72,7 @@ public static class RobustaThrowPatch
         if (clientMsg == null || fullMsg == null) return;
 
         // Start the exploit only at the moment of click (press)
-        var stateObj = GetValue(clientMsg, "State");
+        var stateObj = Reflect.Get(clientMsg, "State", ReflectOptions.Any);
         if (stateObj == null || stateObj.ToString() != "Down") return;
 
         var playerMan = IoCManager.Resolve<IPlayerManager>();
@@ -92,10 +93,10 @@ public static class RobustaThrowPatch
             var eyeManager = IoCManager.Resolve<IEyeManager>();
             var targetMapPos = target.Value.Position;
 
-            var origCoordsObj = GetValue(clientMsg, "Coordinates");
+            var origCoordsObj = Reflect.Get(clientMsg, "Coordinates", ReflectOptions.Any);
             if (origCoordsObj == null) return;
 
-            var origEntityIdObj = GetValue(origCoordsObj, "EntityId") ?? GetValue(origCoordsObj, "NetEntity");
+            var origEntityIdObj = Reflect.GetFirst(origCoordsObj, "EntityId", "NetEntity");
             if (origEntityIdObj == null) return;
 
             var origEntityId = (EntityUid)origEntityIdObj;
@@ -104,10 +105,10 @@ public static class RobustaThrowPatch
             var newScreenCoords = eyeManager.CoordinatesToScreen(newEntityCoords); 
             var newNetCoords = entMan.GetNetCoordinates(newEntityCoords);
 
-            bool c1 = ForceSetValue(clientMsg, "Coordinates", newEntityCoords);
-            bool c2 = ForceSetValue(clientMsg, "ScreenCoordinates", newScreenCoords);
-            bool c3 = ForceSetValue(fullMsg, "Coordinates", newNetCoords);
-            bool c4 = ForceSetValue(fullMsg, "ScreenCoordinates", newScreenCoords);
+            bool c1 = Reflect.TrySet(clientMsg, "Coordinates", newEntityCoords, ReflectOptions.Any);
+            bool c2 = Reflect.TrySet(clientMsg, "ScreenCoordinates", newScreenCoords, ReflectOptions.Any);
+            bool c3 = Reflect.TrySet(fullMsg, "Coordinates", newNetCoords, ReflectOptions.Any);
+            bool c4 = Reflect.TrySet(fullMsg, "ScreenCoordinates", newScreenCoords, ReflectOptions.Any);
 
             if (c1 && c3)
             {
@@ -118,39 +119,5 @@ public static class RobustaThrowPatch
         }
         catch (Exception e) { Logger.GetSawmill("RobustaNet").Error($"[CRASH] {e.Message}"); }
         finally { _isPatching = false; }
-    }
-
-    static object? GetValue(object obj, string name)
-    {
-        var type = obj.GetType();
-        var prop = type.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        if (prop != null) return prop.GetValue(obj);
-        
-        var field = type.GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        if (field != null) return field.GetValue(obj);
-        
-        return null;
-    }
-
-    static bool ForceSetValue(object obj, string name, object value)
-    {
-        var type = obj.GetType();
-        
-        var prop = type.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        if (prop != null && prop.CanWrite) {
-            prop.SetValue(obj, value); return true;
-        }
-        
-        var field = type.GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        if (field != null) {
-            field.SetValue(obj, value); return true;
-        }
-        
-        var backingField = type.GetField($"<{name}>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance);
-        if (backingField != null) {
-            backingField.SetValue(obj, value); return true;
-        }
-        
-        return false;
     }
 }

@@ -42,6 +42,15 @@ public readonly record struct RobustaKeybind
         && Enum.IsDefined(BaseKey)
         && !HasDuplicateKeys();
 
+    /// <summary>
+    /// How many keys the combination requires: 1 for a bare key, up to 4 with three modifiers. Used
+    /// to resolve overlaps, because a bare key also reads as held while a modified variant is.
+    /// </summary>
+    public int Specificity =>
+        1 + (Mod1 != Keyboard.Key.Unknown ? 1 : 0)
+          + (Mod2 != Keyboard.Key.Unknown ? 1 : 0)
+          + (Mod3 != Keyboard.Key.Unknown ? 1 : 0);
+
     /// <summary>True while every key of the combination is held.</summary>
     public bool IsDown(IInputManager input)
     {
@@ -94,7 +103,7 @@ public readonly record struct RobustaKeybind
 
     /// <summary>
     /// Builds a combination from a captured key press. Modifiers are collected in
-    /// Shift/Control/Alt/System order; <see cref="RobustaKeybind"/> sorts them canonically on construction.
+    /// Shift/Control/Alt/System order, <see cref="RobustaKeybind"/> sorts them canonically on construction.
     /// </summary>
     public static RobustaKeybind FromCapture(Keyboard.Key key, bool shift, bool control, bool alt, bool system = false)
     {
@@ -155,7 +164,7 @@ public readonly record struct RobustaKeybind
             if (part.Equals("cmd", StringComparison.OrdinalIgnoreCase) || part.Equals("win", StringComparison.OrdinalIgnoreCase))
                 part = nameof(Keyboard.Key.LSystem);
 
-            // Reject numeric tokens; Enum.TryParse would otherwise map "7" onto an unrelated key.
+            // Reject numeric tokens, Enum.TryParse would otherwise map "7" onto an unrelated key.
             if (part.Length == 0 || char.IsDigit(part[0]))
                 return false;
 

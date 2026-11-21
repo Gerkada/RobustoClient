@@ -3,6 +3,7 @@ using System.Reflection;
 using Content.Client.Chemistry.UI;
 using HarmonyLib;
 using Robust.Client.UserInterface.Controls;
+using RobustoClient.Reflection;
 using RobustoClient.UI.ImGui;
 
 namespace RobustoClient.Patches;
@@ -38,7 +39,7 @@ internal static class AutoChemUIPatch
         };
 
         var clearBtn = (__instance as ReagentDispenserWindow)?.ClearButton
-            ?? __instance.GetType().GetProperty("ClearButton", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(__instance) as Button;
+            ?? Reflect.Get(__instance, "ClearButton", ReflectOptions.Any) as Button;
         clearBtn?.Parent?.AddChild(autoChemBtn);
     }
 }

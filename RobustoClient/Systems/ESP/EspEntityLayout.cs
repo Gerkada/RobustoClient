@@ -79,8 +79,10 @@ public sealed class EspLayoutManager
     {
         if (_handle == null) return;
 
-        // Top: draw stacking upwards. Highest priority is closest to entity (lowest Y offset)
-        _top.Sort(PriorityDescending);
+        // Most entities fill one dock and leave the other three empty, so the count guard skips the
+        // sort setup on the empty lists rather than paying it four times per entity per frame.
+        // Top: stacks upwards, highest priority closest to the entity.
+        if (_top.Count > 1) _top.Sort(PriorityDescending);
         float currentY = _baseScreenPos.Y - 45f;
         foreach (var el in _top)
         {
@@ -88,8 +90,8 @@ public sealed class EspLayoutManager
             currentY -= 12f;
         }
 
-        // Bottom: draw stacking downwards.
-        _bottom.Sort(PriorityDescending);
+        // Bottom: stacks downwards.
+        if (_bottom.Count > 1) _bottom.Sort(PriorityDescending);
         currentY = _baseScreenPos.Y + 10f;
         foreach (var el in _bottom)
         {
@@ -97,8 +99,8 @@ public sealed class EspLayoutManager
             currentY += 12f;
         }
 
-        // Right: stack downwards from center right
-        _right.Sort(PriorityDescending);
+        // Right: stacks downwards from centre right.
+        if (_right.Count > 1) _right.Sort(PriorityDescending);
         currentY = _baseScreenPos.Y - 30f;
         foreach (var el in _right)
         {
@@ -106,12 +108,12 @@ public sealed class EspLayoutManager
             currentY += 12f;
         }
 
-        // Left: stack downwards from center left
-        _left.Sort(PriorityDescending);
+        // Left: stacks downwards from centre left.
+        if (_left.Count > 1) _left.Sort(PriorityDescending);
         currentY = _baseScreenPos.Y - 30f;
         foreach (var el in _left)
         {
-            // Simple offset, ideally would measure string width
+            // Simple offset, does not measure string width.
             _handle.DrawString(_font, new Vector2(_baseScreenPos.X - 80f, currentY), el.Text, el.Color);
             currentY += 12f;
         }

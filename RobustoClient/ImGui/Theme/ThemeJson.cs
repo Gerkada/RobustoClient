@@ -23,7 +23,7 @@ public static class ThemeJson
         using var stream = typeof(ThemeJson).Assembly.GetManifestResourceStream(resourceName);
         if (stream == null)
         {
-            MarseyLogger.Warn($"Theme resource '{resourceName}' not found; using built-in fallback.");
+            MarseyLogger.Warn($"Theme resource '{resourceName}' not found, using built-in fallback.");
             return fallback;
         }
 
@@ -50,7 +50,7 @@ public static class ThemeJson
 
     /// <summary>
     /// Parses a theme document onto <paramref name="fallback"/>. Unknown tokens are ignored with a
-    /// warning; missing tokens keep the fallback value.
+    /// warning, missing tokens keep the fallback value.
     /// </summary>
     public static RobustaThemePalette Parse(string json, RobustaThemePalette fallback) =>
         Parse(json, fallback, isUserTheme: false);
@@ -70,7 +70,7 @@ public static class ThemeJson
 
         if (root == null)
         {
-            MarseyLogger.Warn("Theme JSON root is not an object; keeping current theme.");
+            MarseyLogger.Warn("Theme JSON root is not an object, keeping current theme.");
             return fallback;
         }
 
@@ -92,7 +92,7 @@ public static class ThemeJson
 
     /// <summary>
     /// Reads a font key. An unknown key is kept as written rather than rejected here, so a theme can
-    /// name a face that a newer build will add; resolution falls back at load time.
+    /// name a face that a newer build will add, resolution falls back at load time.
     /// </summary>
     private static string? ReadString(JsonObject root, string key) =>
         root[key] is JsonValue val && val.TryGetValue<string>(out var text) ? text : null;
@@ -120,7 +120,7 @@ public static class ThemeJson
         }
         catch (Exception)
         {
-            MarseyLogger.Warn($"Theme key '{key}' is not a [width, height] pair; keeping default.");
+            MarseyLogger.Warn($"Theme key '{key}' is not a [width, height] pair, keeping default.");
             return fallback;
         }
     }
@@ -180,7 +180,7 @@ public static class ThemeJson
 
                 if (!values.ContainsKey(key))
                 {
-                    MarseyLogger.Warn($"Theme token '{key}' is not recognized; ignoring.");
+                    MarseyLogger.Warn($"Theme token '{key}' is not recognized, ignoring.");
                     continue;
                 }
 
@@ -191,14 +191,14 @@ public static class ThemeJson
                 }
                 catch (Exception)
                 {
-                    MarseyLogger.Warn($"Theme token '{key}' is not a string; keeping default.");
+                    MarseyLogger.Warn($"Theme token '{key}' is not a string, keeping default.");
                     continue;
                 }
 
                 if (ThemeHex.TryParse(text, out var color))
                     values[key] = color;
                 else
-                    MarseyLogger.Warn($"Theme token '{key}' has invalid colour '{text}'; keeping default.");
+                    MarseyLogger.Warn($"Theme token '{key}' has invalid color '{text}', keeping default.");
             }
         }
 
@@ -241,7 +241,7 @@ public static class ThemeJson
 
             if (!props.TryGetValue(key, out var prop))
             {
-                MarseyLogger.Warn($"Theme setting '{key}' is not recognized; ignoring.");
+                MarseyLogger.Warn($"Theme setting '{key}' is not recognized, ignoring.");
                 continue;
             }
 
@@ -251,7 +251,7 @@ public static class ThemeJson
             }
             catch (Exception)
             {
-                MarseyLogger.Warn($"Theme setting '{key}' is not a number; keeping default.");
+                MarseyLogger.Warn($"Theme setting '{key}' is not a number, keeping default.");
             }
         }
 

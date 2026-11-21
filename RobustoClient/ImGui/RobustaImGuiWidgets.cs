@@ -9,16 +9,14 @@ public static class RobustaImGuiWidgets
 {
     private static readonly Dictionary<string, float> ToggleAnimProgress = new();
 
-    /// <summary>
-    /// Toggle row with a colour chip in place of the switch: <c>[chip] Label</c>.
-    /// </summary>
-    /// <remarks>
-    /// The chip shows the effective colour and dims while the row is disabled. The label is both the
-    /// enable target and the only state indicator: no toggle circle, so the row reads as one control
-    /// rather than a colour field beside a switch.
-    /// </remarks>
-    /// <param name="fallbackColor">Colour to show while no override is set.</param>
-    /// <returns>True when the enabled state or the colour changed.</returns>
+    /// <summary>The part of a label ImGui would draw: everything before the <c>##</c> id suffix.</summary>
+    private static string VisibleLabel(string label)
+    {
+        int hash = label.IndexOf("##", StringComparison.Ordinal);
+        return hash >= 0 ? label[..hash] : label;
+    }
+
+    /// <summary>Toggle row with a color chip in place of the switch: <c>[chip] Label</c>.</summary>
     public static bool ToggleColorRow(
         string label,
         ref bool enabled,
@@ -32,7 +30,7 @@ public static class RobustaImGuiWidgets
         float padY = MathF.Max(1f, (rowHeight - lineHeight) * 0.5f);
         var drawList = GetWindowDrawList();
 
-        // Keep the true colour intact so editing while dimmed never writes the dimmed shade back.
+        // Keep the true color intact so editing while dimmed never writes the dimmed shade back.
         var editColor = Theme.ThemeHex.TryParse(hexColor, out var parsed) ? parsed : fallbackColor;
 
         bool colorChanged = false;
@@ -57,7 +55,7 @@ public static class RobustaImGuiWidgets
 
         PopStyleVar();
 
-        // Overlay the dim wash post-render so off/disabled rows still look muted without corrupting editColor.
+        // Dim the chip without corrupting editColor.
         if (!enabled || disabled)
         {
             var dimTint = disabled
@@ -72,8 +70,7 @@ public static class RobustaImGuiWidgets
 
         SameLine();
 
-        // The label is the enable target and the only indicator: no toggle circle, the text itself
-        // is the highlight. A chip plus a switch read as two controls for one setting.
+        // The label is the enable target and the only indicator.
         var labelPos = GetCursorScreenPos();
         float labelWidth = MathF.Max(GetContentRegionAvail().X, lineHeight * 4f);
 
@@ -106,20 +103,57 @@ public static class RobustaImGuiWidgets
         drawList.AddText(
             new Vector2(labelPos.X, labelPos.Y + (rowHeight - lineHeight) * 0.5f),
             RobustaImGuiTheme.ColU32(labelColor),
-            label);
+            VisibleLabel(label));
 
         return colorChanged || enabledChanged;
     }
 
-    /// <summary>
-    /// Toggle row laid out as <c>[indicator] Label</c>: a square colour indicator followed by the
-    /// name, with the whole row as the hit target. Returns true when the value changed.
-    /// </summary>
-    /// <remarks>
-    /// The indicator fill and border lerp from the theme's control and border tokens to its accent
-    /// while the value animates, so it follows whichever theme is active rather than hardcoding
-    /// colours. A disabled row greys out and swallows clicks.
-    /// </remarks>
+    /// <summary>Color row with no on/off state: a chip and a label, with the chip as the only control.</summary>
+    /// <param name="id">Unique widget id, so two rows can share a label.</param>
+    /// <returns>True when the color changed.</returns>
+    public static bool ColorRow(string label, string id, ref string hexColor, Vector4 fallbackColor)
+    {
+        float rowHeight = RobustaImGuiScale.ToggleRow;
+        float lineHeight = GetTextLineHeight();
+        float chipSize = lineHeight * 0.9f;
+        float padY = MathF.Max(1f, (rowHeight - lineHeight) * 0.5f);
+
+        // Keep the true color intact so an unparseable override falls back without being written back.
+        var editColor = Theme.ThemeHex.TryParse(hexColor, out var parsed) ? parsed : fallbackColor;
+        bool changed = false;
+
+        PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(0f, padY));
+        SetNextItemWidth(chipSize);
+        SetCursorPosX(GetCursorPosX() + 2f);
+
+        if (ColorEdit4(
+                $"##colorrow_{id}",
+                ref editColor,
+                ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel |
+                ImGuiColorEditFlags.NoAlpha | ImGuiColorEditFlags.NoDragDrop))
+        {
+            hexColor = Theme.ThemeHex.Format(editColor);
+            changed = true;
+        }
+
+        PopStyleVar();
+
+        SameLine();
+
+        // Same geometry as ToggleColorRow, the invisible item ends the row.
+        var labelPos = GetCursorScreenPos();
+        float labelWidth = MathF.Max(GetContentRegionAvail().X, lineHeight * 4f);
+        InvisibleButton($"##colorrowlabel_{id}", new Vector2(labelWidth, rowHeight));
+
+        GetWindowDrawList().AddText(
+            new Vector2(labelPos.X, labelPos.Y + (rowHeight - lineHeight) * 0.5f),
+            RobustaImGuiTheme.ColU32(RobustaImGuiTheme.TextPrimary),
+            VisibleLabel(label));
+
+        return changed;
+    }
+
+    /// <summary>Toggle row laid out as <c>[indicator] Label</c>, returns true when the value changed.</summary>
     public static bool ToggleSwitch(
         string label,
         ref bool value,
@@ -191,10 +225,6 @@ public static class RobustaImGuiWidgets
         return clicked;
     }
 
-    /// <summary>
-    /// Card heading in the theme's title colour and size. The single place a card title is drawn, so
-    /// a card looks the same whichever container renders it.
-    /// </summary>
     public static void CardTitle(string title)
     {
         bool hasBold = !RobustaImGuiTheme.FontBold.IsNull;
@@ -207,8 +237,6 @@ public static class RobustaImGuiWidgets
         if (hasBold)
             PopFont();
 
-        // Inner hairline under the heading. Uses the outline token so it stays distinct from the
-        // window and table dividers, which use the heavier border token.
         var drawList = GetWindowDrawList();
         var pos = GetCursorScreenPos();
         drawList.AddLine(
@@ -228,7 +256,8 @@ public static class RobustaImGuiWidgets
         BeginChild(
             id,
             new Vector2(0f, height),
-            ImGuiChildFlags.AlwaysUseWindowPadding | (height == 0f ? ImGuiChildFlags.AutoResizeY : ImGuiChildFlags.None));
+            ImGuiChildFlags.AlwaysUseWindowPadding | (height == 0f ? ImGuiChildFlags.AutoResizeY : ImGuiChildFlags.None),
+            height == 0f ? ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse : ImGuiWindowFlags.None);
 
         CardTitle(title);
 
@@ -246,58 +275,79 @@ public static class RobustaImGuiWidgets
     public static void MutedText(string text) =>
         TextColored(RobustaImGuiTheme.TextMuted, text);
 
-    /// <summary>
-    /// Formats a slider reading from an ImGui-style format string such as <c>"%.0f px"</c>.
-    /// </summary>
-    /// <remarks>
-    /// The call sites use ImGui's <c>printf</c>-style specifiers because that is what
-    /// <c>SliderFloat</c> takes. <see cref="string.Format"/> is .NET formatting and only substitutes
-    /// <c>{0}</c> placeholders, so passing these strings to it returns the pattern literally and the
-    /// number never appears. This translates the one specifier form the sliders use and passes the
-    /// surrounding text through unchanged.
-    /// </remarks>
-    internal static string FormatReading(string format, float value)
+    /// <summary>Wrapped muted secondary label, so long hints stay inside narrow cards.</summary>
+    public static void MutedTextWrapped(string text)
     {
+        PushStyleColor(ImGuiCol.Text, RobustaImGuiTheme.TextMuted);
+        TextWrapped(text);
+        PopStyleColor();
+    }
+
+    /// <summary>Locates the float specifier in an ImGui-style format string such as <c>"%.1f m"</c>.</summary>
+    private static bool TryParseFloatSpec(string format, out int specStart, out int specEnd, out int decimals)
+    {
+        specStart = specEnd = -1;
+        decimals = 0;
+
         int percent = format.IndexOf("%.", StringComparison.Ordinal);
         if (percent < 0)
-            return value.ToString(CultureInfo.InvariantCulture);
+            return false;
 
         int cursor = percent + 2;
         int digitsStart = cursor;
         while (cursor < format.Length && char.IsAsciiDigit(format[cursor]))
             cursor++;
 
-        // Require at least one precision digit and the trailing float specifier.
         if (cursor == digitsStart || cursor >= format.Length ||
             (format[cursor] != 'f' && format[cursor] != 'F'))
         {
-            return value.ToString(CultureInfo.InvariantCulture);
+            return false;
         }
 
-        int decimals = int.Parse(
+        decimals = int.Parse(
             format.AsSpan(digitsStart, cursor - digitsStart),
             CultureInfo.InvariantCulture);
+        specStart = percent;
+        specEnd = cursor + 1;
+        return true;
+    }
+
+    /// <summary>Formats a slider reading from an ImGui-style format string such as <c>"%.0f px"</c>.</summary>
+    internal static string FormatReading(string format, float value)
+    {
+        if (!TryParseFloatSpec(format, out int specStart, out int specEnd, out int decimals))
+            return value.ToString(CultureInfo.InvariantCulture);
 
         string number = value.ToString("F" + decimals, CultureInfo.InvariantCulture);
-        return format[..percent] + number + format[(cursor + 1)..];
+        return format[..specStart] + number + format[specEnd..];
     }
 
     /// <summary>
-    /// Single-line labelled slider: label on the left, value in a fixed column, bar filling the rest.
-    /// Returns true when the value changed. The caller decides how to persist.
+    /// Snaps a slider value to its grid: <paramref name="step"/> when given, otherwise the format's precision.
     /// </summary>
-    /// <remarks>
-    /// The reading is drawn after <c>SliderFloat</c> has run so it reflects the value from this frame
-    /// rather than the previous one, and the value column is reserved to a fixed width so the bar
-    /// does not shift as the number's width changes.
-    /// </remarks>
+    internal static float SnapToFormat(float value, string format, float min, float max, float step = 0f)
+    {
+        if (!TryParseFloatSpec(format, out _, out _, out int decimals))
+            return value;
+
+        if (step > 0f)
+            value = min + MathF.Round((value - min) / step) * step;
+
+        // Rounding the step product again clears the float noise it leaves behind.
+        return Math.Clamp(MathF.Round(value, Math.Min(decimals, 6)), min, max);
+    }
+
+    /// <summary>
+    /// Single-line labelled slider, returns true when the value changed.
+    /// </summary>
     public static bool SliderRow(
         string label,
         string id,
         ref float value,
         float min,
         float max,
-        string format)
+        string format,
+        float step = 0f)
     {
         float rowHeight = RobustaImGuiScale.SliderRow;
         float lineHeight = GetTextLineHeight();
@@ -322,9 +372,14 @@ public static class RobustaImGuiWidgets
 
         // Bar takes whatever width is left. Empty format: the reading is drawn in its own column.
         SetNextItemWidth(-1f);
+        float before = value;
         bool changed = SliderFloat(id, ref value, min, max, "");
 
         PopStyleVar();
+
+        // A snap that moves the value counts as a change, so an off-grid config value is persisted.
+        value = SnapToFormat(value, format, min, max, step);
+        changed |= value != before;
 
         // Drawn after the slider so a drag shows the new value in the same frame.
         string reading = FormatReading(format, value);
@@ -346,8 +401,8 @@ public static class RobustaImGuiWidgets
         PushStyleColor(ImGuiCol.ButtonHovered, hoverCol);
         PushStyleColor(ImGuiCol.ButtonActive, RobustaImGuiTheme.AccentCyan);
 
-        // The label colour follows the fill. The accent fill is light, so it needs the paired dark
-        // foreground; the neutral control fill is dark and needs the body text colour. Using
+        // The label color follows the fill. The accent fill is light, so it needs the paired dark
+        // foreground, the neutral control fill is dark and needs the body text color. Using
         // OnPrimary for both made inactive buttons dark-on-dark.
         PushStyleColor(
             ImGuiCol.Text,
@@ -438,9 +493,7 @@ public static class RobustaImGuiWidgets
 
         if (size.X > 0f)
         {
-            int hashIdx = label.IndexOf("##", StringComparison.Ordinal);
-            var visibleLabel = hashIdx >= 0 ? label[..hashIdx] : label;
-            var textSize = CalcTextSize(visibleLabel);
+            var textSize = CalcTextSize(VisibleLabel(label));
             float maxPadX = MathF.Max(2f, (size.X - textSize.X) * 0.5f);
             if (pad.X > maxPadX)
             {

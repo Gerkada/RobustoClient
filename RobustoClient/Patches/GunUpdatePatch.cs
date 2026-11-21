@@ -19,6 +19,7 @@ using Robust.Shared.Log;
 using Robust.Shared.Containers;
 using Robust.Shared.Prototypes;
 using System.Collections;
+using RobustoClient.Reflection;
 
 namespace RobustoClient.Patches;
 
@@ -44,7 +45,7 @@ public class GunUpdatePatch
     ];
 
     private static readonly Dictionary<string, bool> ProtoHitscanCache = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Dictionary<Type, (bool IsHitscanComp, PropertyInfo? SpeedProp, FieldInfo? SpeedField)> CompAccessorCache = new();
+    private static readonly Dictionary<Type, (bool IsHitscanComp, bool HasSpeedMember)> CompAccessorCache = new();
     private static readonly HashSet<string> LoggedWeapons = new(StringComparer.OrdinalIgnoreCase);
 
     public static NetCoordinates Patch(NetCoordinates originalCoords)
@@ -91,7 +92,6 @@ public class GunUpdatePatch
                     bool speedDetected = false;
                     string detectedInComp = "";
                     float bulletSpeed = RobustaConfig.DefaultProjectileSpeed;
-                    const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
                     if (ProtoHitscanCache.TryGetValue(cacheKey, out var cachedProtoHitscan) && cachedProtoHitscan)
                     {
@@ -131,18 +131,7 @@ public class GunUpdatePatch
                         {
                             string cName = t.Name.ToLowerInvariant();
                             bool isHitscanComp = HitscanKeywords.Any(kw => cName.Contains(kw));
-                            PropertyInfo? speedProp = null;
-                            FieldInfo? speedField = null;
-
-                            foreach (var name in PotentialSpeedNames)
-                            {
-                                speedProp = t.GetProperty(name, flags);
-                                if (speedProp != null) break;
-                                speedField = t.GetField(name, flags);
-                                if (speedField != null) break;
-                            }
-
-                            accessor = (isHitscanComp, speedProp, speedField);
+                            accessor = (isHitscanComp, Reflect.HasAnyMember(t, PotentialSpeedNames, ReflectOptions.Any));
                             CompAccessorCache[t] = accessor;
                         }
 
@@ -153,12 +142,11 @@ public class GunUpdatePatch
                             break;
                         }
 
-                        if (!isHitscan && !speedDetected && (accessor.SpeedProp != null || accessor.SpeedField != null))
+                        if (!isHitscan && !speedDetected && accessor.HasSpeedMember)
                         {
-                            var val = accessor.SpeedProp?.GetValue(comp) ?? accessor.SpeedField?.GetValue(comp);
-                            if (val is float f && f > 0f)
+                            if (ReflectConvert.TryToDouble(Reflect.GetFirst(comp, PotentialSpeedNames), out var val) && val > 0d)
                             {
-                                bulletSpeed = f;
+                                bulletSpeed = (float)val;
                                 speedDetected = true;
                                 detectedInComp = t.Name;
                             }

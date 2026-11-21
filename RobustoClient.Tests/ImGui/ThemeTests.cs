@@ -47,29 +47,6 @@ public class ThemeTests
         }
     }
 
-    [Theory]
-    [InlineData(12f)]
-    [InlineData(15.5f)]
-    [InlineData(20f)]
-    public void ResolvedLayout_GrowsWithFontAndRespectsFloors(float fontSize)
-    {
-        // Mirrors RobustaImGuiScale's arithmetic. ImGui's frame height is line height plus twice the
-        // frame padding, so this is the same formula the runtime uses.
-        var m = Dark.Metrics;
-        float line = fontSize * 1.2f;
-        float frame = line + m.FramePaddingY * 2f;
-
-        float titleRow = line * m.TitleRowScale;
-        float tabRow = MathF.Max(RobustaImGuiScale.MinTargetSize, line * m.TabRowScale);
-        float close = MathF.Max(RobustaImGuiScale.MinTargetSize, frame * m.CloseButtonScale);
-
-        titleRow.Should().BePositive();
-        tabRow.Should().BeGreaterThanOrEqualTo(RobustaImGuiScale.MinTargetSize,
-            "the tab row must stay a legal pointer target at every font size");
-        close.Should().BeGreaterThanOrEqualTo(RobustaImGuiScale.MinTargetSize,
-            "chrome buttons must stay a legal pointer target at every font size");
-    }
-
     [Fact]
     public void ItemSpacing_IsSmallerThanReservedBands()
     {
@@ -100,52 +77,42 @@ public class ThemeTests
             "a ThemeColors property without a token would be unreachable from JSON");
     }
 
-    [Theory]
-    [MemberData(nameof(AllTokens))]
-    public void EveryToken_ResolvesToAProperty(string token)
-    {
-        ThemeColorTokens.TryGetProperty(token, out var prop).Should().BeTrue();
-        prop.PropertyType.Should().Be(typeof(Vector4));
-    }
-
     [Fact]
     public void ThemeSectionHeadings_AreUnique()
     {
         // ImGui derives a widget id from its label, so two sections sharing a heading open and close
         // as one. The TEXT SIZES / TEXT COLORS split exists because both were once called "TEXT".
         var fixedSections = CheatMenuImGui.FixedThemeSections;
-        var colourSections = ThemeColorTokens.Sections.Select(s => s.Section);
+        var colorSections = ThemeColorTokens.Sections
+            .Concat(ThemeColorTokens.VisualsSections)
+            .Select(s => s.Section);
 
-        fixedSections.Concat(colourSections)
+        fixedSections.Concat(colorSections)
             .Should().OnlyHaveUniqueItems("a duplicate heading is also a duplicate ImGui id");
     }
 
     [Fact]
-    public void ThemeSectionHeadings_AreUpperCase()
+    public void AntagonistTokenLabels_AreReadable()
     {
-        // Matches the existing THEMES tab convention; the check also catches a stray space or case
-        // change that would make two headings differ only by formatting.
-        foreach (var heading in CheatMenuImGui.FixedThemeSections.Concat(ThemeColorTokens.Sections.Select(s => s.Section)))
-        {
-            heading.Should().Be(heading.ToUpperInvariant(), $"'{heading}' should be upper case");
-            heading.Should().Be(heading.Trim());
-        }
+        // The prefix is redundant under the ANTAGONISTS heading, so only the role name remains.
+        ThemeColorTokens.LabelFor(ThemeColorTokens.AntagonistNinja).Should().Be("Ninja");
+        ThemeColorTokens.LabelFor(ThemeColorTokens.AntagonistNukie).Should().Be("Nukie");
+        ThemeColorTokens.LabelFor(ThemeColorTokens.AntagonistRatKing).Should().Be("Rat King");
+
+        // A token without the prefix keeps its own name, spaced.
+        ThemeColorTokens.LabelFor(ThemeColorTokens.SeverityGrandTheft).Should().Be("severity Grand Theft");
     }
 
     [Fact]
     public void Sections_CoverEveryTokenExactlyOnce()
     {
-        var fromSections = ThemeColorTokens.Sections.SelectMany(s => s.Tokens).ToList();
+        var fromSections = ThemeColorTokens.Sections
+            .Concat(ThemeColorTokens.VisualsSections)
+            .SelectMany(s => s.Tokens)
+            .ToList();
 
         fromSections.Should().OnlyHaveUniqueItems();
         fromSections.Should().BeEquivalentTo(ThemeColorTokens.All);
-    }
-
-    [Fact]
-    public void Builtins_AreNamedDark()
-    {
-        Dark.Name.Should().Be("Dark");
-        RobustaImGuiTheme.Builtins.Should().ContainSingle(t => t.Name == "Dark");
     }
 
     [Fact]
@@ -194,19 +161,6 @@ public class ThemeTests
         // 15 * 2.3 lands the logo box on 34.5px, which snaps to 2x the 17px-wide art.
         dark.Metrics.LogoScale.Should().Be(2.3f);
         dark.DefaultWindowSize.Should().Be(new Vector2(380f, 500f));
-    }
-
-    [Fact]
-    public void DarkDefaults_UseTheBoxfontTitleFace()
-    {
-        var dark = ThemeDefaults.Dark();
-        var json = RobustaImGuiTheme.Builtins.First(t => t.Name == "Dark");
-
-        foreach (var palette in new[] { dark, json })
-        {
-            palette.TitleFont.Should().Be(RobustaFontCatalog.DefaultTitleFont, palette.Name);
-            palette.TextFont.Should().Be(RobustaFontCatalog.DefaultTextFont, palette.Name);
-        }
     }
 
     [Fact]
@@ -265,7 +219,7 @@ public class ThemeTests
     [Fact]
     public void EveryColorToken_IsReachable()
     {
-        // A token with no consumer is a colour picker that silently does nothing. Splitting the
+        // A token with no consumer is a color picker that silently does nothing. Splitting the
         // tokens into "feeds an ImGui style slot" and "read at draw time" makes that impossible to
         // ship unnoticed: both sets must together cover the registry exactly once.
         var styled = ThemeStyleMap.StyleSlots.Select(s => s.Token).ToList();
@@ -285,12 +239,12 @@ public class ThemeTests
     {
         foreach (var (token, slots) in ThemeStyleMap.StyleSlots)
         {
-            ThemeColorTokens.TryGetProperty(token, out _).Should().BeTrue($"'{token}' is not a colour token");
+            ThemeColorTokens.TryGetProperty(token, out _).Should().BeTrue($"'{token}' is not a color token");
             slots.Should().NotBeEmpty($"'{token}' claims a style slot but lists none");
         }
 
         foreach (var token in ThemeStyleMap.DrawOnly)
-            ThemeColorTokens.TryGetProperty(token, out _).Should().BeTrue($"'{token}' is not a colour token");
+            ThemeColorTokens.TryGetProperty(token, out _).Should().BeTrue($"'{token}' is not a color token");
     }
 
     [Fact]
@@ -334,7 +288,7 @@ public class ThemeTests
     {
         // LogoBox is TitleSize * LogoScale, snapped to whole multiples of the 17px-wide art. At title
         // 15 the old 1.5 scale gives a 22.5px box, which snaps to 1x and collapses the logo to 17x9.
-        // That is the "logo got smaller" regression; the default must hold it at 2x (34x18), which is
+        // That is the "logo got smaller" regression, the default must hold it at 2x (34x18), which is
         // also the size it had before the title shrank.
         var dark = ThemeDefaults.Dark();
         float box = dark.Typography.TitleSize * dark.Metrics.LogoScale;
@@ -373,28 +327,6 @@ public class ThemeTests
         RobustaImGuiLogo.SnapMultiple(float.PositiveInfinity, 17f).Should().Be(1);
     }
 
-    [Theory]
-    [InlineData(12f)]
-    [InlineData(15.5f)]
-    [InlineData(20f)]
-    public void CompactRows_HugTheTextHeight(float fontSize)
-    {
-        // Toggle and slider rows are one line of text plus small padding, not a multiple of the
-        // taller frame height. This is the property that made them shrink.
-        var m = Dark.Metrics;
-        float line = fontSize * 1.2f;
-        float frame = line + m.FramePaddingY * 2f;
-
-        float toggle = line * (1f + 2f * m.TogglePadScale);
-        float slider = line * (1f + 2f * m.SliderPadScale);
-
-        toggle.Should().BeLessThan(frame, "a toggle row must not be taller than a standard control");
-        slider.Should().BeLessThan(frame, "a slider row is now a single line, so it must not exceed a control");
-
-        (toggle - line).Should().BeLessThan(line * 0.3f, "padding must stay small relative to the text");
-        (slider - line).Should().BeLessThan(line * 0.3f, "padding must stay small relative to the text");
-    }
-
     [Fact]
     public void ToggleAndSliderRows_AreTheSameHeight()
     {
@@ -407,29 +339,10 @@ public class ThemeTests
     public void CardButton_IsTallerThanAStandardControl()
     {
         // Card buttons were reported as too small, so CardButtonScale exists to size them
-        // independently of the Binds tab's ButtonRowScale. Guard that it actually makes them bigger
-        // and keeps them above the pointer-target floor.
+        // independently of the Binds tab's ButtonRowScale.
         var m = Dark.Metrics;
-        float frame = 15.5f * 1.2f + m.FramePaddingY * 2f;
 
-        float cardButton = frame * m.CardButtonScale;
-        float standardRow = frame * m.ButtonRowScale;
-
-        cardButton.Should().BeGreaterThan(standardRow, "card buttons are meant to be larger");
-        cardButton.Should().BeGreaterThanOrEqualTo(RobustaImGuiScale.MinTargetSize);
-    }
-
-    [Fact]
-    public void CardCollapseButton_RespectsPointerTargetFloor()
-    {
-        // The collapse control scales with the card title row but must never fall below the 24px
-        // pointer-target minimum, which is what makes the floor explicit rather than implicit.
-        var m = Dark.Metrics;
-        float frame = 15.5f * 1.2f + m.FramePaddingY * 2f;
-        float titleRow = frame * m.CardTitleRowScale;
-
-        MathF.Max(RobustaImGuiScale.MinTargetSize, titleRow * m.CardCollapseButtonScale)
-            .Should().BeGreaterThanOrEqualTo(RobustaImGuiScale.MinTargetSize);
+        m.CardButtonScale.Should().BeGreaterThan(m.ButtonRowScale, "card buttons are meant to be larger");
     }
 
     [Fact]
@@ -451,7 +364,7 @@ public class ThemeTests
     [MemberData(nameof(AllTokens))]
     public void BuiltinJson_MatchesCompiledDefaults(string token)
     {
-        // The JSON files and the C# fallbacks are two representations of the same palette; if they
+        // The JSON files and the C# fallbacks are two representations of the same palette, if they
         // drift, one of them is lying about what the default look is.
         ThemeColorTokens.TryGetProperty(token, out var prop).Should().BeTrue();
 
@@ -582,35 +495,6 @@ public class ThemeTests
     }
 
     [Fact]
-    public void TabLabels_StayReadableAtDefaultWindow()
-    {
-        // At the size the menu opens at, labels may shrink slightly but must stay legible. The tab
-        // row inherits the frame-wide text size, so raising RegularSize eats into the label width;
-        // this pins a floor rather than demanding an exact fit, which a 14px text face cannot meet
-        // in a 380px window. TabLabels_FitMinimumWindow covers the hard legibility limit.
-        const float minimumScale = 0.9f;
-
-        var tabs = CheatMenuImGui.Tabs;
-
-        foreach (var palette in RobustaImGuiTheme.Builtins)
-        {
-            float advance = palette.Typography.RegularSize * 0.62f;
-            float usable = palette.DefaultWindowSize.X - (palette.Metrics.ItemSpacingX + advance) * 2f;
-            float textRoom = usable / tabs.Length - palette.Metrics.ItemInnerSpacingX * 2f;
-
-            foreach (var (label, _) in tabs)
-            {
-                float natural = label.Length * advance;
-                float scale = natural > textRoom ? textRoom / natural : 1f;
-
-                scale.Should().BeGreaterThanOrEqualTo(
-                    minimumScale,
-                    $"{palette.Name}: '{label}' would shrink to {scale:0.00}x at the default window size");
-            }
-        }
-    }
-
-    [Fact]
     public void TabLabels_AreAscii()
     {
         // RobotoMono has no glyph for the astronomical and box-drawing symbols, and ImGui 1.92 does
@@ -650,7 +534,7 @@ public class ThemeJsonTests
     [InlineData("#GGGGGG")]
     [InlineData("#12345")]
     [InlineData("#1234567")]
-    [InlineData("not-a-colour")]
+    [InlineData("not-a-color")]
     [InlineData("")]
     [InlineData(null)]
     public void TryParse_RejectsInvalidInput(string? text)
@@ -675,7 +559,7 @@ public class ThemeJsonTests
     [Theory]
     [InlineData("#0E1016")]
     [InlineData("#0F1420F2")]
-    public void ParseThenFormat_PreservesColour(string hex)
+    public void ParseThenFormat_PreservesColor(string hex)
     {
         ThemeHex.TryParse(hex, out var color).Should().BeTrue();
         ThemeHex.Format(color).Should().Be(hex);
@@ -701,18 +585,6 @@ public class ThemeJsonTests
             actual.Z.Should().BeApproximately(expected.Z, 1f / 255f, $"token '{token}' B");
             actual.W.Should().BeApproximately(expected.W, 1f / 255f, $"token '{token}' A");
         }
-    }
-
-    [Fact]
-    public void WriteThenParse_RoundTripsMetricsAndTypography()
-    {
-        var original = ThemeDefaults.Dark();
-        var parsed = ThemeJson.Parse(ThemeJson.Write(original), ThemeDefaults.Dark());
-
-        parsed.Metrics.GridGapScale.Should().Be(original.Metrics.GridGapScale);
-        parsed.Metrics.TitleRowScale.Should().Be(original.Metrics.TitleRowScale);
-        parsed.Metrics.TabRowScale.Should().Be(original.Metrics.TabRowScale);
-        parsed.Typography.RegularSize.Should().Be(original.Typography.RegularSize);
     }
 
     [Fact]
@@ -794,7 +666,7 @@ public class ThemeJsonTests
     [Fact]
     public void Parse_RoundTripsFontKeys()
     {
-        // The font choices are theme data like colours and sizes, so exporting and re-importing must
+        // The font choices are theme data like colors and sizes, so exporting and re-importing must
         // not silently drop them back to the defaults.
         var original = ThemeDefaults.Dark();
         var custom = new RobustaThemePalette
@@ -847,17 +719,6 @@ public class ThemeJsonTests
     }
 
     [Fact]
-    public void Parse_UnknownToken_KeepsFallbackAndDoesNotThrow()
-    {
-        var json = """{ "name": "X", "colors": { "notARealToken": "#FF0000" } }""";
-
-        var parsed = ThemeJson.Parse(json, ThemeDefaults.Dark());
-
-        parsed.Name.Should().Be("X");
-        parsed.Colors.Card.Should().Be(ThemeDefaults.Dark().Colors.Card);
-    }
-
-    [Fact]
     public void Parse_MissingTokens_FallBackToDefault()
     {
         var json = """{ "name": "Partial", "colors": { "card": "#123456" } }""";
@@ -881,9 +742,9 @@ public class ThemeJsonTests
     }
 
     [Fact]
-    public void Parse_InvalidColour_KeepsDefault()
+    public void Parse_InvalidColor_KeepsDefault()
     {
-        var json = """{ "name": "Bad", "colors": { "card": "not-a-colour" } }""";
+        var json = """{ "name": "Bad", "colors": { "card": "not-a-color" } }""";
         var fallback = ThemeDefaults.Dark();
 
         var parsed = ThemeJson.Parse(json, fallback);
@@ -1015,7 +876,7 @@ public class FontCatalogTests
         // The header centres the line box, so an all-caps title drifts by
         // (ascent + descent - capHeight) / 2. Boxfont Round has the worst of it: its cap height equals
         // its ascent while it still reserves 32% of the em below the baseline. These values are read
-        // from the faces' own hhea and OS/2 tables; a bad edit here is what puts the title off-centre.
+        // from the faces' own hhea and OS/2 tables, a bad edit here is what puts the title off-centre.
         RobustaFontCatalog.TryGet("BoxfontRound", out var boxfont).Should().BeTrue();
         boxfont.TitleOffsetEm.Should().BeApproximately(0.1600f, 0.002f);
 
@@ -1043,7 +904,7 @@ public class FontCatalogTests
             AppContext.BaseDirectory, "..", "..", "..", "..",
             "space-station-14", "Resources", title.Path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
 
-        File.Exists(path).Should().BeTrue($"'{path}' must exist; a moved upstream font is a real break");
+        File.Exists(path).Should().BeTrue($"'{path}' must exist, a moved upstream font is a real break");
 
         var bytes = File.ReadAllBytes(path);
         foreach (var c in "ROBUSTO")

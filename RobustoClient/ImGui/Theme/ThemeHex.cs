@@ -3,12 +3,12 @@ using System.Numerics;
 namespace RobustoClient.ImGui.Theme;
 
 /// <summary>
-/// Parses <c>#RRGGBB</c> and <c>#RRGGBBAA</c> into an ImGui colour vector.
+/// Parses <c>#RRGGBB</c> and <c>#RRGGBBAA</c> into an ImGui color vector.
 /// ImGui consumes sRGB components directly, so no gamma conversion happens here.
 /// </summary>
 public static class ThemeHex
 {
-    /// <summary>Parses a hex colour. Returns false rather than throwing on malformed input.</summary>
+    /// <summary>Parses a hex color. Returns false rather than throwing on malformed input.</summary>
     public static bool TryParse(string? text, out Vector4 color)
     {
         color = Vector4.One;
@@ -39,7 +39,7 @@ public static class ThemeHex
         return true;
     }
 
-    /// <summary>Formats a colour as <c>#RRGGBB</c>, or <c>#RRGGBBAA</c> when it is not fully opaque.</summary>
+    /// <summary>Formats a color as <c>#RRGGBB</c>, or <c>#RRGGBBAA</c> when it is not fully opaque.</summary>
     public static string Format(Vector4 color)
     {
         byte ToByte(float v) => (byte)Math.Clamp(MathF.Round(v * 255f), 0f, 255f);

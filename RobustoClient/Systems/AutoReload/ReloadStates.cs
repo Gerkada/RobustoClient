@@ -26,14 +26,14 @@ using Robust.Client.GameObjects;
 
 namespace RobustoClient.Systems.AutoReload;
 
-// Idle: Waiting for trigger
+// Idle: waiting for trigger.
 public sealed class IdleState : ReloadStateBase
 {
     public static readonly IdleState Instance = new();
     public override IReloadState Execute(float frameTime, AutoReloadContext context) => this;
 }
 
-// Phase 1: Analyze active weapon
+// Phase 1: analyze the active weapon.
 public sealed class CheckWeaponState : ReloadStateBase
 {
     public static readonly CheckWeaponState Instance = new();
@@ -104,7 +104,7 @@ public sealed class CheckWeaponState : ReloadStateBase
     }
 }
 
-// Phase 2: Search inventory for matching ammo/magazines
+// Phase 2: search inventory for matching ammo and magazines.
 public sealed class SearchAmmoState : ReloadStateBase
 {
     public static readonly SearchAmmoState Instance = new();
@@ -114,7 +114,7 @@ public sealed class SearchAmmoState : ReloadStateBase
         if (context.Player == null || context.Gun == null)
             return IdleState.Instance;
 
-        // Check if gun is already full (important for loops)
+        // Already full, matters for loops.
         var fullEv = new GetAmmoCountEvent();
         context.EntManager.EventBus.RaiseLocalEvent(context.Gun.Value, ref fullEv);
         if (fullEv.Count == fullEv.Capacity && fullEv.Capacity > 0)
@@ -243,7 +243,7 @@ public sealed class SearchAmmoState : ReloadStateBase
             }
         }
 
-        // 2. Ballistic Ammo Provider (Ammo Box)
+        // 2. Ballistic ammo provider (ammo box).
         if (context.EntManager.TryGetComponent<BallisticAmmoProviderComponent>(uid, out var provider))
         {
             bool providerMatches = false;
@@ -258,7 +258,7 @@ public sealed class SearchAmmoState : ReloadStateBase
                 }
             }
 
-            // Check if it can spawn valid ammo via Proto
+            // Whether it can spawn valid ammo via proto.
             if (!providerMatches && provider.Proto != null)
             {
                 providerMatches = IsPrototypeValid(whitelist, provider.Proto.Value, context);
@@ -328,7 +328,7 @@ public sealed class SearchAmmoState : ReloadStateBase
     }
 }
 
-// Phase 3: Free hands and retrieve ammo
+// Phase 3: free hands and retrieve ammo.
 public sealed class PrepareHandsState : ReloadStateBase
 {
     public static readonly PrepareHandsState Instance = new();
@@ -341,7 +341,7 @@ public sealed class PrepareHandsState : ReloadStateBase
         if (!context.EntManager.TryGetComponent<HandsComponent>(context.Player.Value, out var hands))
             return IdleState.Instance;
 
-        // Step 0: Find empty hand and swap to it explicitly via Network Event
+        // Step 0: find an empty hand and swap to it via a network event.
         if (context.RetrieveStep == 0)
         {
             string? emptyHandName = null;
@@ -358,7 +358,7 @@ public sealed class PrepareHandsState : ReloadStateBase
             {
                 if (!context.AttemptedForceUnwield)
                 {
-                    // Find ANY off-hand to swap to and break wield
+                    // Any off-hand will do, to break the wield.
                     string? offHandName = hands.Hands.Keys.FirstOrDefault(h => h != context.GunHandName);
                     if (offHandName != null)
                     {
@@ -548,7 +548,7 @@ public sealed class ActionState : ReloadStateBase
     }
 }
 
-// Phase 4.5: Wait for ballistic DoAfters to finish
+// Phase 4.5: wait for ballistic DoAfters to finish.
 public sealed class WaitBallisticState : ReloadStateBase
 {
     public static readonly WaitBallisticState Instance = new();
@@ -560,11 +560,10 @@ public sealed class WaitBallisticState : ReloadStateBase
 
         context.Timer += frameTime;
 
-        // Give it a bit of time to start the first DoAfter (0.5s)
+        // Let the first DoAfter start.
         if (context.Timer < 0.25f)
             return this;
 
-        // Check for active DoAfters on the player
         if (context.EntManager.TryGetComponent<DoAfterComponent>(context.Player.Value, out var doAfterComp))
         {
             bool foundActive = false;
@@ -573,7 +572,7 @@ public sealed class WaitBallisticState : ReloadStateBase
                 if (doAfter.Cancelled || doAfter.Completed)
                     continue;
 
-                // Check if this DoAfter is the ammo fill one
+                // The ammo-fill DoAfter.
                 if (doAfter.Args.Target == context.Gun && doAfter.Args.Used == context.FoundAmmo)
                 {
                     foundActive = true;
@@ -583,31 +582,22 @@ public sealed class WaitBallisticState : ReloadStateBase
 
             if (foundActive)
             {
-                // Reset a small "no-doafter-seen" timer
-                context.ActionStep = 0; 
-                context.RetrieveStep = 0; // Reusing RetrieveStep as a "started" flag if needed, but ActionStep is enough
+                context.ActionStep = 0;
+                context.RetrieveStep = 0;
                 return this;
             }
         }
 
-        // If no active DoAfter found, wait for a small grace period (0.4s) before assuming it's done
-        // We use ActionStep to store a secondary timer state or just use Timer.
-        // Let's use ActionStep to count frames or just another float if I had one. 
-        // Actually I can just reset context.Timer when foundActive is true, but context.Timer is used for the initial 0.5s wait.
-        // Let's use a separate timer logic.
-        
+        // No DoAfter seen: wait a grace period before assuming it finished.
         if (context.ActionStep == 0)
         {
-            // First time we don't see a DoAfter, start a sub-timer
             context.ActionStep = 1;
-            context.Timer = 0.25f; // Re-purpose Timer for grace period
+            context.Timer = 0.25f; // Re-purposed as the grace-period start.
         }
-        
+
         context.Timer += frameTime;
-        if (context.Timer < 0.45f) // 0.2s grace period
-        {
+        if (context.Timer < 0.45f)
             return this;
-        }
 
         context.ExecutedSteps.Add("[WaitBallistic] No active DoAfters found. Reload complete or interrupted.");
         context.Timer = 0f;
@@ -616,7 +606,7 @@ public sealed class WaitBallisticState : ReloadStateBase
     }
 }
 
-// Phase 5: Put remaining stuff back and reset
+// Phase 5: put remaining items back and reset.
 public sealed class CleanupState : ReloadStateBase
 {
     public static readonly CleanupState Instance = new();

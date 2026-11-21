@@ -38,6 +38,9 @@ public sealed class EspCategoryDefinition
     /// <summary>User-facing switch this category answers to. Defaults to players.</summary>
     public EspFeature Feature { get; set; } = EspFeature.Players;
 
+    /// <summary>Name of a registered per-entity color rule, empty keeps <see cref="Color"/>.</summary>
+    public string ColorFrom { get; set; } = string.Empty;
+
     public EspConditions Conditions { get; set; } = new();
 }
 

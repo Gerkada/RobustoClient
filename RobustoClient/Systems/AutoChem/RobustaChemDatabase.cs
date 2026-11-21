@@ -5,6 +5,7 @@ using Content.Shared.Chemistry.Reaction;
 using Robust.Shared.IoC;
 using Robust.Shared.Log;
 using Robust.Shared.Prototypes;
+using RobustoClient.Reflection;
 
 namespace RobustoClient.Systems.AutoChem;
 
@@ -23,37 +24,10 @@ public static class RobustaChemDatabase
     
     public static bool IsInitialized = false;
 
-    private static System.Reflection.FieldInfo? _productsField;
-    private static System.Reflection.PropertyInfo? _productsProperty;
-    private static System.Reflection.FieldInfo? _reactantsField;
-    private static System.Reflection.PropertyInfo? _reactantsProperty;
-    private static System.Reflection.FieldInfo? _priorityField;
-    private static System.Reflection.PropertyInfo? _priorityProperty;
-    private static System.Reflection.FieldInfo? _minTempField;
-    private static System.Reflection.PropertyInfo? _minTempProperty;
-
-    private static void InitReflection()
-    {
-        if (_productsField != null || _productsProperty != null) return;
-        var type = typeof(ReactionPrototype);
-        
-        _productsField = type.GetField("Products");
-        _productsProperty = type.GetProperty("Products");
-        
-        _reactantsField = type.GetField("Reactants");
-        _reactantsProperty = type.GetProperty("Reactants");
-        
-        _priorityField = type.GetField("Priority");
-        _priorityProperty = type.GetProperty("Priority");
-        
-        _minTempField = type.GetField("MinimumTemperature");
-        _minTempProperty = type.GetProperty("MinimumTemperature");
-    }
-
     private static Dictionary<string, float> ReflectProducts(ReactionPrototype reaction)
     {
         var products = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-        object? obj = _productsField?.GetValue(reaction) ?? _productsProperty?.GetValue(reaction);
+        object? obj = Reflect.Get(reaction, "Products");
         if (obj is System.Collections.IDictionary dict)
         {
             foreach (System.Collections.DictionaryEntry entry in dict)
@@ -61,13 +35,7 @@ public static class RobustaChemDatabase
                 string id = entry.Key?.ToString() ?? string.Empty;
                 if (string.IsNullOrEmpty(id)) continue;
 
-                float yield = 1f;
-                if (entry.Value != null)
-                {
-                    var floatMethod = entry.Value.GetType().GetMethod("Float", Type.EmptyTypes);
-                    if (floatMethod != null) yield = (float)(floatMethod.Invoke(entry.Value, null) ?? 1f);
-                }
-                products[id] = yield;
+                products[id] = ReflectConvert.TryToDouble(entry.Value, out var yield) ? (float)yield : 1f;
             }
         }
         return products;
@@ -76,7 +44,7 @@ public static class RobustaChemDatabase
     private static List<ChemReactant> ReflectReactants(ReactionPrototype reaction)
     {
         var reactants = new List<ChemReactant>();
-        object? obj = _reactantsField?.GetValue(reaction) ?? _reactantsProperty?.GetValue(reaction);
+        object? obj = Reflect.Get(reaction, "Reactants");
         if (obj is System.Collections.IDictionary dict)
         {
             foreach (System.Collections.DictionaryEntry entry in dict)
@@ -84,19 +52,16 @@ public static class RobustaChemDatabase
                 string id = entry.Key?.ToString() ?? "Unknown";
                 float amount = 1f;
                 bool catalyst = false;
-                
+
                 if (entry.Value != null)
                 {
-                    var valType = entry.Value.GetType();
-                    var amtObj = valType.GetField("Amount")?.GetValue(entry.Value) ?? valType.GetProperty("Amount")?.GetValue(entry.Value);
-                    if (amtObj != null)
-                    {
-                        var floatMethod = amtObj.GetType().GetMethod("Float", Type.EmptyTypes);
-                        if (floatMethod != null) amount = (float)(floatMethod.Invoke(amtObj, null) ?? 1f);
-                    }
-                    var catObj = valType.GetField("Catalyst")?.GetValue(entry.Value) ?? valType.GetProperty("Catalyst")?.GetValue(entry.Value);
-                    if (catObj is bool b) catalyst = b;
+                    if (ReflectConvert.TryToDouble(Reflect.Get(entry.Value, "Amount"), out var amt))
+                        amount = (float)amt;
+
+                    if (Reflect.Get(entry.Value, "Catalyst") is bool b)
+                        catalyst = b;
                 }
+
                 reactants.Add(new ChemReactant(id, amount, catalyst));
             }
         }
@@ -121,17 +86,11 @@ public static class RobustaChemDatabase
         return 1f;
     }
 
-    private static int SafeGetPriority(ReactionPrototype reaction)
-    {
-        object? val = _priorityField?.GetValue(reaction) ?? _priorityProperty?.GetValue(reaction);
-        return val is int i ? i : 0;
-    }
+    private static int SafeGetPriority(ReactionPrototype reaction) =>
+        Reflect.Get(reaction, "Priority") is int i ? i : 0;
 
-    private static float SafeGetMinTemp(ReactionPrototype reaction)
-    {
-        object? val = _minTempField?.GetValue(reaction) ?? _minTempProperty?.GetValue(reaction);
-        return val is float f ? f : 0f;
-    }
+    private static float SafeGetMinTemp(ReactionPrototype reaction) =>
+        Reflect.Get(reaction, "MinimumTemperature") is float f ? f : 0f;
 
     public static int LoadRecipes(IEnumerable<ChemRecipeDefinition> recipes)
     {
@@ -164,8 +123,6 @@ public static class RobustaChemDatabase
     public static void Initialize()
     {
         if (IsInitialized) return;
-
-        InitReflection();
 
         var protoMan = IoCManager.Resolve<IPrototypeManager>();
         var definitions = protoMan.EnumeratePrototypes<ReactionPrototype>()

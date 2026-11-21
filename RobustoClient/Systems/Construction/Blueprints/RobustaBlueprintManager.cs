@@ -5,10 +5,10 @@ using Content.Shared.Construction.Prototypes;
 using Content.Shared.Mobs.Components;
 using Robust.Client.Graphics;
 using Robust.Client.Input;
-using Robust.Client.Player;
 using Robust.Shared.Map;
 using Robust.Shared.Map.Components;
 using Robust.Shared.Prototypes;
+using RobustoClient.Systems.Abstract;
 
 namespace RobustoClient.Systems.Construction.Blueprints;
 
@@ -16,9 +16,8 @@ public sealed class RobustaBlueprintManager : EntitySystem
 {
     [Dependency] private readonly IEntityManager _entMan = default!;
     [Dependency] private readonly IPrototypeManager _protoMan = default!;
-    [Dependency] private readonly IPlayerManager _player = default!;
     [Dependency] private readonly IInputManager _input = default!;
-    [Dependency] private readonly IEyeManager _eye = default!;
+    [Dependency] private readonly MouseUtilitySystem _mouse = default!;
     [Dependency] private readonly IOverlayManager _overlay = default!;
     [Dependency] private readonly Robust.Client.Placement.IPlacementManager _placement = default!;
     [Dependency] private readonly SharedTransformSystem _transform = default!;
@@ -40,7 +39,7 @@ public sealed class RobustaBlueprintManager : EntitySystem
 
     public event Action? OnBlueprintsReloaded;
 
-    // 2-click interactive area selection state
+    // 2-click interactive area selection state.
     private bool _isSelectingArea;
     private string _pendingExportName = string.Empty;
     private bool _pendingIncludeNonConstructible;
@@ -202,7 +201,7 @@ public sealed class RobustaBlueprintManager : EntitySystem
     {
         var idLower = (protoId ?? string.Empty).ToLowerInvariant();
 
-        // Phase 0: Subfloor & Lattice
+        // Phase 0: subfloor and lattice.
         if (idLower.Contains("lattice") || idLower.Contains("catwalk"))
             return BlueprintZPhase.Phase0_SubfloorAndLattice;
 
@@ -233,7 +232,7 @@ public sealed class RobustaBlueprintManager : EntitySystem
             }
         }
 
-        // Phase 1: Underfloor Utilities (Cables, Gas Pipes, Manifolds, Disposal pipes/trunks)
+        // Phase 1: underfloor utilities (cables, gas pipes, manifolds, disposal pipes and trunks).
         if (hasCable ||
             idLower.Contains("cablehv") ||
             idLower.Contains("cablemv") ||
@@ -247,7 +246,7 @@ public sealed class RobustaBlueprintManager : EntitySystem
             return BlueprintZPhase.Phase1_UnderfloorUtilities;
         }
 
-        // Phase 2: Flooring & Frames
+        // Phase 2: flooring and frames.
         if (idLower.Contains("girder") ||
             idLower.Contains("machineframe") ||
             idLower.Contains("computerframe") ||
@@ -258,7 +257,7 @@ public sealed class RobustaBlueprintManager : EntitySystem
             return BlueprintZPhase.Phase2_FlooringAndFrames;
         }
 
-        // Phase 3: Walls, Windows, Grilles, Doors
+        // Phase 3: walls, windows, grilles and doors.
         if (hasDoor ||
             hasAirtight ||
             idLower.Contains("wall") ||
@@ -271,7 +270,7 @@ public sealed class RobustaBlueprintManager : EntitySystem
             return BlueprintZPhase.Phase3_WallsWindowsDoors;
         }
 
-        // Phase 4: Machines & Fixtures
+        // Phase 4: machines and fixtures.
         return BlueprintZPhase.Phase4_MachinesAndFixtures;
     }
 
@@ -280,7 +279,7 @@ public sealed class RobustaBlueprintManager : EntitySystem
         if (string.IsNullOrWhiteSpace(entityProtoId))
             return null;
 
-        // 1. Check client ConstructionSystem recipe cache
+        // 1. Client ConstructionSystem recipe cache.
         foreach (var cProto in _protoMan.EnumeratePrototypes<ConstructionPrototype>())
         {
             if (_clientConstruction.TryGetRecipePrototype(cProto.ID, out var targetProtoId) &&
@@ -290,7 +289,7 @@ public sealed class RobustaBlueprintManager : EntitySystem
             }
         }
 
-        // 2. Fallback to RobustaConstructionSolver graph cache
+        // 2. Fallback: RobustaConstructionSolver graph cache.
         return _solver.ResolveConstructionPrototypeForEntity(entityProtoId);
     }
 
@@ -446,7 +445,7 @@ public sealed class RobustaBlueprintManager : EntitySystem
             return;
         }
 
-        // PlacementManager clears itself after each click; re-arm for the 2nd corner click while selecting
+        // PlacementManager clears itself after each click, re-arm for the second corner click.
         if (!_placement.IsActive)
         {
             ArmSelectionPlacementHijack();
@@ -464,7 +463,7 @@ public sealed class RobustaBlueprintManager : EntitySystem
             var foundGrid = _transform.GetGrid(coordinates);
             if (foundGrid == null || !TryComp(foundGrid.Value, out grid))
             {
-                if (!TryGetCursorGridTile(out gridUid, out var fallbackTile))
+                if (!_mouse.TryGetCursorGridTile(out gridUid, out var fallbackTile))
                     return true;
                 CompleteCornerSelection(gridUid, fallbackTile);
                 return true;
@@ -479,7 +478,7 @@ public sealed class RobustaBlueprintManager : EntitySystem
 
     private void HandleAreaSelectionClick()
     {
-        if (!TryGetCursorGridTile(out var gridUid, out var tileIndices))
+        if (!_mouse.TryGetCursorGridTile(out var gridUid, out var tileIndices))
             return;
 
         CompleteCornerSelection(gridUid, tileIndices);
@@ -504,38 +503,6 @@ public sealed class RobustaBlueprintManager : EntitySystem
         _placement.Clear();
 
         ExportAreaAsBlueprint(gridUid, c1, c2, _pendingExportName, _pendingIncludeNonConstructible);
-    }
-
-    public bool TryGetCursorGridTile(out EntityUid gridUid, out Vector2i tileIndices)
-    {
-        gridUid = EntityUid.Invalid;
-        tileIndices = default;
-
-        var cursorMapCoords = _eye.PixelToMap(_input.MouseScreenPosition);
-        if (cursorMapCoords.MapId == MapId.Nullspace)
-            return false;
-
-        if (_player.LocalEntity is { } player && Exists(player))
-        {
-            var playerXform = Transform(player);
-            if (playerXform.GridUid is { } pGrid && Exists(pGrid) && TryComp<MapGridComponent>(pGrid, out var gridComp))
-            {
-                gridUid = pGrid;
-                tileIndices = _mapSystem.WorldToTile(pGrid, gridComp, cursorMapCoords.Position);
-                return true;
-            }
-        }
-
-        if (_transform.GetGrid(_transform.ToCoordinates(cursorMapCoords)) is { } cursorGrid &&
-            Exists(cursorGrid) &&
-            TryComp<MapGridComponent>(cursorGrid, out var cGridComp))
-        {
-            gridUid = cursorGrid;
-            tileIndices = _mapSystem.WorldToTile(cursorGrid, cGridComp, cursorMapCoords.Position);
-            return true;
-        }
-
-        return false;
     }
 
     private sealed class BlueprintAreaSelectionHijack : Robust.Client.Placement.PlacementHijack

@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Robust.Shared.GameObjects;
 using Robust.Shared.IoC;
 using Robust.Shared.Containers;
+using Robust.Shared.Maths;
+using Robust.Shared.Timing;
+using RobustoClient.Systems.Abstract;
 
 namespace RobustoClient.Systems.ESP;
 
@@ -10,21 +14,43 @@ public sealed class EspEvaluationResult
 {
     public EspCategoryDefinition Category { get; set; } = default!;
     public string RenderText { get; set; } = string.Empty;
+
+    /// <summary>Per-entity color from the category's <c>colorFrom</c> rule, or null to use the category color.</summary>
+    public Color? Color { get; set; }
 }
 
 public sealed class EspEvaluator : EntitySystem
 {
     [Dependency] private readonly IComponentFactory _compFactory = default!;
+    [Dependency] private readonly IGameTiming _timing = default!;
 
-    private readonly Dictionary<EntityUid, List<EspEvaluationResult>> _cache = new();
-    
-    // Extension points
+    /// <summary>Bound on the evaluation cache.</summary>
+    private const int CacheLimit = 1024;
+
+    /// <summary>Lifetime of a cached evaluation.</summary>
+    private static readonly TimeSpan CacheLifetime = TimeSpan.FromSeconds(1);
+
+    private readonly Dictionary<EntityUid, (List<EspEvaluationResult> Results, TimeSpan Stamp)> _cache = new();
+
     private readonly Dictionary<string, Func<EntityUid, bool>> _customConditions = new();
-    private readonly Dictionary<string, Func<EntityUid, string>> _customVariables = new();
+    private readonly Dictionary<string, VariableBinding> _customVariables = new();
+
+    /// <summary>Per-entity color rules a category can name with <c>colorFrom</c>.</summary>
+    private readonly Dictionary<string, Func<EntityUid, Color?>> _customColors = new();
+
+    /// <summary>Component each custom rule provably requires, for the category index.</summary>
+    private readonly Dictionary<string, string> _ruleGates = new(StringComparer.Ordinal);
+
+    private readonly Dictionary<Type, List<EspCategoryDefinition>> _byComponent = new();
+    private readonly List<EspCategoryDefinition> _ungated = new();
+    private bool _indexDirty = true;
 
     private EspRegistry _registry = default!;
 
     public EspRegistry Registry => _registry;
+
+    /// <summary>A variable's resolver plus the token it replaces.</summary>
+    private readonly record struct VariableBinding(string Token, Func<EntityUid, string> Resolver);
 
     public override void Initialize()
     {
@@ -67,14 +93,31 @@ public sealed class EspEvaluator : EntitySystem
         _cache.Clear();
     }
 
-    public void RegisterCondition(string name, Func<EntityUid, bool> predicate)
+    /// <summary>
+    /// Registers a rule esp.yml can name, <paramref name="requires"/> is a component the rule cannot match without.
+    /// </summary>
+    public void RegisterCondition(string name, Func<EntityUid, bool> predicate, string? requires = null)
     {
         _customConditions[name] = predicate;
+
+        if (requires != null)
+            _ruleGates[name] = requires;
+
+        _indexDirty = true;
     }
 
     public void RegisterVariable(string name, Func<EntityUid, string> resolver)
     {
-        _customVariables[name] = resolver;
+        _customVariables[name] = new VariableBinding("{" + name + "}", resolver);
+    }
+
+    /// <summary>
+    /// Registers a per-entity color a category can name with <c>colorFrom</c>. Returning null keeps
+    /// the category's own color.
+    /// </summary>
+    public void RegisterColor(string name, Func<EntityUid, Color?> resolver)
+    {
+        _customColors[name] = resolver;
     }
 
     public void Invalidate(EntityUid uid)
@@ -84,8 +127,11 @@ public sealed class EspEvaluator : EntitySystem
 
     public List<EspEvaluationResult> Evaluate(EntityUid uid)
     {
-        if (_cache.TryGetValue(uid, out var cached))
-            return cached;
+        if (_cache.TryGetValue(uid, out var cached) && _timing.CurTime - cached.Stamp < CacheLifetime)
+            return cached.Results;
+
+        if (_indexDirty)
+            RebuildIndex();
 
         var results = new List<EspEvaluationResult>();
 
@@ -95,24 +141,25 @@ public sealed class EspEvaluator : EntitySystem
                 meta.EntityPrototype?.ID == "ActionDummy" ||
                 meta.EntityName == "VIRTUAL ITEM YOU SHOULD NOT SEE THIS")
             {
-                _cache[uid] = results;
+                Store(uid, results);
                 return results;
             }
         }
 
-        foreach (var category in _registry.Categories)
+        // Ungated categories always run, the rest are bucketed by a required component.
+        foreach (var category in _ungated)
+            EvaluateCategory(uid, category, results);
+
+        foreach (var (componentType, categories) in _byComponent)
         {
-            if (Matches(uid, category.Conditions))
-            {
-                var text = ResolveText(uid, category.TextFormat);
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    results.Add(new EspEvaluationResult { Category = category, RenderText = text });
-                }
-            }
+            if (!HasComp(uid, componentType))
+                continue;
+
+            foreach (var category in categories)
+                EvaluateCategory(uid, category, results);
         }
 
-        // Deduplicate results by Group (only keep highest priority per group, ignore empty groups)
+        // Keep the highest-priority result per group.
         var groupedResults = new Dictionary<string, List<EspEvaluationResult>>();
         foreach (var r in results)
         {
@@ -145,8 +192,69 @@ public sealed class EspEvaluator : EntitySystem
             }
         }
 
-        _cache[uid] = results;
+        Store(uid, results);
         return results;
+    }
+
+    private void EvaluateCategory(EntityUid uid, EspCategoryDefinition category, List<EspEvaluationResult> results)
+    {
+        if (!Matches(uid, category.Conditions))
+            return;
+
+        var text = ResolveText(uid, category.TextFormat);
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
+        Color? color = null;
+        if (!string.IsNullOrEmpty(category.ColorFrom) &&
+            _customColors.TryGetValue(category.ColorFrom, out var resolver))
+        {
+            color = resolver(uid);
+        }
+
+        results.Add(new EspEvaluationResult { Category = category, RenderText = text, Color = color });
+    }
+
+    private void Store(EntityUid uid, List<EspEvaluationResult> results)
+    {
+        var now = _timing.CurTime;
+
+        // Expired entries go first. Dropping the oldest outright is what made a crowded room
+        // re-evaluate every entity on every frame: the set the next frame asks for never fit.
+        if (_cache.Count >= CacheLimit)
+        {
+            CacheUtility.RemoveOlderThan(_cache, entry => entry.Stamp, now - CacheLifetime);
+
+            if (_cache.Count >= CacheLimit)
+                CacheUtility.RemoveOldest(_cache, entry => entry.Stamp);
+        }
+
+        _cache[uid] = (results, now);
+    }
+
+    /// <summary>Rebuilds the component buckets from the registry and rule gates.</summary>
+    private void RebuildIndex()
+    {
+        _indexDirty = false;
+        _byComponent.Clear();
+        _ungated.Clear();
+
+        var (byComponent, ungated) = EspCategoryIndex.Build(_registry.Categories, _ruleGates);
+        _ungated.AddRange(ungated);
+
+        foreach (var (componentName, categories) in byComponent)
+        {
+            if (!_compFactory.TryGetRegistration(componentName, out var registration))
+            {
+                _ungated.AddRange(categories);
+                continue;
+            }
+
+            if (!_byComponent.TryGetValue(registration.Type, out var list))
+                _byComponent[registration.Type] = list = new List<EspCategoryDefinition>();
+
+            list.AddRange(categories);
+        }
     }
 
     private bool Matches(EntityUid uid, EspConditions conditions)
@@ -215,29 +323,25 @@ public sealed class EspEvaluator : EntitySystem
         return true;
     }
 
-    public string ResolveVariable(EntityUid uid, string name)
-    {
-        if (_customVariables.TryGetValue(name, out var resolver))
-            return resolver(uid);
-        return string.Empty;
-    }
+    public string ResolveVariable(EntityUid uid, string name) =>
+        _customVariables.TryGetValue(name, out var binding) ? binding.Resolver(uid) : string.Empty;
 
-    private string ResolveText(EntityUid uid, string format)
+    /// <summary>Substitutes registered tokens into a category's format.</summary>
+    internal string ResolveText(EntityUid uid, string format)
     {
         if (string.IsNullOrWhiteSpace(format)) return string.Empty;
-        
+
+        // Most formats carry no token at all, so the scan is skipped entirely for them.
+        if (format.IndexOf('{') < 0)
+            return format.Trim();
+
         var result = format;
-        foreach (var kvp in _customVariables)
+        foreach (var binding in _customVariables.Values)
         {
-            var token = "{" + kvp.Key + "}";
-            if (result.Contains(token))
-            {
-                result = result.Replace(token, kvp.Value(uid));
-            }
+            if (result.Contains(binding.Token))
+                result = result.Replace(binding.Token, binding.Resolver(uid));
         }
 
-        // Resolve EntityName implicitly if not explicitly mapped as custom rule for simplicity,
-        // though we mapped it in Initialize.
         return result.Trim();
     }
 }

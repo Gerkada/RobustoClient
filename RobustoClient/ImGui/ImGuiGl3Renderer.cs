@@ -3,7 +3,9 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using Hexa.NET.ImGui;
+using static Hexa.NET.ImGui.ImGui;
 using Robust.Client.Graphics;
+using RobustoClient.Reflection;
 
 namespace RobustoClient.ImGui;
 
@@ -168,7 +170,7 @@ public sealed unsafe class ImGuiGl3Renderer : IDisposable
     /// <remarks>
     /// The filter is texture state, not draw state, so it can be changed without re-uploading the
     /// pixels. Nearest sampling keeps a low-resolution sprite's pixel grid intact when it is scaled
-    /// up; linear sampling interpolates and blurs it.
+    /// up, linear sampling interpolates and blurs it.
     /// </remarks>
     public unsafe void SetTextureFilter(ImTextureID id, bool nearest)
     {
@@ -197,7 +199,7 @@ public sealed unsafe class ImGuiGl3Renderer : IDisposable
         var versionStr = versionPtr != null ? Marshal.PtrToStringUTF8((nint)versionPtr) ?? "" : "";
         _isGles = versionStr.Contains("OpenGL ES", StringComparison.OrdinalIgnoreCase);
 
-        var io = Hexa.NET.ImGui.ImGui.GetIO();
+        var io = GetIO();
         io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
         if (!_isGles && _glDrawElementsBaseVertex != null)
             io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;
@@ -208,11 +210,9 @@ public sealed unsafe class ImGuiGl3Renderer : IDisposable
 
     private void LoadFunctions(IClyde clyde)
     {
-        var clydeType = clyde.GetType();
-        var bindingsField = clydeType.GetField("_glBindingsContext", BindingFlags.Instance | BindingFlags.NonPublic);
-        var bindingsCtx = bindingsField?.GetValue(clyde)
+        var bindingsCtx = Reflect.Get(clyde, "_glBindingsContext", ReflectOptions.Any)
             ?? throw new InvalidOperationException("Failed to access Clyde._glBindingsContext");
-        var getProcMethod = bindingsCtx.GetType().GetMethod("GetProcAddress", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+        var getProcMethod = Reflect.GetMethod(bindingsCtx.GetType(), "GetProcAddress", ReflectOptions.Any)
             ?? throw new InvalidOperationException("Failed to find GetProcAddress on _glBindingsContext");
 
         nint Load(string name, bool optional = false)

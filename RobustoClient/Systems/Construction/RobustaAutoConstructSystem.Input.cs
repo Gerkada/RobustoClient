@@ -72,9 +72,7 @@ public sealed partial class RobustaAutoConstructSystem
 
         _solver.NoteHeldEntity(_hands.GetActiveItem(player));
 
-        var mouseScreenPos = _input.MouseScreenPosition;
-        var cursorMapCoords = _eye.PixelToMap(mouseScreenPos);
-        if (cursorMapCoords.MapId == MapId.Nullspace)
+        if (!_mouse.TryGetMouseMapCoordinates(out var cursorMapCoords))
             return;
 
         var playerMapCoords = _transform.GetMapCoordinates(player);
