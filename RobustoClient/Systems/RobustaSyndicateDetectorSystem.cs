@@ -31,7 +31,7 @@ using Content.Shared.NPC.Components;
 using Content.Shared.NPC.Prototypes;
 using Content.Shared.Ninja.Components;
 using Content.Shared.NukeOps;
-using Content.Shared.RatKing;
+using Content.Shared.RatKing.Components;
 using Content.Shared.Revolutionary.Components;
 using Content.Shared.Zombies;
 using RobustoClient.Reflection;
