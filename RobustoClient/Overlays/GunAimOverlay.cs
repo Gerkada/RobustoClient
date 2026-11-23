@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Numerics;
 using RobustoClient.Systems;
 using Content.Client.CombatMode;
@@ -40,66 +39,90 @@ public class GunAimOverlay(
         if (mapPos.MapId == MapId.Nullspace)
             return;
 
+        var aimSystem = entManager.System<RobustaAimSystem>();
+        var lockedUid = aimSystem.LockedTarget is { } candidate && entManager.EntityExists(candidate)
+            ? candidate
+            : (EntityUid?) null;
+
         if (!combatModeSystem.IsInCombatMode(playerEntity))
+        {
+            // Allows locking outside of combat mode.
+            if (RobustaConfig.NoCombatLock && lockedUid is { } preLock)
+            {
+                var preLockPos = transform.GetMapCoordinates(
+                    preLock, xform: entManager.GetComponent<TransformComponent>(preLock)).Position;
+                DrawTargetMarker(worldHandle, mapPos.Position, preLockPos, Color.LimeGreen);
+            }
+
             return;
+        }
 
         var mouseScreenPos = input.MouseScreenPosition;
         var mouseWorldPos = eye.PixelToMap(mouseScreenPos);
+        var sameMap = mapPos.MapId == mouseWorldPos.MapId;
+
+        // The FOV circle bounds both aimbots' search, so draw it once whenever either is on.
+        if (sameMap && (RobustaConfig.RangedAimbotEnabled || RobustaConfig.MeleeAimbotEnabled))
+        {
+            var edgeScreen = new ScreenCoordinates(mouseScreenPos.Position + new Vector2(RobustaConfig.AimFovPixels, 0), mouseScreenPos.Window);
+            var centerWorld = eye.PixelToMap(mouseScreenPos).Position;
+            var edgeWorld = eye.PixelToMap(edgeScreen).Position;
+
+            worldHandle.DrawCircle(mouseWorldPos.Position, (edgeWorld - centerWorld).Length(), Color.White.WithAlpha(0.1f), false);
+        }
 
         if (RobustaConfig.MeleeAimbotEnabled)
         {
             var handsSystem = entManager.System<Content.Shared.Hands.EntitySystems.SharedHandsSystem>();
-            if (handsSystem.TryGetActiveItem(playerEntity.Value, out var heldItem))
+            if (handsSystem.TryGetActiveItem(playerEntity.Value, out var heldItem) &&
+                entManager.TryGetComponent<MeleeWeaponComponent>(heldItem, out var melee))
             {
-                if (entManager.TryGetComponent<MeleeWeaponComponent>(heldItem, out var melee))
+                // Cyan, so the melee radius reads as distinct from the gun FOV.
+                worldHandle.DrawCircle(mapPos.Position, melee.Range, Color.Cyan.WithAlpha(0.15f), false);
+
+                // With the ranged aimbot off nothing else marks the melee pick, so show it here.
+                if (!RobustaConfig.RangedAimbotEnabled)
                 {
-                    // Cyan, so the melee radius reads as distinct from the gun FOV.
-                    worldHandle.DrawCircle(mapPos.Position, melee.Range, Color.Cyan.WithAlpha(0.15f), false);
+                    var meleeTarget = aimSystem.GetLockedAimOutput(playerEntity, melee.Range)
+                        ?? aimSystem.GetClosestInScreenFov(mouseScreenPos, RobustaConfig.AimFovPixels, null, playerEntity, melee.Range);
+
+                    if (meleeTarget is { } picked)
+                    {
+                        var color = lockedUid != null ? Color.LimeGreen : Color.Red;
+                        DrawTargetMarker(worldHandle, mouseWorldPos.Position, picked.Position.Position, color);
+                    }
                 }
             }
         }
 
-        if (RobustaConfig.RangedAimbotEnabled && mapPos.MapId == mouseWorldPos.MapId)
+        if (RobustaConfig.RangedAimbotEnabled && sameMap)
         {
-            var aimSystem = entManager.System<RobustaAimSystem>();
-            var exclude = new HashSet<EntityUid> { playerEntity.Value };
+            var hasTarget = aimSystem.TryAcquireAim(mouseScreenPos, out var drawTarget);
+            var plan = entManager.System<RobustaPredictionSystem>().LastPlan;
+            var blocked = plan is { Blocked: true };
 
-            var centerScreen = mouseScreenPos;
-            var edgeScreen = new ScreenCoordinates(mouseScreenPos.Position + new Vector2(RobustaConfig.AimFovPixels, 0), mouseScreenPos.Window);
-            var centerWorld = eye.PixelToMap(centerScreen).Position;
-            var edgeWorld = eye.PixelToMap(edgeScreen).Position;
-            var fovWorldRadius = (edgeWorld - centerWorld).Length();
-
-            worldHandle.DrawCircle(mouseWorldPos.Position, fovWorldRadius, Color.White.WithAlpha(0.1f), false);
-
-            AimOutput? drawTarget = null;
-            bool isLocked = false;
-
-            if (aimSystem.LockedTarget.HasValue && entManager.EntityExists(aimSystem.LockedTarget.Value))
+            if (hasTarget)
             {
-                var lockedEnt = aimSystem.LockedTarget.Value;
-                var lockedXform = entManager.GetComponent<TransformComponent>(lockedEnt);
-                var lockedMapPos = transform.GetMapCoordinates(lockedEnt, xform: lockedXform);
-                
-                drawTarget = new AimOutput { Entity = lockedEnt, Position = lockedMapPos };
-                isLocked = true;
-            }
-            else
-            {
-                drawTarget = aimSystem.GetClosestInScreenFov(mouseScreenPos, RobustaConfig.AimFovPixels, exclude);
+                // Green while locked, red inside the FOV, orange when the shot cannot reach it.
+                var targetColor = blocked ? Color.OrangeRed : lockedUid != null ? Color.LimeGreen : Color.Red;
+                DrawTargetMarker(worldHandle, mouseWorldPos.Position, drawTarget.Position.Position, targetColor);
             }
 
-            if (drawTarget != null)
+            // Lead marker: where the shot was actually pointed, and whether geometry blocked it.
+            if (plan is { } solved && (RobustaConfig.UsePrediction || solved.Blocked))
             {
-                var targetPos = drawTarget.Value.Position.Position;
-
-                // Green while locked, red while merely inside the FOV.
-                var targetColor = isLocked ? Color.LimeGreen : Color.Red;
-                worldHandle.DrawLine(mouseWorldPos.Position, targetPos, targetColor.WithAlpha(0.5f));
-                worldHandle.DrawCircle(targetPos, 0.2f, targetColor, false);
-                worldHandle.DrawLine(targetPos - new Vector2(0.3f, 0), targetPos + new Vector2(0.3f, 0), targetColor);
-                worldHandle.DrawLine(targetPos - new Vector2(0, 0.3f), targetPos + new Vector2(0, 0.3f), targetColor);
+                var planColor = solved.Blocked ? Color.OrangeRed : Color.Cyan;
+                worldHandle.DrawLine(mapPos.Position, solved.WorldPoint, planColor.WithAlpha(0.35f));
+                worldHandle.DrawCircle(solved.WorldPoint, 0.15f, planColor, false);
             }
         }
+    }
+
+    private static void DrawTargetMarker(DrawingHandleWorld handle, Vector2 from, Vector2 to, Color color)
+    {
+        handle.DrawLine(from, to, color.WithAlpha(0.5f));
+        handle.DrawCircle(to, 0.2f, color, false);
+        handle.DrawLine(to - new Vector2(0.3f, 0), to + new Vector2(0.3f, 0), color);
+        handle.DrawLine(to - new Vector2(0, 0.3f), to + new Vector2(0, 0.3f), color);
     }
 }

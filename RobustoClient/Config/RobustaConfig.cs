@@ -88,6 +88,21 @@ public static partial class RobustaConfig
 
     public static bool UsePrediction = false;
 
+    /// <summary>Adds a Line of Sight mechanic.</summary>
+    public static bool AimLineOfSight = true;
+
+    /// <summary>Prevents firing if the target is not within LOS.</summary>
+    public static bool AimFireWhenBlocked = false;
+
+    /// <summary> Allows to lock onto players outside of combat mode, intended for throwing slippery items/pre locking.</summary>
+    public static bool NoCombatLock = false;
+
+    /// <summary> Place thrown slip items (soap, banana peels) where the target will walk onto them. </summary>
+    public static bool SlipThrowEnabled = true;
+
+    /// <summary> How far ahead of a target that is too slow to slip to place a thrown slip item. </summary>
+    public static float SlipThrowMinLead = 1f;
+
     public static bool FOVDisable = true;
 
     /// <summary>Hides upstream visual effects: flash, blindness, blurry vision, drunk, rainbow.</summary>
@@ -135,6 +150,9 @@ public static partial class RobustaConfig
     public enum PingMode { Local, Stable, Laggy, Auto }
 
     public static PingMode CurrentPingMode = PingMode.Auto;
+
+    /// <summary> Ceiling applied to any measured network lead, in seconds. </summary>
+    public static float MaxAimLeadSeconds = 0.5f;
 
     #endregion
 
