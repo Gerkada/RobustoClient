@@ -45,18 +45,16 @@ public class LocalPlayerOverlayFilterTests
     }
 
     [Fact]
-    public void OverlaysPatchTargets_ResolveAndExceedInlineThreshold()
+    public void OverlaysPatchTarget_ResolvesAndExceedsInlineThreshold()
     {
         var targetMethods = ((IEnumerable)AccessTools.Method(typeof(OverlaysPatch), "TargetMethods")!.Invoke(null, null)!)
             .Cast<MethodBase>()
             .ToArray();
 
-        targetMethods.Should().HaveCount(5, "all five suppressed upstream overlays must resolve");
-        foreach (var target in targetMethods)
-        {
-            target.Name.Should().Be("BeforeDraw");
-            AssertAboveInlineThreshold(target);
-        }
+        // One hook on Clyde's overlay list covers every overlay in every space.
+        targetMethods.Should().ContainSingle("Clyde.GetOverlaysForSpace is the only overlay filter hook");
+        targetMethods[0].Name.Should().Be("GetOverlaysForSpace");
+        AssertAboveInlineThreshold(targetMethods[0]);
     }
 
     private static void AssertAboveInlineThreshold(MethodBase target)

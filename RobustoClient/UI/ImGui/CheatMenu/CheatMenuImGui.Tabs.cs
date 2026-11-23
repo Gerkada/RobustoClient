@@ -47,7 +47,15 @@ public sealed partial class CheatMenuImGui
             if (RobustaImGuiWidgets.ToggleSwitch(
                     "Disable Visual Overlays",
                     ref RobustaConfig.DisableVisualOverlays,
-                    "Hides flash, blindness, blurry vision, drunk and rainbow effects."))
+                    "Hides upstream vision effects: flash, blindness, etc."))
+            {
+                MarkConfigDirty();
+            }
+
+            if (RobustaImGuiWidgets.ToggleSwitch(
+                    "Show Own Status Icons",
+                    ref RobustaConfig.ShowOwnStatusIcons,
+                    "Draws your own job icons above your head while Job Icons is on."))
             {
                 MarkConfigDirty();
             }

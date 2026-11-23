@@ -15,6 +15,9 @@ public static class MarseyEntry
         if (!TryGetAssembly("Content.Client"))
             return;
 
+        // probe once at beginning
+        RobustoClient.Reflection.Reflect.BuildTypeIndex();
+
         var subversionAssembly = Assembly.GetExecutingAssembly();
         SubverterPatch.Harm.PatchAll(subversionAssembly);
     }

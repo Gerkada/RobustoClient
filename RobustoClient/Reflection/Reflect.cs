@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.IO;
+using System.Linq;
 using System.Reflection;
 
 namespace RobustoClient.Reflection;
@@ -12,11 +14,20 @@ public static class Reflect
     private static readonly ConcurrentDictionary<(Type Type, string Member, ReflectOptions Options), MemberInfo?> Members = new();
     private static readonly ConcurrentDictionary<(Type Type, string Method, string Signature, ReflectOptions Options), MethodInfo?> Methods = new();
     private static readonly ConcurrentDictionary<string, Type?> Types = new();
+    private static readonly ConcurrentDictionary<string, Type> TypeByName = new();
+    private static readonly HashSet<Assembly> IndexedAssemblies = new();
+    private static readonly object IndexLock = new();
+
+    // Missing-member warnings fire from per-entity loops, so each one is logged once per type and path.
     private static readonly ConcurrentDictionary<string, byte> Warned = new();
+
+    // Assembly count at the last index pass. Assemblies only ever load, so a changed count is the
+    // cheap signal that new ones arrived.
+    private static int _indexedAssemblyCount = -1;
 
     private static readonly ReflectOptions ProbeOptions = ReflectOptions.Any with { WarnOnMissing = false };
 
-    // ---- Read ---------------------------------------------------------------------------------
+    #region Read
 
     /// <summary>Reads a member path, warning once when a segment is missing.</summary>
     public static bool TryGet(object? target, string member, out object? value, ReflectOptions? options = null)
@@ -96,7 +107,9 @@ public static class Reflect
     public static T? GetFirst<T>(object? target, ReflectOptions options, params string[] members) =>
         GetFirst(target, options, members) is T typed ? typed : default;
 
-    // ---- Write --------------------------------------------------------------------------------
+    #endregion
+
+    #region Write
 
     /// <summary>
     /// Writes a member: a settable property, then a field, then a get-only property's backing field.
@@ -153,7 +166,9 @@ public static class Reflect
         }
     }
 
-    // ---- Invoke -------------------------------------------------------------------------------
+    #endregion
+
+    #region Invoke
 
     public static bool TryInvoke(object? target, string method, out object? result, params object?[] args)
     {
@@ -232,7 +247,9 @@ public static class Reflect
         }
     }
 
-    // ---- Members ------------------------------------------------------------------------------
+    #endregion
+
+    #region Members
 
     public static MemberInfo? GetMemberInfo(Type? type, string member, ReflectOptions? options = null) =>
         type == null ? null : ResolveMember(type, member, options ?? ReflectOptions.Default);
@@ -280,7 +297,9 @@ public static class Reflect
             yield return field;
     }
 
-    // ---- Types --------------------------------------------------------------------------------
+    #endregion
+
+    #region Types
 
     /// <summary>
     /// Resolves a type by name, trying the assembly-qualified form first and then every loaded assembly.
@@ -298,6 +317,137 @@ public static class Reflect
     {
         type = FindType(typeName, assemblyName);
         return type != null;
+    }
+
+    /// <summary>
+    /// Indexes every loaded assembly by simple type name.
+    /// </summary>
+    /// <remarks>
+    /// Call once at boot, before anything resolves a type by name. The index is what makes
+    /// <see cref="FindTypeByName"/> a dictionary read instead of an assembly scan. Calling it again
+    /// indexes only the assemblies that loaded since the last pass.
+    /// </remarks>
+    public static void BuildTypeIndex() => IndexAssemblies(log: true);
+
+    /// <summary>
+    /// Resolves a type from its simple name using the index.
+    /// </summary>
+    /// <remarks>
+    /// This is the fork-safe form. <c>GasTileHeatBlurOverlay</c> survives a namespace or assembly move that
+    /// a full name, and certainly a <c>typeof</c>, would not, and an absent type answers null instead of
+    /// throwing on first touch.
+    /// </remarks>
+    public static Type? FindTypeByName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        if (TypeByName.TryGetValue(name, out var type))
+            return type;
+
+        // A miss may mean an assembly loaded since the last pass. Index the new ones and re-check:
+        // another thread may have completed the pass this one skipped.
+        IndexAssemblies(log: false);
+
+        return TypeByName.TryGetValue(name, out type) ? type : null;
+    }
+
+    public static bool TryFindTypeByName(string name, out Type? type)
+    {
+        type = FindTypeByName(name);
+        return type != null;
+    }
+
+    /// <summary>
+    /// Indexes assemblies that are not yet indexed, by simple type name.
+    /// </summary>
+    /// <remarks>
+    /// The count check is the fast path: assemblies only ever load, so an unchanged count means the index
+    /// is current and the lock is never taken. A pass only walks assemblies the set has not seen, which
+    /// keeps a rescan after a late load proportional to what arrived rather than to the process.
+    /// </remarks>
+    private static void IndexAssemblies(bool log)
+    {
+        var loaded = AppDomain.CurrentDomain.GetAssemblies();
+        if (loaded.Length == Volatile.Read(ref _indexedAssemblyCount))
+            return;
+
+        lock (IndexLock)
+        {
+            // Another thread may have indexed while this one waited for the lock.
+            if (loaded.Length == _indexedAssemblyCount)
+                return;
+
+            var added = 0;
+
+            foreach (var assembly in loaded)
+            {
+                if (!IndexedAssemblies.Add(assembly))
+                    continue;
+
+                foreach (var type in TypesIn(assembly))
+                {
+                    if (type.Name.Length == 0)
+                        continue;
+
+                    if (TypeByName.TryGetValue(type.Name, out var existing))
+                    {
+                        if (Prefer(type, existing))
+                            TypeByName[type.Name] = type;
+
+                        continue;
+                    }
+
+                    TypeByName[type.Name] = type;
+                    added++;
+                }
+            }
+
+            _indexedAssemblyCount = loaded.Length;
+
+            if (log && added > 0)
+                MarseyLogger.Info($"[Reflect] Indexed {added} types by name.");
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="candidate"/> should replace <paramref name="existing"/> for a shared simple name.
+    /// </summary>
+    private static bool Prefer(Type candidate, Type existing)
+    {
+        if (candidate == existing)
+            return false;
+
+        try
+        {
+            return existing.IsAssignableFrom(candidate);
+        }
+        catch (Exception e) when (e is TypeLoadException or FileNotFoundException or BadImageFormatException)
+        {
+            // A type whose base could not be loaded cannot be preferred over a working one.
+            return false;
+        }
+    }
+
+    private static IEnumerable<Type> TypesIn(Assembly assembly)
+    {
+        // A dynamic assembly is emitted at runtime and may not outlive its types, so it is not indexed.
+        if (assembly.IsDynamic)
+            return [];
+
+        try
+        {
+            return assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException e)
+        {
+            // A partly loaded assembly still answers for the types that did load.
+            return e.Types.OfType<Type>();
+        }
+        catch (Exception e) when (e is FileNotFoundException or TypeLoadException or BadImageFormatException)
+        {
+            return [];
+        }
     }
 
     private static Type? ResolveType(string typeName, string? assemblyName)
@@ -326,7 +476,9 @@ public static class Reflect
         return null;
     }
 
-    // ---- Lookup -------------------------------------------------------------------------------
+    #endregion
+
+    #region Lookup
 
     private static BindingFlags BindingFlagsFor(ReflectOptions options)
     {
@@ -391,4 +543,6 @@ public static class Reflect
         MarseyLogger.Warn(
             $"[Reflect] {type.Name} has no member '{segment}' for path '{member}', the lookup will keep failing.");
     }
+
+    #endregion
 }

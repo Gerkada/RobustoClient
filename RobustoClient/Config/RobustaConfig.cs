@@ -89,9 +89,8 @@ public static partial class RobustaConfig
     public static bool UsePrediction = false;
 
     public static bool FOVDisable = true;
-
-    /// <summary>Hides upstream visual effects: flash, blindness, blurry vision, drunk, rainbow.</summary>
     public static bool DisableVisualOverlays = false;
+    public static bool ShowOwnStatusIcons = false;
 
     public static bool FullbrightEnabled = false;
 
