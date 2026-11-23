@@ -123,9 +123,22 @@ internal static class SelfOverlayFilter
     /// <summary>Local player entity, or null when no session is attached.</summary>
     internal static EntityUid? LocalPlayer =>
         IoCManager.Resolve<IPlayerManager>().LocalSession?.AttachedEntity;
+
+    /// <summary>
+    /// Whether the local player's own overlay should be hidden: the feature is on, the user has not
+    /// asked to see their own, and the request is for the local player.
+    /// </summary>
+    internal static bool ShouldHideOwn(bool featureEnabled, EntityUid uid, EntityUid? localPlayer) =>
+        featureEnabled &&
+        !RobustaConfig.ShowOwnStatusIcons &&
+        localPlayer != null &&
+        uid == localPlayer;
 }
 
-/// <summary>Skips the health bar the local player would draw on itself while the Health ESP switch is on.</summary>
+/// <summary>
+/// Skips the health bar the local player would draw on itself while the Health Bars switch is on and
+/// Show Own Icons is off.
+/// </summary>
 [HarmonyPatch]
 internal static class SelfHealthBarPatch
 {
@@ -147,7 +160,7 @@ internal static class SelfHealthBarPatch
     [HarmonyPrefix]
     private static bool Prefix(EntityUid uid, ref (float ratio, bool inCrit)? __result)
     {
-        if (!RobustaConfig.Esp.Health.Enabled || uid != SelfOverlayFilter.LocalPlayer)
+        if (!SelfOverlayFilter.ShouldHideOwn(RobustaConfig.Esp.Health.Enabled, uid, SelfOverlayFilter.LocalPlayer))
             return true;
 
         // A null progress makes the upstream draw loop skip this entity.
@@ -192,8 +205,5 @@ internal static class SelfStatusIconPatch
     /// Whether this icon request is the local player asking for its own icons, which the toggle hides.
     /// </summary>
     internal static bool ShouldHideOwnIcons(EntityUid uid, EntityUid? localPlayer) =>
-        RobustaConfig.Esp.Icons.Enabled &&
-        !RobustaConfig.ShowOwnStatusIcons &&
-        localPlayer != null &&
-        uid == localPlayer;
+        SelfOverlayFilter.ShouldHideOwn(RobustaConfig.Esp.Icons.Enabled, uid, localPlayer);
 }

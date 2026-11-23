@@ -117,3 +117,52 @@ public class SelfStatusIconTests : IDisposable
         SelfStatusIconPatch.ShouldHideOwnIcons(new EntityUid(uid), local).Should().Be(expected);
     }
 }
+
+/// <summary>
+/// The health bar follows the same rule as the status icons: hidden on the local player only while
+/// Health Bars is on and Show Own Icons is off. The two patches share one predicate, so this pins the
+/// health-bar side of it.
+/// </summary>
+[Collection("ProcessWideState")]
+public class SelfHealthBarTests : IDisposable
+{
+    private readonly bool _health = RobustaConfig.Esp.Health.Enabled;
+    private readonly bool _icons = RobustaConfig.Esp.Icons.Enabled;
+    private readonly bool _showOwn = RobustaConfig.ShowOwnStatusIcons;
+
+    public void Dispose()
+    {
+        RobustaConfig.Esp.Health.Enabled = _health;
+        RobustaConfig.Esp.Icons.Enabled = _icons;
+        RobustaConfig.ShowOwnStatusIcons = _showOwn;
+    }
+
+    [Theory]
+    // health, showOwn, uid, localPlayer, expected
+    [InlineData(true, false, 1, 1, true)]   // the default: own bar hidden
+    [InlineData(true, true, 1, 1, false)]   // Show Own Icons keeps it
+    [InlineData(false, false, 1, 1, false)] // Health Bars off draws nothing, so nothing to hide
+    [InlineData(true, false, 2, 1, false)]  // other players are never hidden
+    [InlineData(true, false, 1, 0, false)]  // no local player attached
+    public void ShouldHideOwnHealthBar_MatchesTheSwitches(
+        bool health, bool showOwn, int uid, int localPlayer, bool expected)
+    {
+        RobustaConfig.Esp.Health.Enabled = health;
+        RobustaConfig.ShowOwnStatusIcons = showOwn;
+
+        var local = localPlayer == 0 ? (EntityUid?)null : new EntityUid(localPlayer);
+        SelfOverlayFilter.ShouldHideOwn(health, new EntityUid(uid), local).Should().Be(expected);
+    }
+
+    [Fact]
+    public void ShowOwnIcons_IsIndependentOfTheJobIconsSwitch()
+    {
+        // The toggle is shared, so turning Job Icons off must not change what the health bar does.
+        RobustaConfig.Esp.Icons.Enabled = false;
+        RobustaConfig.Esp.Health.Enabled = true;
+        RobustaConfig.ShowOwnStatusIcons = false;
+
+        SelfOverlayFilter.ShouldHideOwn(RobustaConfig.Esp.Health.Enabled, new EntityUid(1), new EntityUid(1))
+            .Should().BeTrue();
+    }
+}

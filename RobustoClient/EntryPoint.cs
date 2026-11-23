@@ -56,18 +56,7 @@ public sealed class EntryPoint : GameShared
     {
         try
         {
-            _inputManager.RegisterBinding(new KeyBindingRegistration
-            {
-                Function = function,
-                BaseKey = bind.BaseKey,
-                Mod1 = bind.Mod1,
-                Mod2 = bind.Mod2,
-                Mod3 = bind.Mod3,
-                Priority = CommandBindingPriority,
-                Type = KeyBindingType.Command,
-                CommandWhenUIFocused = false
-            }, false);
-
+            _inputManager.RegisterBinding(RobustaKeybindRegistration.Create(function, bind, CommandBindingPriority), false);
             MarseyLogger.Info($"Bound {function} to {bind}.");
         }
         catch (Exception ex)

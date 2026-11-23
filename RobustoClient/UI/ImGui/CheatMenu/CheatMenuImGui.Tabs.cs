@@ -52,14 +52,6 @@ public sealed partial class CheatMenuImGui
                 MarkConfigDirty();
             }
 
-            if (RobustaImGuiWidgets.ToggleSwitch(
-                    "Show Own Status Icons",
-                    ref RobustaConfig.ShowOwnStatusIcons,
-                    "Draws your own job icons above your head while Job Icons is on."))
-            {
-                MarkConfigDirty();
-            }
-
             Spacing();
 
             // Both are upstream HUD overlays, so they live here rather than under ESP: they draw for
@@ -78,6 +70,15 @@ public sealed partial class CheatMenuImGui
                 RobustaConfig.Esp.Icons.Enabled = icons;
                 MarkConfigDirty();
                 CheatMenuActions.SetJobIconsOverlay(icons);
+            }
+
+            // Applies to both overlays above, so it sits under them.
+            if (RobustaImGuiWidgets.ToggleSwitch(
+                    "Show Own Icons",
+                    ref RobustaConfig.ShowOwnStatusIcons,
+                    "Draws your own health bar and job icons above your head."))
+            {
+                MarkConfigDirty();
             }
         }),
 
