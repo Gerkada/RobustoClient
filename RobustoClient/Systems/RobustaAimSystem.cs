@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using System.Reflection;
-using Content.Shared.Hands.Components;
+using Content.Shared.CombatMode;
 using Content.Shared.Mobs;
 using Content.Shared.Mobs.Components;
 using Robust.Client.GameObjects;
@@ -13,6 +12,8 @@ using Robust.Shared.GameObjects;
 using Robust.Shared.IoC;
 using Robust.Shared.Map;
 using Robust.Shared.Physics.Components;
+using Robust.Shared.Timing;
+using RobustoClient.Systems.Aim;
 
 namespace RobustoClient.Systems;
 
@@ -26,21 +27,25 @@ public class RobustaAimSystem : EntitySystem
     [Dependency] private readonly IPlayerManager _player = default!;
     
     [Dependency] private readonly RobustaFriendSystem _friend = default!;
-    [Dependency] private readonly RobustaPredictionSystem _prediction = default!; 
+    [Dependency] private readonly IGameTiming _timing = default!;
 
     private EntityUid? _lockedTarget;
     public EntityUid? LockedTarget => _lockedTarget;
 
-    // --- Cache for mob state reflection ---
-    private PropertyInfo? _mobStateProp;
-    private FieldInfo? _mobStateField;
-    private bool _mobStateReflected;
+    /// <summary>Cursor movement below this squared distance reuses the previous scan for the same tick.</summary>
+    private const float ScanMemoDistanceSq = 64f;
+
+    private GameTick _scanTick;
+    private bool _scanned;
+    private ScreenCoordinates _scanMouse;
+    private AimOutput? _scanResult;
 
     public override void FrameUpdate(float frameTime)
     {
         base.FrameUpdate(frameTime);
 
-        if (!RobustaConfig.RangedAimbotEnabled && !RobustaConfig.ThrowAimbotEnabled)
+        // Melee counts: a melee-only setup still needs the lock, and locking does not require a gun.
+        if (!RobustaConfig.RangedAimbotEnabled && !RobustaConfig.ThrowAimbotEnabled && !RobustaConfig.MeleeAimbotEnabled)
         {
             _lockedTarget = null;
             return;
@@ -57,13 +62,21 @@ public class RobustaAimSystem : EntitySystem
         var localPlayer = _player.LocalSession?.AttachedEntity;
         if (localPlayer == null) return;
 
+        // Locking is a combat action unless No Combat Lock is on, which exists so a throw target can be
+        // picked before combat mode (and its FOV ring) is engaged.
+        if (!RobustaConfig.NoCombatLock &&
+            (!TryComp<CombatModeComponent>(localPlayer.Value, out var combat) || !combat.IsInCombatMode))
+        {
+            _lockedTarget = null;
+            return;
+        }
+
         if (!_lockedTarget.HasValue)
         {
-            // USE PIXEL FOV
-            var target = GetClosestInScreenFov(inputMan.MouseScreenPosition, RobustaConfig.AimFovPixels, new HashSet<EntityUid> { localPlayer.Value });
-            if (target != null)
+            // Shares the per-tick scan cache with the shot solve and the overlay.
+            if (TryAcquireAim(inputMan.MouseScreenPosition, out var acquired))
             {
-                _lockedTarget = target.Value.Entity;
+                _lockedTarget = acquired.Entity;
             }
         }
         else
@@ -89,102 +102,103 @@ public class RobustaAimSystem : EntitySystem
 
         return new AimOutput { Entity = ent, Position = mapCoords, Velocity = velocity };
     }
+    /// <summary>
+    /// The locked target's aim point, optionally gated by world reach from <paramref name="rangeFrom"/>.
+    /// </summary>
+    public AimOutput? GetLockedAimOutput(EntityUid? rangeFrom = null, float maxRange = 0f)
+    {
+        if (_lockedTarget is not { } locked || GetAimOutputFromEnt(locked) is not { } output)
+            return null;
+
+        if (rangeFrom is { } origin && maxRange > 0f && Exists(origin))
+        {
+            var originPos = _transform.GetMapCoordinates(Transform(origin));
+            if (!RobustaAimSolver.WithinReach(output.Position, originPos, maxRange))
+                return null;
+        }
+
+        return output;
+    }
+
     public bool IsInRange(EntityUid ent, EntityUid target, float range)
     {
         if (!Exists(ent) || !Exists(target)) return false; // got deleted o algo
 
-        var entTransform = Transform(ent);
-        var targetTransform = Transform(target);
-        if (entTransform.MapID != targetTransform.MapID) return false; // different maps
-
-        var entMapPos = _transform.GetMapCoordinates(entTransform);
-        var targetMapPos = _transform.GetMapCoordinates(targetTransform);
-
-        var distance = (entMapPos.Position - targetMapPos.Position).Length();
-        return distance <= range;
+        var entMapPos = _transform.GetMapCoordinates(Transform(ent));
+        var targetMapPos = _transform.GetMapCoordinates(Transform(target));
+        return RobustaAimSolver.WithinReach(targetMapPos, entMapPos, range);
     }
 
     // --- Target Methods ---
-    public AimOutput? GetSilentAimTarget(ScreenCoordinates mousePos, float bulletSpeed)
+
+    /// <summary>
+    /// Resolves the entity a shot should be aimed at
+    /// </summary>
+    public bool TryAcquireAim(ScreenCoordinates mouse, out AimOutput output)
     {
-        if (!RobustaConfig.RangedAimbotEnabled) return null;
+        output = default;
 
-        var localPlayer = _player.LocalSession?.AttachedEntity;
-        if (localPlayer == null) return null;
-
-        if (_lockedTarget.HasValue && Exists(_lockedTarget.Value))
+        if (GetLockedAimOutput() is { } locked)
         {
-            var lockTransform = Transform(_lockedTarget.Value);
-            var lockedPredictedPos = _prediction.GetPredictedAimPoint(localPlayer.Value, _lockedTarget.Value, bulletSpeed, true);
-            
-            return new AimOutput 
-            { 
-                Entity = _lockedTarget.Value, 
-                Position = new MapCoordinates(lockedPredictedPos, lockTransform.MapID),
-                Velocity = null 
-            };
+            output = locked;
+            return true;
         }
 
-        _lockedTarget = null;
-
-        // USE PIXEL FOV
-        var target = GetClosestInScreenFov(mousePos, RobustaConfig.AimFovPixels, new HashSet<EntityUid> { localPlayer.Value });
-        if (target == null) return null;
-
-        var predictedPos = _prediction.GetPredictedAimPoint(localPlayer.Value, target.Value.Entity, bulletSpeed, true);
-        
-        var finalOutput = target.Value;
-        finalOutput.Position = new MapCoordinates(predictedPos, target.Value.Position.MapId);
-        return finalOutput;
-    }
-
-    public AimOutput? GetThrowAimTarget(ScreenCoordinates mousePos)
-    {
-        if (!RobustaConfig.ThrowAimbotEnabled) return null;
-
-        var localPlayer = _player.LocalSession?.AttachedEntity;
-        if (localPlayer == null) return null;
-
-        // Determine throw speed dynamically
-        float throwSpeed = RobustaConfig.DefaultThrowSpeed;
-        if (TryComp<HandsComponent>(localPlayer.Value, out var hands))
+        if (_scanned && _scanTick == _timing.CurTick &&
+            (mouse.Position - _scanMouse.Position).LengthSquared() <= ScanMemoDistanceSq)
         {
-            throwSpeed = hands.BaseThrowspeed;
+            if (_scanResult is not { } memo)
+                return false;
+
+            output = memo;
+            return true;
         }
 
-        if (_lockedTarget.HasValue && Exists(_lockedTarget.Value))
-        {
-            var lockTransform = Transform(_lockedTarget.Value);
-            var lockedPredictedPos = _prediction.GetPredictedAimPoint(localPlayer.Value, _lockedTarget.Value, throwSpeed, false);
-            
-            return new AimOutput 
-            { 
-                Entity = _lockedTarget.Value, 
-                Position = new MapCoordinates(lockedPredictedPos, lockTransform.MapID),
-                Velocity = null 
-            };
-        }
+        if (_player.LocalSession?.AttachedEntity == null)
+            return false;
 
-        _lockedTarget = null;
+        var result = GetClosestInScreenFov(mouse, RobustaConfig.AimFovPixels);
 
-        // USE PIXEL FOV
-        var target = GetClosestInScreenFov(mousePos, RobustaConfig.AimFovPixels, new HashSet<EntityUid> { localPlayer.Value });
-        if (target == null) return null;
+        _scanned = true;
+        _scanTick = _timing.CurTick;
+        _scanMouse = mouse;
+        _scanResult = result;
 
-        var predictedPos = _prediction.GetPredictedAimPoint(localPlayer.Value, target.Value.Entity, throwSpeed, false);
-        
-        var finalOutput = target.Value;
-        finalOutput.Position = new MapCoordinates(predictedPos, target.Value.Position.MapId);
-        return finalOutput;
+        if (result is not { } found)
+            return false;
+
+        output = found;
+        return true;
     }
 
     // ==========================================================
     // SEARCH TARGET BY DISTANCE IN PIXELS ON SCREEN
     // ==========================================================
-    public AimOutput? GetClosestInScreenFov(ScreenCoordinates mouseScreenPos, float fovRadiusPixels, HashSet<EntityUid>? exclude = null)
+    /// <summary>
+    /// Nearest body to the cursor inside the FOV circle, optionally limited to weapon reach.
+    /// </summary>
+    /// <param name="rangeFrom">
+    /// Optional origin for a world-space reach limit. Melee passes the attacker so the FOV circle cannot
+    /// reach past the weapon, which is what keeps a swing from picking a body the cursor never covered.
+    /// </param>
+    /// <param name="maxRange">Reach limit in metres, applied only when <paramref name="rangeFrom"/> is set.</param>
+    public AimOutput? GetClosestInScreenFov(
+        ScreenCoordinates mouseScreenPos,
+        float fovRadiusPixels,
+        HashSet<EntityUid>? exclude = null,
+        EntityUid? rangeFrom = null,
+        float maxRange = 0f)
     {
         var mapCoords = _eyeManager.ScreenToMap(mouseScreenPos);
         if (mapCoords.MapId == MapId.Nullspace) return null;
+
+        var originPos = default(MapCoordinates);
+        var hasRange = false;
+        if (rangeFrom is { } origin && maxRange > 0f)
+        {
+            hasRange = true;
+            originPos = _transform.GetMapCoordinates(Transform(origin));
+        }
 
         var edgeScreen = new ScreenCoordinates(mouseScreenPos.Position + new Vector2(fovRadiusPixels, 0), mouseScreenPos.Window);
         var edgeMapCoords = _eyeManager.PixelToMap(edgeScreen);
@@ -206,6 +220,11 @@ public class RobustaAimSystem : EntitySystem
             if (!FilterEntity(ent, transform)) continue;
 
             var entityMapPos = _transform.GetMapCoordinates(transform);
+
+            if (hasRange && !RobustaAimSolver.WithinReach(entityMapPos, originPos, maxRange))
+            {
+                continue;
+            }
             
             // Translate mob coordinates to screen coordinates
             var entityScreenPos = _eyeManager.CoordinatesToScreen(transform.Coordinates);
@@ -231,89 +250,15 @@ public class RobustaAimSystem : EntitySystem
         return new AimOutput { Entity = bestEntity.Value, Position = bestCoordinates.Value, Velocity = velocity };
     }
 
-    // --- Methods kept for compatibility with other systems (e.g., melee aimbot) ---
-    public AimOutput? GetClosestInRange(ScreenCoordinates screenCoordinates, float range, HashSet<EntityUid>? exclude = null)
-    {
-        var mapCoords = _eyeManager.ScreenToMap(screenCoordinates);
-        if (mapCoords.MapId == MapId.Nullspace) return null;
-        return GetClosestInRange(mapCoords, range, exclude);
-    }
-
-    public AimOutput? GetClosestInRange(MapCoordinates coordinates, float range, HashSet<EntityUid>? exclude = null)
-    {
-        var entitiesInRange = _lookup.GetEntitiesInRange(coordinates, range, LookupFlags.Uncontained);
-        if (exclude != null) entitiesInRange.ExceptWith(exclude);
-        return GetClosestTo(coordinates, entitiesInRange);
-    }
-
-    public AimOutput? GetClosestToEntInRange(EntityUid ent, float range, HashSet<EntityUid>? exclude = null)
-    {
-        var mapCords = _transform.GetMapCoordinates(Transform(ent));
-        var entitiesInRange = _lookup.GetEntitiesInRange(mapCords, range, LookupFlags.Uncontained);
-        if (exclude != null) entitiesInRange.ExceptWith(exclude);
-        return GetClosestTo(mapCords, entitiesInRange);
-    }
-
-    private AimOutput? GetClosestTo(MapCoordinates coordinates, HashSet<EntityUid> entities)
-    {
-        MapCoordinates? closestCoordinates = null;
-        EntityUid? closestEntity = null;
-        var closestDistance = float.MaxValue;
-        
-        foreach (var ent in entities)
-        {
-            var transform = Transform(ent);
-            if (!FilterEntity(ent, transform)) continue;
-                
-            var entityMapPos = _transform.GetMapCoordinates(transform);
-            var distance = (coordinates.Position - entityMapPos.Position).Length();
-            
-            if (distance < closestDistance)
-            {
-                closestCoordinates = entityMapPos;
-                closestDistance = distance;
-                closestEntity = ent;
-            }
-        }
-
-        if (closestEntity == null || closestCoordinates == null) return null;
-
-        Vector2? velocity = null;
-        if (TryComp<PhysicsComponent>(closestEntity, out var phys))
-            velocity = phys.LinearVelocity;
-
-        return new AimOutput { Entity = closestEntity.Value, Position = closestCoordinates.Value, Velocity = velocity };
-    }
-
     private bool FilterEntity(EntityUid uid, TransformComponent transform)
     {
         var localPlayer = _player.LocalSession?.AttachedEntity;
-        if (localPlayer == null) return false;
+        if (localPlayer == null || uid == localPlayer.Value) return false;
         if (transform.MapID != Transform(localPlayer.Value).MapID) return false;
         if (!TryComp<MobStateComponent>(uid, out var state)) return false;
 
-        // Dynamic mob state lookup for cross-version compatibility
-        if (!_mobStateReflected)
-        {
-            var type = state.GetType();
-            _mobStateProp = type.GetProperty("CurrentState");
-            _mobStateField = type.GetField("CurrentState");
-            _mobStateReflected = true;
-        }
-
-        object? stateVal = null;
-        if (_mobStateProp != null)
-            stateVal = _mobStateProp.GetValue(state);
-        else if (_mobStateField != null)
-            stateVal = _mobStateField.GetValue(state);
-
-        if (stateVal != null)
-        {
-            var stateStr = stateVal.ToString();
-            // We cut off dead and invalid entities by the string name of the enum
-            if (stateStr == "Dead" || stateStr == "Invalid") 
-                return false;
-        }
+        // Critical targets stay valid, they are hittable once the shot names them in RequestShootEvent.Target.
+        if (state.CurrentState is MobState.Dead or MobState.Invalid) return false;
 
         if (_friend != null && _friend.IsFriend(uid)) return false;
         return true;
