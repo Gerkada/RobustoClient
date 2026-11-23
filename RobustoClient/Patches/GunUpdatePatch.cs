@@ -7,9 +7,11 @@ using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Weapons.Ranged.Components;
 using Content.Shared.Weapons.Ranged.Events;
 using HarmonyLib;
+using Robust.Client.GameObjects;
 using Robust.Client.Input;
 using Robust.Client.Player;
 using Robust.Shared.GameObjects;
+using Robust.Shared.Input;
 using Robust.Shared.IoC;
 using Robust.Shared.Map;
 using Robust.Shared.Timing;
@@ -85,13 +87,18 @@ public class GunUpdatePatch
 
         _plan = plan;
 
-        // The plan is solved every tick so the overlay can show it, but a shot only happens once the
-        // cooldown has elapsed. Holding fire means dropping the request, which upstream builds inside
-        // the update we are about to skip.
+        // The plan is solved every tick so the overlay can show it, but only suppress the update
+        // when the gun would actually send a shoot request; letting idle ticks run keeps
+        // battery/ballistic updates and RequestStopShootEvent intact.
         if (plan.Blocked && !RobustaConfig.AimFireWhenBlocked &&
             gunComp.NextFire <= _timing.CurTime)
         {
-            return false;
+            var useKey = gunComp.UseKey ? EngineKeyFunctions.Use : EngineKeyFunctions.UseSecondary;
+            if (_entMan.System<InputSystem>().CmdStates.GetState(useKey) == BoundKeyState.Down ||
+                gunComp.BurstActivated)
+            {
+                return false;
+            }
         }
 
         return true;
