@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using Content.Shared.Damage.Components;
 using Content.Shared.Hands.Components;
@@ -81,6 +80,7 @@ public class RobustaPredictionSystem : EntitySystem
     private EntityUid? _dampingTarget;
     private Vector2 _dampingVelocity;
     private float _damping = 1f;
+    private GameTick _dampingTick;
 
     /// <summary>Most recent solved gun plan, for overlays and diagnostics.</summary>
     public ShotPlan? LastPlan { get; private set; }
@@ -230,18 +230,22 @@ public class RobustaPredictionSystem : EntitySystem
             ? targetPos + targetVel / speed * lead
             : targetPos;
 
-        // Same visibility rule as the gun path, with the mask a thrown item actually collides with.
+        worldPoint = point;
+
+        // When placing ahead of a moving target, hitting the target itself must not hide an obstacle
+        // further along the ray (or mid-air body block) before the landing point.
         if (RobustaConfig.AimLineOfSight &&
-            !IsPathClear(shooter, target, mapId, shooterPos, point, ThrownMask, out blocker))
+            !IsPathClear(shooter, SlipLosTarget(lead, target), mapId, shooterPos, point, ThrownMask, out blocker))
         {
             status = SlipPlanStatus.Blocked;
             return false;
         }
 
-        worldPoint = point;
         status = lead <= 0f ? SlipPlanStatus.Underfoot : SlipPlanStatus.Placed;
         return true;
     }
+
+    internal static EntityUid? SlipLosTarget(float lead, EntityUid target) => lead > 0f ? null : target;
 
     private bool Solve(EntityUid shooter, EntityUid target, AimProfile profile, float extraLead, out ShotPlan plan)
     {
@@ -330,16 +334,22 @@ public class RobustaPredictionSystem : EntitySystem
 
     private float UpdateDamping(EntityUid target, Vector2 relVel)
     {
+        var tick = _timing.CurTick;
         if (_dampingTarget != target)
         {
             _dampingTarget = target;
             _dampingVelocity = relVel;
             _damping = 1f;
+            _dampingTick = tick;
             return _damping;
         }
 
+        if (_dampingTick == tick)
+            return _damping;
+
         _damping = RobustaAimSolver.LeadDamping(relVel, _dampingVelocity, _damping);
         _dampingVelocity = relVel;
+        _dampingTick = tick;
         return _damping;
     }
 
@@ -354,7 +364,7 @@ public class RobustaPredictionSystem : EntitySystem
     /// </summary>
     private bool IsPathClear(
         EntityUid shooter,
-        EntityUid target,
+        EntityUid? target,
         MapId mapId,
         Vector2 from,
         Vector2 to,
@@ -376,7 +386,7 @@ public class RobustaPredictionSystem : EntitySystem
         // (walls, windows) is queried before the dynamic one that holds mobs.
         foreach (var candidate in _physics.IntersectRay(mapId, ray, length, shooter, returnOnFirstHit: false))
         {
-            if (candidate.HitEntity == target)
+            if (target != null && candidate.HitEntity == target.Value)
                 return true;
 
             if (PassesOver(candidate.HitEntity))

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Numerics;
 using RobustoClient.Systems;
 using Content.Client.CombatMode;
@@ -61,7 +60,6 @@ public class GunAimOverlay(
         var mouseScreenPos = input.MouseScreenPosition;
         var mouseWorldPos = eye.PixelToMap(mouseScreenPos);
         var sameMap = mapPos.MapId == mouseWorldPos.MapId;
-        var exclude = new HashSet<EntityUid> { playerEntity.Value };
 
         // The FOV circle bounds both aimbots' search, so draw it once whenever either is on.
         if (sameMap && (RobustaConfig.RangedAimbotEnabled || RobustaConfig.MeleeAimbotEnabled))
@@ -85,9 +83,8 @@ public class GunAimOverlay(
                 // With the ranged aimbot off nothing else marks the melee pick, so show it here.
                 if (!RobustaConfig.RangedAimbotEnabled)
                 {
-                    var meleeTarget = lockedUid is { } lockEnt
-                        ? new AimOutput { Entity = lockEnt, Position = transform.GetMapCoordinates(lockEnt) }
-                        : aimSystem.GetClosestInScreenFov(mouseScreenPos, RobustaConfig.AimFovPixels, exclude, playerEntity, melee.Range);
+                    var meleeTarget = aimSystem.GetLockedAimOutput(playerEntity, melee.Range)
+                        ?? aimSystem.GetClosestInScreenFov(mouseScreenPos, RobustaConfig.AimFovPixels, null, playerEntity, melee.Range);
 
                     if (meleeTarget is { } picked)
                     {
@@ -100,35 +97,19 @@ public class GunAimOverlay(
 
         if (RobustaConfig.RangedAimbotEnabled && sameMap)
         {
-            AimOutput? drawTarget;
-            if (lockedUid is { } lockedEnt)
-            {
-                drawTarget = new AimOutput
-                {
-                    Entity = lockedEnt,
-                    Position = transform.GetMapCoordinates(lockedEnt),
-                };
-            }
-            else
-            {
-                drawTarget = aimSystem.GetClosestInScreenFov(mouseScreenPos, RobustaConfig.AimFovPixels, exclude);
-            }
-
-            // Only set while a target is acquired this tick.
-            var plan = RobustaConfig.UsePrediction
-                ? entManager.System<RobustaPredictionSystem>().LastPlan
-                : null;
+            var hasTarget = aimSystem.TryAcquireAim(mouseScreenPos, out var drawTarget);
+            var plan = entManager.System<RobustaPredictionSystem>().LastPlan;
             var blocked = plan is { Blocked: true };
 
-            if (drawTarget != null)
+            if (hasTarget)
             {
                 // Green while locked, red inside the FOV, orange when the shot cannot reach it.
                 var targetColor = blocked ? Color.OrangeRed : lockedUid != null ? Color.LimeGreen : Color.Red;
-                DrawTargetMarker(worldHandle, mouseWorldPos.Position, drawTarget.Value.Position.Position, targetColor);
+                DrawTargetMarker(worldHandle, mouseWorldPos.Position, drawTarget.Position.Position, targetColor);
             }
 
             // Lead marker: where the shot was actually pointed, and whether geometry blocked it.
-            if (plan is { } solved)
+            if (plan is { } solved && (RobustaConfig.UsePrediction || solved.Blocked))
             {
                 var planColor = solved.Blocked ? Color.OrangeRed : Color.Cyan;
                 worldHandle.DrawLine(mapPos.Position, solved.WorldPoint, planColor.WithAlpha(0.35f));

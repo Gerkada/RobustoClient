@@ -1,9 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Numerics;
 using System.Reflection;
 using Content.Client.Weapons.Melee;
 using Content.Client.MouseRotator;
+using Content.Shared.CombatMode;
 using Content.Shared.MouseRotator;
 using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Weapons.Melee;
@@ -41,10 +41,10 @@ public static class MeleePatch
     private static AimOutput? FindMeleeTarget(EntityUid origin, float range)
     {
         var aim = Aim;
-        if (aim.GetLockedAimOutput() is { } locked) return locked;
+        if (aim.GetLockedAimOutput(origin, range) is { } locked) return locked;
 
         var mouse = IoCManager.Resolve<IInputManager>().MouseScreenPosition;
-        return aim.GetClosestInScreenFov(mouse, RobustaConfig.AimFovPixels, [origin], origin, range);
+        return aim.GetClosestInScreenFov(mouse, RobustaConfig.AimFovPixels, null, origin, range);
     }
 
     [HarmonyPatch(typeof(MeleeWeaponSystem), "ClientLightAttack")]
@@ -129,6 +129,12 @@ public static class MeleePatch
 
             var localPlayer = playerManager.LocalEntity;
             if (localPlayer == null) return true;
+
+            if (!entityManager.TryGetComponent<CombatModeComponent>(localPlayer.Value, out var combat) ||
+                !combat.IsInCombatMode)
+            {
+                return true;
+            }
 
             if (!entityManager.HasComponent<MouseRotatorComponent>(localPlayer.Value))
                 return true;

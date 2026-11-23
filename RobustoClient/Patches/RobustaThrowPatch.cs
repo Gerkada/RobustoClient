@@ -120,7 +120,10 @@ public static class RobustaThrowPatch
 
                 if (!planned)
                 {
-                    Logger.GetSawmill("RobustaNet").Debug($"[!] Slip throw fell back: {slipStatus}");
+                    Logger.GetSawmill("RobustaNet").Debug($"[!] Slip throw aborted: {slipStatus}");
+                    if (!ShouldContinueBlockedSlip(slipStatus, RobustaConfig.AimFireWhenBlocked))
+                        return;
+                    planned = true;
                 }
                 else
                 {
@@ -171,6 +174,9 @@ public static class RobustaThrowPatch
         catch (Exception e) { Logger.GetSawmill("RobustaNet").Error($"[CRASH] {e.Message}"); }
         finally { _isPatching = false; }
     }
+
+    internal static bool ShouldContinueBlockedSlip(RobustoClient.Systems.Aim.SlipPlanStatus status, bool fireWhenBlocked) =>
+        status == RobustoClient.Systems.Aim.SlipPlanStatus.Blocked && fireWhenBlocked;
 
     /// <summary>
     /// Whether this input command is the throw key, resolved through the input manager's bind map so the

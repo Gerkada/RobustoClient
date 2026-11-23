@@ -103,27 +103,30 @@ public class RobustaAimSystem : EntitySystem
         return new AimOutput { Entity = ent, Position = mapCoords, Velocity = velocity };
     }
     /// <summary>
-    /// The locked target's aim point, ignoring weapon range. A lock outranks a nearer body, so a melee swing
-    /// aims at the lock and leaves the range check to upstream rather than retargeting someone else.
+    /// The locked target's aim point, optionally gated by world reach from <paramref name="rangeFrom"/>.
     /// </summary>
-    public AimOutput? GetLockedAimOutput()
+    public AimOutput? GetLockedAimOutput(EntityUid? rangeFrom = null, float maxRange = 0f)
     {
-        return _lockedTarget is { } locked ? GetAimOutputFromEnt(locked) : null;
+        if (_lockedTarget is not { } locked || GetAimOutputFromEnt(locked) is not { } output)
+            return null;
+
+        if (rangeFrom is { } origin && maxRange > 0f && Exists(origin))
+        {
+            var originPos = _transform.GetMapCoordinates(Transform(origin));
+            if (!RobustaAimSolver.WithinReach(output.Position, originPos, maxRange))
+                return null;
+        }
+
+        return output;
     }
 
     public bool IsInRange(EntityUid ent, EntityUid target, float range)
     {
         if (!Exists(ent) || !Exists(target)) return false; // got deleted o algo
 
-        var entTransform = Transform(ent);
-        var targetTransform = Transform(target);
-        if (entTransform.MapID != targetTransform.MapID) return false; // different maps
-
-        var entMapPos = _transform.GetMapCoordinates(entTransform);
-        var targetMapPos = _transform.GetMapCoordinates(targetTransform);
-
-        var distance = (entMapPos.Position - targetMapPos.Position).Length();
-        return distance <= range;
+        var entMapPos = _transform.GetMapCoordinates(Transform(ent));
+        var targetMapPos = _transform.GetMapCoordinates(Transform(target));
+        return RobustaAimSolver.WithinReach(targetMapPos, entMapPos, range);
     }
 
     // --- Target Methods ---
@@ -135,15 +138,9 @@ public class RobustaAimSystem : EntitySystem
     {
         output = default;
 
-        if (_lockedTarget is { } locked && Exists(locked))
+        if (GetLockedAimOutput() is { } locked)
         {
-            output = new AimOutput
-            {
-                Entity = locked,
-                Position = _transform.GetMapCoordinates(Transform(locked)),
-                Velocity = null
-            };
-
+            output = locked;
             return true;
         }
 
@@ -157,12 +154,10 @@ public class RobustaAimSystem : EntitySystem
             return true;
         }
 
-        var localPlayer = _player.LocalSession?.AttachedEntity;
-        if (localPlayer == null)
+        if (_player.LocalSession?.AttachedEntity == null)
             return false;
 
-        var exclude = new HashSet<EntityUid> { localPlayer.Value };
-        var result = GetClosestInScreenFov(mouse, RobustaConfig.AimFovPixels, exclude);
+        var result = GetClosestInScreenFov(mouse, RobustaConfig.AimFovPixels);
 
         _scanned = true;
         _scanTick = _timing.CurTick;
@@ -258,7 +253,7 @@ public class RobustaAimSystem : EntitySystem
     private bool FilterEntity(EntityUid uid, TransformComponent transform)
     {
         var localPlayer = _player.LocalSession?.AttachedEntity;
-        if (localPlayer == null) return false;
+        if (localPlayer == null || uid == localPlayer.Value) return false;
         if (transform.MapID != Transform(localPlayer.Value).MapID) return false;
         if (!TryComp<MobStateComponent>(uid, out var state)) return false;
 

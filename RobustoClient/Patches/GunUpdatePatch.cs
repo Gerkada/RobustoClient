@@ -43,10 +43,11 @@ public class GunUpdatePatch
     {
         _plan = null;
 
-        // Cleared every tick, so the overlay's line-of-sight marker only reflects a target acquired now.
-        _prediction?.ForgetPlan();
-
-        if (!RobustaConfig.RangedAimbotEnabled) return true;
+        if (!RobustaConfig.RangedAimbotEnabled)
+        {
+            _prediction?.ForgetPlan();
+            return true;
+        }
 
         _entMan ??= IoCManager.Resolve<IEntityManager>();
         _input ??= IoCManager.Resolve<IInputManager>();
@@ -55,8 +56,11 @@ public class GunUpdatePatch
         _aim ??= _entMan.System<RobustaAimSystem>();
         _prediction ??= _entMan.System<RobustaPredictionSystem>();
 
-        // Upstream bails out of its own Update on this, so there is nothing to prepare.
+        // Upstream bails out of its own Update on this, so keep the previous predicted tick's plan for the overlay.
         if (!_timing.IsFirstTimePredicted) return true;
+
+        // Cleared on each predicted tick, so the overlay's line-of-sight marker only reflects a target acquired now.
+        _prediction.ForgetPlan();
 
         if (_player.LocalSession?.AttachedEntity is not { } localPlayer) return true;
 

@@ -28,7 +28,7 @@ public sealed partial class CheatMenuImGui
             Toggle("Aim Prediction", ref RobustaConfig.UsePrediction);
             Toggle("No Combat Lock", ref RobustaConfig.NoCombatLock, "Allows to target outside combat mode");
             Toggle("Line of Sight", ref RobustaConfig.AimLineOfSight);
-            Toggle("Fire When Blocked", ref RobustaConfig.AimFireWhenBlocked, "Disables firing if something is in the way.");
+            Toggle("Fire When Blocked", ref RobustaConfig.AimFireWhenBlocked, "Allows firing even if something is in the way.");
         }),
 
         new WidgetCard("##CombatOptions", "OPTIONS", () =>

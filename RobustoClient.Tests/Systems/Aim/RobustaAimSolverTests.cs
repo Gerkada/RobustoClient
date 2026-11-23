@@ -1,7 +1,10 @@
 using System;
 using System.Numerics;
 using FluentAssertions;
+using RobustoClient.Patches;
+using RobustoClient.Systems;
 using RobustoClient.Systems.Aim;
+using Robust.Shared.GameObjects;
 using Robust.Shared.Map;
 using Robust.Shared.Maths;
 using Robust.Shared.Physics;
@@ -378,5 +381,29 @@ public class RobustaAimSolverTests
             .Should().BeFalse();
         RobustaAimSolver.WithinReach(new MapCoordinates(Vector2.Zero, new MapId(2)), origin, 5f)
             .Should().BeFalse("a point on another map is never in reach");
+    }
+
+    [Fact]
+    public void SlipLosTarget_ExcludesTargetWhenPlacedAhead()
+    {
+        var target = new EntityUid(42);
+
+        RobustaPredictionSystem.SlipLosTarget(1.5f, target).Should().BeNull(
+            "when placing ahead of a moving target, hitting the target must not hide obstacles between target and landing spot");
+        RobustaPredictionSystem.SlipLosTarget(0f, target).Should().Be(target);
+    }
+
+    [Theory]
+    [InlineData(SlipPlanStatus.Blocked, true, true)]
+    [InlineData(SlipPlanStatus.Blocked, false, false)]
+    [InlineData(SlipPlanStatus.OutOfRange, true, false)]
+    [InlineData(SlipPlanStatus.OutOfRange, false, false)]
+    [InlineData(SlipPlanStatus.NoTarget, true, false)]
+    public void ShouldContinueBlockedSlip_OnlyContinuesWhenBlockedAndFireWhenBlockedEnabled(
+        SlipPlanStatus status,
+        bool fireWhenBlocked,
+        bool expected)
+    {
+        RobustaThrowPatch.ShouldContinueBlockedSlip(status, fireWhenBlocked).Should().Be(expected);
     }
 }
