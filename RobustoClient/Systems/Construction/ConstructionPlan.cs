@@ -91,5 +91,6 @@ public sealed record ConstructionTargetSnapshot(
     bool IsSecurityWiresAccessible = true,
     string? SecurityExamine = null,
     bool HasMachineFrameBoard = false,
-    MachineBoardRequirements? MachineBoard = null
+    MachineBoardRequirements? MachineBoard = null,
+    int CompletedDeconstructSteps = 0
 );

@@ -88,7 +88,7 @@ public sealed class RobustaWorldScanner : EntitySystem
         var localPlayer = _player.LocalSession?.AttachedEntity;
         if (localPlayer == null) return null;
 
-        foreach (var heldItem in _hands.EnumerateHeld(localPlayer.Value))
+        foreach (var heldItem in _itemUtil.GetHeldItems(localPlayer.Value))
         {
             if (IsBeaker(heldItem)) return heldItem;
         }

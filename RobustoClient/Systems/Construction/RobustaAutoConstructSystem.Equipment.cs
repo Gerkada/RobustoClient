@@ -213,6 +213,7 @@ public sealed partial class RobustaAutoConstructSystem
         {
             var best = vicinityMatches[0];
             _itemUtil.StowActiveTrackedItem();
+            _itemUtil.RecordItemOrigin(best.Entity, best.Source, best.SlotOrHand, best.StorageEntity);
             if (best.Source == ItemSource.Storage && best.StorageEntity is { } storageUid)
             {
                 if (!string.IsNullOrEmpty(best.SlotOrHand))
@@ -344,6 +345,7 @@ public sealed partial class RobustaAutoConstructSystem
         if (chosen.StorageOwner is { } storageOwner && Exists(storageOwner))
         {
             var itemToFetch = chosen.Item;
+            _itemUtil.RecordItemOrigin(itemToFetch, ItemSource.Storage, chosen.RootSlot, storageOwner);
             _itemUtil.EnqueueStep(ItemUtilitySystem.StepDelay, () =>
             {
                 if (!Exists(itemToFetch) || !Exists(storageOwner))

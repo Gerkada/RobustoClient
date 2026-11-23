@@ -290,10 +290,23 @@ public static class Reflect
     {
         var flags = BindingFlagsFor(options ?? ReflectOptions.Default);
 
-        foreach (var property in type.GetProperties(flags))
+        PropertyInfo[] properties;
+        FieldInfo[] fields;
+        try
+        {
+            properties = type.GetProperties(flags);
+            fields = type.GetFields(flags);
+        }
+        catch (Exception e) when (e is TypeLoadException or ReflectionTypeLoadException or FileNotFoundException or BadImageFormatException)
+        {
+            // A member whose signature names a type this fork does not ship cannot be enumerated.
+            yield break;
+        }
+
+        foreach (var property in properties)
             yield return property;
 
-        foreach (var field in type.GetFields(flags))
+        foreach (var field in fields)
             yield return field;
     }
 
@@ -494,20 +507,29 @@ public static class Reflect
     private static MemberInfo? ResolveMember(Type type, string member, ReflectOptions options) =>
         Members.GetOrAdd((type, member, options), key =>
         {
-            var flags = BindingFlagsFor(key.Options);
+            try
+            {
+                var flags = BindingFlagsFor(key.Options);
 
-            var property = key.Type.GetProperty(key.Member, flags);
-            if (property != null)
-                return property;
+                var property = key.Type.GetProperty(key.Member, flags);
+                if (property != null)
+                    return property;
 
-            var field = key.Type.GetField(key.Member, flags);
-            if (field != null)
-                return field;
+                var field = key.Type.GetField(key.Member, flags);
+                if (field != null)
+                    return field;
 
-            if (!key.Options.UnderscoreFallback || key.Member.StartsWith('_'))
+                if (!key.Options.UnderscoreFallback || key.Member.StartsWith('_'))
+                    return null;
+
+                return key.Type.GetField($"_{key.Member}", flags);
+            }
+            catch (Exception e) when (e is TypeLoadException or ReflectionTypeLoadException or FileNotFoundException or BadImageFormatException)
+            {
+                // A member whose signature names a type this fork does not ship cannot be resolved.
+                // That is a fork difference rather than a bug: answer null and let the caller degrade.
                 return null;
-
-            return key.Type.GetField($"_{key.Member}", flags);
+            }
         });
 
     private static MethodInfo? ResolveMethod(
@@ -522,13 +544,21 @@ public static class Reflect
 
         return Methods.GetOrAdd((type, method, signature, options), key =>
         {
-            var flags = BindingFlagsFor(key.Options);
+            try
+            {
+                var flags = BindingFlagsFor(key.Options);
 
-            if (parameterTypes != null)
-                return key.Type.GetMethod(key.Method, flags, null, parameterTypes, null);
+                if (parameterTypes != null)
+                    return key.Type.GetMethod(key.Method, flags, null, parameterTypes, null);
 
-            // GetMethod(name, flags) throws on overloads, so take the first by name instead.
-            return key.Type.GetMethods(flags).FirstOrDefault(m => m.Name == key.Method);
+                // GetMethod(name, flags) throws on overloads, so take the first by name instead.
+                return key.Type.GetMethods(flags).FirstOrDefault(m => m.Name == key.Method);
+            }
+            catch (Exception e) when (e is TypeLoadException or ReflectionTypeLoadException or FileNotFoundException or BadImageFormatException)
+            {
+                // Same fork tolerance as ResolveMember: an unresolvable signature answers null.
+                return null;
+            }
         });
     }
 

@@ -299,7 +299,37 @@ public sealed partial class RobustaAutoConstructSystem
             recipeId = resolvedFromEntity;
         }
 
-        // 2. Existing unfinished frame, unanchored/unconfigured structure, or matching ghost on the tile
+        // 2. Pipes and pipe-like contraptions are anchored on the subfloor layer, and the pipe layer is then set
+        // with a screwdriver that cannot reach a covered entity. Lift the floor covering before building.
+        if (IsUnderfloorPipeItem(task.Item))
+        {
+            switch (EnsureFloorCoveringPried(task.GridUid, task.Tile, tileCoords))
+            {
+                case FloorPryResult.Issued:
+                    _currentDiagnosticStatus =
+                        $"Prying floor tile at ({task.Tile.X}, {task.Tile.Y}) to reach the pipe layer [{_currentTaskElapsed:0.0}s / {JobTimeoutSeconds:0}s]";
+                    _waitTimer = 1.2f;
+                    return;
+
+                case FloorPryResult.NoTool:
+                    if (_currentTaskElapsed < 0.6f)
+                        TryOpenWornStorageSlots(player);
+
+                    _currentDiagnosticStatus =
+                        $"Waiting for a crowbar to lift the floor tile at ({task.Tile.X}, {task.Tile.Y}) [{_currentTaskElapsed:0.0}s / {JobTimeoutSeconds:0}s]";
+                    if (_currentTaskElapsed >= 4.0f)
+                    {
+                        FailBlueprintOrJob(
+                            $"Missing a crowbar (Prying + ToolTileCompatible) to lift the floor tile at ({task.Tile.X}, {task.Tile.Y}) for '{task.Item.EntityPrototypeId}'.");
+                        return;
+                    }
+
+                    _waitTimer = 0.45f;
+                    return;
+            }
+        }
+
+        // 3. Existing unfinished frame, unanchored/unconfigured structure, or matching ghost on the tile
         var existingFrameOrGhost = FindMatchingFrameOrGhostOnTile(tileMapCoords, task.Item, task.Dir, recipeId);
         if (existingFrameOrGhost != null && Exists(existingFrameOrGhost.Value))
         {
@@ -316,7 +346,7 @@ public sealed partial class RobustaAutoConstructSystem
             }
         }
 
-        // 3. Ensure no mismatched ghost is occupying the tile, then spawn this item's construction ghost on-demand
+        // 4. Ensure no mismatched ghost is occupying the tile, then spawn this item's construction ghost on-demand
         ClearGhostsOnTile(tileMapCoords);
 
         if (!string.IsNullOrEmpty(recipeId) &&
@@ -340,12 +370,12 @@ public sealed partial class RobustaAutoConstructSystem
                 }
             }
 
+            // The ghost could not be placed even though the floor is clear, so keep rechecking the tile.
             _currentDiagnosticStatus =
                 $"Waiting to place ghost for '{task.Item.EntityPrototypeId}' at ({task.Tile.X}, {task.Tile.Y}) — rechecking tile [{_currentTaskElapsed:0.0}s / {JobTimeoutSeconds:0}s]";
             _waitTimer = 0.5f;
             return;
         }
-
         FailBlueprintOrJob($"Could not resolve a valid construction recipe for '{task.Item.EntityPrototypeId}'.");
     }
 

@@ -35,6 +35,7 @@ public sealed partial class PlayerStateUtility : EntitySystem
     [Dependency] private readonly IGameTiming _timing = default!;
     [Dependency] private readonly IPlayerManager _player = default!;
     [Dependency] private readonly SharedContainerSystem _container = default!;
+    [Dependency] private readonly ItemUtilitySystem _itemUtil = default!;
 
     private readonly Dictionary<string, PlayerFlagDefinition> _flags = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<EntityUid, (PlayerFlagReport Report, TimeSpan Stamp)> _cache = new();
@@ -93,7 +94,7 @@ public sealed partial class PlayerStateUtility : EntitySystem
     }
 
     private FlagContext Context(EntityUid player) =>
-        new(player, EntityManager, _inventory, _hands, _prototypes);
+        new(player, EntityManager, _inventory, _hands, _prototypes, _itemUtil);
 
     /// <summary>
     /// Full report for every registered flag, always freshly evaluated.

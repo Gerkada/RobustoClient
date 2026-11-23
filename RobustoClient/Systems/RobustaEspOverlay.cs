@@ -8,6 +8,7 @@ using Robust.Shared.Maths;
 using Robust.Client.Player;
 using Robust.Client.ResourceManagement;
 using RobustoClient.Systems.ESP;
+using RobustoClient.Systems.Abstract;
 using RobustoClient.Systems.PlayerState;
 using RobustoClient.ImGui;
 using RobustoClient.Reflection;
@@ -63,6 +64,7 @@ public sealed class RobustaEspOverlay : Overlay
     private readonly PlayerStateUtility _playerState;
     private readonly InventorySystem _inv;
     private readonly SharedHandsSystem _hands;
+    private readonly ItemUtilitySystem _itemUtil;
 
     /// <summary>Entities with at least one ESP result, rebuilt every <see cref="EvaluateInterval"/> frames.</summary>
     private readonly List<(EntityUid Uid, List<EspEvaluationResult> Results)> _drawList = new();
@@ -99,6 +101,7 @@ public sealed class RobustaEspOverlay : Overlay
         _playerState = _entMan.System<PlayerStateUtility>();
         _inv = _entMan.System<InventorySystem>();
         _hands = _entMan.System<SharedHandsSystem>();
+        _itemUtil = _entMan.System<ItemUtilitySystem>();
         
         var cache = IoCManager.Resolve<IResourceCache>();
         _font = new VectorFont(cache.GetResource<FontResource>("/Fonts/NotoSans/NotoSans-Regular.ttf"), 10);
@@ -127,7 +130,7 @@ public sealed class RobustaEspOverlay : Overlay
         _esp.RegisterVariable("HeldItems", uid => {
             if (!_entMan.HasComponent<HandsComponent>(uid)) return "";
             var heldItems = new List<string>();
-            foreach (var held in _hands.EnumerateHeld(uid))
+            foreach (var held in _itemUtil.GetHeldItems(uid))
             {
                 if (_entMan.TryGetComponent<MetaDataComponent>(held, out var heldMeta)) 
                 {

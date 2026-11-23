@@ -625,7 +625,8 @@ public sealed class ItemUtilitySystem : EntitySystem
             }
         }));
 
-        // 2. Target storage: the origin storage if recorded, else "belt", then "back".
+        // 2. Target storage: the origin storage if recorded, else "back", then "belt".
+        // The backpack is the default so dismantle output never displaces the belt the tools came from.
         // Stow via ClickEntity, not UseSlotNetworkMessage: the latter unequips the belt or backpack
         // when the server sees an empty active hand.
         EntityUid? primaryStorage = null;
@@ -657,15 +658,15 @@ public sealed class ItemUtilitySystem : EntitySystem
 
         if (primaryStorage == null && primarySlot == null)
         {
-            if (_inventory.TryGetSlotEntity(player, "belt", out var beltEnt) && beltEnt.HasValue && HasComp<StorageComponent>(beltEnt.Value))
-            {
-                primarySlot = "belt";
-                primaryStorage = beltEnt.Value;
-            }
-            else if (_inventory.TryGetSlotEntity(player, "back", out var backEnt) && backEnt.HasValue && HasComp<StorageComponent>(backEnt.Value))
+            if (_inventory.TryGetSlotEntity(player, "back", out var backEnt) && backEnt.HasValue && HasComp<StorageComponent>(backEnt.Value))
             {
                 primarySlot = "back";
                 primaryStorage = backEnt.Value;
+            }
+            else if (_inventory.TryGetSlotEntity(player, "belt", out var beltEnt) && beltEnt.HasValue && HasComp<StorageComponent>(beltEnt.Value))
+            {
+                primarySlot = "belt";
+                primaryStorage = beltEnt.Value;
             }
         }
 
@@ -777,6 +778,34 @@ public sealed class ItemUtilitySystem : EntitySystem
         }));
     }
 
+    /// <summary>
+    /// The items currently in <paramref name="player"/>'s hands, active hand first.
+    /// </summary>
+    public List<EntityUid> GetHeldItems(EntityUid player)
+    {
+        var result = new List<EntityUid>();
+        if (!TryComp<HandsComponent>(player, out var hands))
+            return result;
+
+        var activeHand = _hands.GetActiveHand(player);
+        if (activeHand != null &&
+            GetHeldInHand(player, hands, activeHand) is { } activeItem)
+        {
+            result.Add(activeItem);
+        }
+
+        foreach (var handName in hands.Hands.Keys)
+        {
+            if (handName == activeHand)
+                continue;
+
+            if (GetHeldInHand(player, hands, handName) is { } item && !result.Contains(item))
+                result.Add(item);
+        }
+
+        return result;
+    }
+
     public bool IsToolOrWelder(EntityUid uid)
     {
         if (!Exists(uid))
@@ -821,10 +850,19 @@ public sealed class ItemUtilitySystem : EntitySystem
         return isWelder && isActivated;
     }
 
+    /// <summary>
+    /// Records where an item was drawn from, so stowing returns it to that container instead of the
+    /// default slot. Call this from every fetch path that bypasses <see cref="EnqueueFetchLocation"/>.
+    /// </summary>
+    public void RecordItemOrigin(EntityUid item, ItemSource source, string? slotOrHand, EntityUid? storageEntity)
+    {
+        if (source is ItemSource.Slot or ItemSource.Storage)
+            _itemOrigins[item] = (source, slotOrHand, storageEntity);
+    }
+
     private void EnqueueFetchLocation(EntityUid player, ItemLocation loc)
     {
-        if (loc.Source is ItemSource.Slot or ItemSource.Storage)
-            _itemOrigins[loc.Entity] = (loc.Source, loc.SlotOrHand, loc.StorageEntity);
+        RecordItemOrigin(loc.Entity, loc.Source, loc.SlotOrHand, loc.StorageEntity);
 
         switch (loc.Source)
         {
