@@ -24,13 +24,19 @@ public sealed partial class CheatMenuImGui
             Toggle("Ranged Aimbot", ref RobustaConfig.RangedAimbotEnabled);
             Toggle("No Recoil", ref RobustaConfig.NoRecoilEnabled);
             Toggle("Throw Aimbot", ref RobustaConfig.ThrowAimbotEnabled);
+            Toggle("Slip Throw", ref RobustaConfig.SlipThrowEnabled, "Tries to auto place slip items in front of people");
             Toggle("Aim Prediction", ref RobustaConfig.UsePrediction);
+            Toggle("No Combat Lock", ref RobustaConfig.NoCombatLock, "Allows to target outside combat mode");
+            Toggle("Line of Sight", ref RobustaConfig.AimLineOfSight);
+            Toggle("Fire When Blocked", ref RobustaConfig.AimFireWhenBlocked, "Disables firing if something is in the way.");
         }),
 
         new WidgetCard("##CombatOptions", "OPTIONS", () =>
         {
             Slider("Aim FOV", "##AimFov", ref RobustaConfig.AimFovPixels, 10f, 500f, "%.0f px", 5f);
             Slider("Lock Distance", "##LockDist", ref RobustaConfig.MaxLockDistance, 1f, 40f, "%.1f m");
+            Slider("Max Lead", "##MaxLead", ref RobustaConfig.MaxAimLeadSeconds, 0f, 1f, "%.2f s", 0.05f);
+            Slider("Slip Min Lead", "##SlipMinLead", ref RobustaConfig.SlipThrowMinLead, 0f, 3f, "%.2f m", 0.1f);
 
             RobustaImGuiWidgets.MutedText("Ping Compensation");
             DrawPingCompensationSelector();

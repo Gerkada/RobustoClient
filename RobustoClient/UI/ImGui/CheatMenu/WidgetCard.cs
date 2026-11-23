@@ -22,9 +22,9 @@ internal sealed class WidgetCard(string id, string title, Action body, bool coll
 
 public sealed partial class CheatMenuImGui
 {
-    private void Toggle(string label, ref bool value)
+    private void Toggle(string label, ref bool value, string? tooltip = null)
     {
-        if (RobustaImGuiWidgets.ToggleSwitch(label, ref value))
+        if (RobustaImGuiWidgets.ToggleSwitch(label, ref value, tooltip))
             MarkConfigDirty();
     }
 
