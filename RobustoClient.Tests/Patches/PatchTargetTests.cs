@@ -57,6 +57,19 @@ public class LocalPlayerOverlayFilterTests
         AssertAboveInlineThreshold(targetMethods[0]);
     }
 
+    [Fact]
+    public void ThrowHookTarget_ResolvesAndExceedsInlineThreshold()
+    {
+        // Load the upstream assembly first so the by-name lookup cannot cache a miss.
+        _ = typeof(Robust.Client.GameObjects.InputSystem);
+
+        var target = RobustaThrowPatch.ResolveHook();
+
+        target.Should().NotBeNull("the throw aimbot hangs off this method, and a rename would disable it silently");
+        target!.Name.Should().Be("HandleInputCommand");
+        AssertAboveInlineThreshold(target);
+    }
+
     private static void AssertAboveInlineThreshold(MethodBase target)
     {
         var il = target.GetMethodBody()?.GetILAsByteArray();

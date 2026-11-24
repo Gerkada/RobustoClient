@@ -15,7 +15,6 @@ using Content.Shared.StepTrigger.Components;
 using RobustoClient.Systems;
 using RobustoClient.Reflection;
 using Robust.Shared.Log;
-using Robust.Client.Graphics;
 
 namespace RobustoClient.Patches;
 
@@ -35,56 +34,59 @@ public static class RobustaThrowPatch
     {
         try
         {
-            var harmony = new Harmony("robusta.throw.hardcode");
-            var prefix = new HarmonyMethod(typeof(RobustaThrowPatch).GetMethod(nameof(DispatchInputPrefix), BindingFlags.Static | BindingFlags.NonPublic));
-
-            var inputSystemType = Type.GetType("Robust.Client.GameObjects.InputSystem, RobustClient");
-            if (inputSystemType == null)
+            var hook = ResolveHook();
+            if (hook == null)
             {
-                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    inputSystemType = asm.GetType("Robust.Client.GameObjects.InputSystem");
-                    if (inputSystemType != null) break;
-                }
+                Logger.GetSawmill("RobustaNet").Error($">>> [INIT] {HookTypeName} has no {HookMethodName}, throw aimbot disabled.");
+                return true;
             }
 
-            if (inputSystemType != null)
-            {
-                var dispatchMethod = inputSystemType.GetMethod("DispatchInputCommand", BindingFlags.Instance | BindingFlags.NonPublic);
-                if (dispatchMethod != null)
-                {
-                    harmony.Patch(dispatchMethod, prefix: prefix);
-                    Logger.GetSawmill("RobustaNet").Info(">>> [INIT] SUCCESS! InputSystem Aimbot deployed.");
-                }
-            }
+            var prefix = new HarmonyMethod(typeof(RobustaThrowPatch).GetMethod(nameof(HandleInputCommandPrefix), BindingFlags.Static | BindingFlags.NonPublic));
+            new Harmony("robusta.throw.hardcode").Patch(hook, prefix: prefix);
+            Logger.GetSawmill("RobustaNet").Info($">>> [INIT] SUCCESS! Throw aimbot hooked on {HookTypeName}.{HookMethodName}.");
         }
         catch (Exception e) { Logger.GetSawmill("RobustaNet").Error($">>> [INIT] Prepare crashed: {e.Message}"); }
-        return true; 
+        return true;
     }
 
-    private static bool _isPatching = false;
+    /// <summary>
+    /// The upstream input entry point the prefix hangs off, resolved by name so a fork that renames or moves
+    /// it fails with a clear log line.
+    /// </summary>
+    internal static MethodBase? ResolveHook() =>
+        Reflect.GetMethod(Reflect.FindType(HookTypeName), HookMethodName, ReflectOptions.Any);
+
+    private const string HookTypeName = "Robust.Client.GameObjects.InputSystem";
+    private const string HookMethodName = "HandleInputCommand";
 
     /// <summary>The bound function name upstream uses for the throw key.</summary>
     private const string ThrowFunctionName = "ThrowItemInHand";
 
-    private static void DispatchInputPrefix(object[] __args) 
+    private static bool _isPatching;
+
+    /// <summary>The last message already rewritten, so a fork that dispatches twice does not re-solve it.</summary>
+    private static object? _lastRewritten;
+
+    private static void HandleInputCommandPrefix(object[] __args)
     {
-        if (_isPatching || __args == null || __args.Length < 2) return;
+        if (_isPatching || __args is not { Length: >= 3 }) return;
         if (!RobustaConfig.ThrowAimbotEnabled) return;
+
+        // Every gameplay key press lands here.
+        if (__args[1] is not BoundKeyFunction function || function.FunctionName != ThrowFunctionName) return;
+        if (__args.Length > 3 && __args[3] is bool replay && replay) return;
+        if (__args[2] is not ClientFullInputCmdMessage clientMsg) return;
+
+        if (Reflect.Get(clientMsg, "State", ReflectOptions.Any) is not BoundKeyState { } state ||
+            state != BoundKeyState.Down)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(clientMsg, _lastRewritten)) return;
 
         var input = IoCManager.Resolve<IInputManager>();
         if (!RobustaConfig.TargetLockKey.IsDown(input)) return;
-
-        var clientMsg = __args[0]; 
-        var fullMsg = __args[1];   
-        if (clientMsg == null || fullMsg == null) return;
-
-        // Start the exploit only at the moment of click (press)
-        var stateObj = Reflect.Get(clientMsg, "State", ReflectOptions.Any);
-        if (stateObj == null || stateObj.ToString() != "Down") return;
-
-        // Only redirect an actual throw.
-        if (!IsThrowCommand(clientMsg)) return;
 
         var playerMan = IoCManager.Resolve<IPlayerManager>();
         var localPlayer = playerMan.LocalEntity;
@@ -118,19 +120,13 @@ public static class RobustaThrowPatch
             {
                 planned = prediction.TrySolveSlipThrow(localPlayer.Value, target.Entity, item, out worldPoint, out blocker, out var slipStatus);
 
-                if (!planned)
-                {
-                    Logger.GetSawmill("RobustaNet").Debug($"[!] Slip throw aborted: {slipStatus}");
-                    if (!ShouldContinueBlockedSlip(slipStatus, RobustaConfig.AimFireWhenBlocked))
-                        return;
-                    planned = true;
-                }
-                else
-                {
-                    Logger.GetSawmill("RobustaNet").Debug($"[!] Slip throw placed at {worldPoint} for {target.Entity}");
-                }
+                Logger.GetSawmill("RobustaNet").Info(planned
+                    ? $"[!] Slip throw {slipStatus}: {worldPoint} for {target.Entity}"
+                    : $"[!] Slip throw unavailable ({slipStatus}) for {target.Entity}, using the item intercept");
             }
 
+            // A slip item that cannot be placed ahead still gets thrown at the target's intercept point,
+            // which slips them on contact. Leaving it at the raw cursor lands it where they no longer are.
             if (!planned &&
                 !prediction.TrySolveThrow(localPlayer.Value, target.Entity, throwSpeed, out worldPoint, out blocker))
             {
@@ -144,58 +140,35 @@ public static class RobustaThrowPatch
                 return;
             }
 
-            var transformSystem = entMan.System<SharedTransformSystem>();
-            var eyeManager = IoCManager.Resolve<IEyeManager>();
-
-            var origCoordsObj = Reflect.Get(clientMsg, "Coordinates", ReflectOptions.Any);
-            if (origCoordsObj == null) return;
-
-            var origEntityIdObj = Reflect.GetFirst(origCoordsObj, "EntityId", "NetEntity");
-            if (origEntityIdObj == null) return;
-
-            var origEntityId = (EntityUid)origEntityIdObj;
-
-            var newEntityCoords = transformSystem.ToCoordinates(origEntityId, new MapCoordinates(worldPoint, entMan.GetComponent<TransformComponent>(localPlayer.Value).MapID));
-            var newScreenCoords = eyeManager.CoordinatesToScreen(newEntityCoords); 
-            var newNetCoords = entMan.GetNetCoordinates(newEntityCoords);
-
-            bool c1 = Reflect.TrySet(clientMsg, "Coordinates", newEntityCoords, ReflectOptions.Any);
-            bool c2 = Reflect.TrySet(clientMsg, "ScreenCoordinates", newScreenCoords, ReflectOptions.Any);
-            bool c3 = Reflect.TrySet(fullMsg, "Coordinates", newNetCoords, ReflectOptions.Any);
-            bool c4 = Reflect.TrySet(fullMsg, "ScreenCoordinates", newScreenCoords, ReflectOptions.Any);
-
-            if (c1 && c3)
+            var transform = entMan.System<SharedTransformSystem>();
+            if (Reflect.Get(clientMsg, "Coordinates", ReflectOptions.Any) is not EntityCoordinates origCoords ||
+                !origCoords.IsValid(entMan))
             {
-                __args[0] = clientMsg;
-                __args[1] = fullMsg;
-                Logger.GetSawmill("RobustaNet").Info($"[!] Aimbot Throw: Target {target.Entity}");
+                return;
             }
+
+            var mapId = entMan.GetComponent<TransformComponent>(localPlayer.Value).MapID;
+            var newCoords = transform.ToCoordinates(origCoords.EntityId, new MapCoordinates(worldPoint, mapId));
+
+            // Upstream builds the networked message from this one after the prefix runs, so one write
+            // reaches both the local handler and the server.
+            if (!Reflect.TrySet(clientMsg, "Coordinates", newCoords, ReflectOptions.Any))
+            {
+                Logger.GetSawmill("RobustaNet").Warning("[!] Throw coordinates could not be rewritten.");
+                return;
+            }
+
+            _lastRewritten = clientMsg;
+            Logger.GetSawmill("RobustaNet").Info($"[!] Aimbot Throw: Target {target.Entity} at {worldPoint}");
         }
         catch (Exception e) { Logger.GetSawmill("RobustaNet").Error($"[CRASH] {e.Message}"); }
         finally { _isPatching = false; }
     }
 
-    internal static bool ShouldContinueBlockedSlip(RobustoClient.Systems.Aim.SlipPlanStatus status, bool fireWhenBlocked) =>
-        status == RobustoClient.Systems.Aim.SlipPlanStatus.Blocked && fireWhenBlocked;
-
-    /// <summary>
-    /// Whether this input command is the throw key, resolved through the input manager's bind map so the
-    /// check follows the player's own keybind rather than a hardcoded function name.
-    /// </summary>
-    private static bool IsThrowCommand(object clientMsg)
-    {
-        if (clientMsg is not InputCmdMessage msg)
-            return false;
-
-        var input = IoCManager.Resolve<IInputManager>();
-        return input.NetworkBindMap.TryGetKeyFunction(msg.InputFunctionId, out var function) &&
-               function.FunctionName == ThrowFunctionName;
-    }
-
     /// <summary>
     /// Whether the item can slip people once it is on the floor.
     /// </summary>
-    private static bool IsSlipItem(IEntityManager entMan, EntityUid item)
+    internal static bool IsSlipItem(IEntityManager entMan, EntityUid item)
     {
         return entMan.HasComponent<SlipperyComponent>(item) &&
                entMan.TryGetComponent<StepTriggerComponent>(item, out var step) &&

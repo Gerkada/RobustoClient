@@ -143,9 +143,15 @@ internal static class RobustaAimSolver
     }
 
     /// <summary>
-    /// Fraction of the throw distance a friction-compensated throw spends in the air.
+    /// Fraction of the throw distance a friction-compensated throw spends in the air. The item becomes
+    /// steppable at that point, about 78% of the way to the aim point at typical ranges.
     /// </summary>
     public const float SlipReadyFraction = 0.8f;
+
+    /// <summary>
+    /// Seconds the item keeps creeping toward its landing point after it becomes steppable.
+    /// </summary>
+    public const float SlipSettleSeconds = 0.2f;
 
     /// <summary>Bisection steps used to find the slip lead. Twelve is sub-millimetre over an 8 m range.</summary>
     private const int SlipBisectionSteps = 12;
@@ -159,18 +165,21 @@ internal static class RobustaAimSolver
     /// Distance ahead of the target to place a thrown slip item.
     /// </summary>
     /// <param name="shooterPos">Thrower position in map space.</param>
-    /// <param name="targetPos">Target position in map space.</param>
+    /// <param name="targetPos">
+    /// Target position in map space, corrected for the client's render lag. The lead is measured from here,
+    /// so this must be where the target actually is, not where the client draws it.
+    /// </param>
     /// <param name="targetVelocity">Target map velocity.</param>
     /// <param name="throwSpeed">Throw speed, from <c>HandsComponent.BaseThrowspeed</c>.</param>
     /// <param name="maxRange">Throw range, from <c>HandsComponent.ThrowRange</c>.</param>
-    /// <param name="networkLead">Measured one-way delay, since the point is anchored to the world.</param>
+    /// <param name="networkLead">Deadline cost of the message transit, in seconds.</param>
     /// <param name="minTriggerSpeed">Speed the target must exceed for the step trigger to fire.</param>
-    /// <param name="minLead">Minimum lead used when the target cannot slip on this pass.</param>
+    /// <param name="minLead">Forward margin in metres, applied to every target with a heading.</param>
     /// <returns>
-    /// Lead distance along the target's heading. Zero means drop it under them, which only happens when the
-    /// target has no heading at all. Negative means no placement works within range.
+    /// The lead and whether it beats the deadline. <c>Lead</c> is negative only when the target's path is
+    /// unreachable inside <paramref name="maxRange"/> at every lead, which is the one case with no point.
     /// </returns>
-    public static float SolveSlipLead(
+    public static SlipLeadPlan SolveSlipLead(
         Vector2 shooterPos,
         Vector2 targetPos,
         Vector2 targetVelocity,
@@ -181,62 +190,45 @@ internal static class RobustaAimSolver
         float minLead)
     {
         if (throwSpeed <= HitscanSpeedThreshold || maxRange <= 0f)
-            return -1f;
+            return new SlipLeadPlan(-1f, false);
 
         var speed = targetVelocity.Length();
 
         // No direction of travel at all: the item belongs at their feet.
         if (speed < HeadingEpsilon)
-            return 0f;
+            return new SlipLeadPlan(0f, true);
 
         var heading = targetVelocity / speed;
         var toTarget = targetPos - shooterPos;
+        var reachable = ReachableLead(toTarget, heading, maxRange);
 
-        // Throw distance to the placement point for a given lead along the heading.
+        if (reachable <= 0f)
+            return new SlipLeadPlan(-1f, false);
+
+        // The margin is a distance along the heading, so it is capped by what the throw can reach.
+        var floor = Math.Clamp(minLead, 0f, reachable);
+
+        // Too slow to slip on this pass. No deadline applies, so the item just goes the margin ahead of them.
+        if (speed < minTriggerSpeed)
+            return new SlipLeadPlan(floor, true);
+
         float Distance(float lead) => (toTarget + heading * lead).Length();
 
-        // Furthest lead whose throw distance still fits the range. The server clamps the throw direction to
-        // ThrowRange, so anything past this lands short of the intended spot.
-        var reachable = maxRange;
-        if (Distance(maxRange) > maxRange)
-        {
-            var lowDistance = 0f;
-            var highDistance = maxRange;
+        // f(lead) = time for the item to settle - time for the target to arrive. Negative means the item is
+        // ready first, which is what we want.
+        float Slack(float lead) =>
+            SlipReadyFraction * Distance(lead) / throwSpeed + SlipSettleSeconds + networkLead - lead / speed;
 
-            for (var i = 0; i < SlipBisectionSteps; i++)
-            {
-                var mid = (lowDistance + highDistance) * 0.5f;
-                if (Distance(mid) <= maxRange)
-                    lowDistance = mid;
-                else
-                    highDistance = mid;
-            }
+        // Ready even at the closest allowed point
+        if (Slack(floor) <= 0f)
+            return new SlipLeadPlan(floor, true);
 
-            reachable = lowDistance;
-        }
-
-        // Already out of range where they stand, so there is nowhere to put it.
-        if (reachable <= 0f)
-            return -1f;
-
-        // Too slow to slip on this pass. Lead anyway so the item is in their path once they speed up, but
-        // skip the arrival deadline because it does not apply.
-        if (speed < minTriggerSpeed)
-            return Math.Min(MathF.Max(minLead, 0f), reachable);
-
-        // f(lead) = time for the item to become slippery - time for the target to arrive.
-        // Negative means the item is ready first, which is what we want.
-        float Slack(float lead) => SlipReadyFraction * Distance(lead) / throwSpeed + networkLead - lead / speed;
-
-        // Already ready at zero lead: drop it on their feet and let them walk into it.
-        if (Slack(0f) <= 0f)
-            return 0f;
-
-        // Not ready even at the furthest reachable point: no placement works.
+        // Not ready even at the furthest reachable point. Lead as far as the throw allows and report it,
+        // rather than dropping the throw back to the raw cursor.
         if (Slack(reachable) > 0f)
-            return -1f;
+            return new SlipLeadPlan(reachable, false);
 
-        var low = 0f;
+        var low = floor;
         var high = reachable;
 
         for (var i = 0; i < SlipBisectionSteps; i++)
@@ -248,6 +240,23 @@ internal static class RobustaAimSolver
                 high = mid;
         }
 
-        return high;
+        return new SlipLeadPlan(high, true);
     }
+
+    /// <summary>Furthest lead at which the landing point is still inside the throw range.</summary>
+    /// <remarks>
+    /// <c>|toTarget + heading * lead|² &lt;= range²</c> is a quadratic in lead. Its valid interval, when one
+    /// exists, lies between the roots, so the upper root is the furthest point the server will not clamp
+    /// short of.
+    /// </remarks>
+    private static float ReachableLead(Vector2 toTarget, Vector2 heading, float maxRange)
+    {
+        var along = Vector2.Dot(toTarget, heading);
+        var discriminant = along * along - Vector2.Dot(toTarget, toTarget) + maxRange * maxRange;
+        if (discriminant < 0f)
+            return 0f;
+
+        return MathF.Max(0f, -along + MathF.Sqrt(discriminant));
+    }
+
 }

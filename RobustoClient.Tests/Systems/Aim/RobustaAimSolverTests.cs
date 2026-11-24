@@ -180,18 +180,24 @@ public class RobustaAimSolverTests
     private const float ThrowRange = 8f;
     private const float TriggerSpeed = 3.5f;
     private const float MinLead = 1f;
+    private const float TickLead = 0.033f;
 
-    private static float Solve(Vector2 shooter, Vector2 target, Vector2 velocity)
+    private static SlipLeadPlan Solve(Vector2 shooter, Vector2 target, Vector2 velocity, float netLead = TickLead)
         => RobustaAimSolver.SolveSlipLead(
-            shooter, target, velocity, ThrowSpeed, ThrowRange, 0f, TriggerSpeed, MinLead);
+            shooter, target, velocity, ThrowSpeed, ThrowRange, netLead, TriggerSpeed, MinLead);
 
-    /// <summary>The inequality the solver must satisfy: the item is slippery before the target arrives.</summary>
-    private static bool IsReadyInTime(Vector2 shooter, Vector2 target, Vector2 velocity, float lead, float netLead)
+    private static SlipLeadPlan SolveWithMargin(Vector2 shooter, Vector2 target, Vector2 velocity, float margin)
+        => RobustaAimSolver.SolveSlipLead(
+            shooter, target, velocity, ThrowSpeed, ThrowRange, TickLead, TriggerSpeed, margin);
+
+    /// <summary>The inequality the solver must satisfy: the item settles before the target arrives.</summary>
+    private static bool ArrivesInTime(Vector2 shooter, Vector2 target, Vector2 velocity, float lead, float netLead)
     {
         var distance = (target + Vector2.Normalize(velocity) * lead - shooter).Length();
-        var readyAt = RobustaAimSolver.SlipReadyFraction * distance / ThrowSpeed + netLead;
+        var settledAt = RobustaAimSolver.SlipReadyFraction * distance / ThrowSpeed +
+                        RobustaAimSolver.SlipSettleSeconds + netLead;
         var arriveAt = lead / velocity.Length();
-        return readyAt <= arriveAt + 0.0001f;
+        return settledAt <= arriveAt + 0.0001f;
     }
 
     [Fact]
@@ -201,11 +207,12 @@ public class RobustaAimSolverTests
         var target = new Vector2(5f, 0f);
         var velocity = new Vector2(0f, 4f);
 
-        var lead = Solve(shooter, target, velocity);
+        var plan = Solve(shooter, target, velocity);
 
-        lead.Should().BeGreaterThan(0f);
-        lead.Should().BeLessThan(ThrowRange);
-        IsReadyInTime(shooter, target, velocity, lead, 0f).Should().BeTrue();
+        plan.Lead.Should().BeGreaterThan(0f);
+        plan.Lead.Should().BeLessThan(ThrowRange);
+        plan.ReadyInTime.Should().BeTrue();
+        ArrivesInTime(shooter, target, velocity, plan.Lead, TickLead).Should().BeTrue();
     }
 
     [Fact]
@@ -215,11 +222,49 @@ public class RobustaAimSolverTests
         var target = new Vector2(5f, 0f);
         var velocity = new Vector2(0f, 4f);
 
-        var lead = Solve(shooter, target, velocity);
+        var plan = Solve(shooter, target, velocity);
 
-        // Slightly closer is too late: the peel would still be airborne when they walk over the spot.
-        IsReadyInTime(shooter, target, velocity, lead - 0.05f, 0f).Should().BeFalse();
-        IsReadyInTime(shooter, target, velocity, lead, 0f).Should().BeTrue();
+        // Slightly closer is too late: the peel would still be sliding when they walk over the spot.
+        ArrivesInTime(shooter, target, velocity, plan.Lead - 0.05f, TickLead).Should().BeFalse();
+        ArrivesInTime(shooter, target, velocity, plan.Lead, TickLead).Should().BeTrue();
+    }
+
+    [Fact]
+    public void SlipLead_LeavesRoomForTheSlideAfterLanding()
+    {
+        // The old solver declared the item ready the moment it was steppable, which is about 78% of the way
+        // to the aim point, so the target crossed the spot before the peel settled there.
+        var velocity = new Vector2(0f, 4.5f);
+        var plan = Solve(Vector2.Zero, new Vector2(5f, 0f), velocity, netLead: 0f);
+
+        plan.Lead.Should().BeGreaterThan(velocity.Length() * RobustaAimSolver.SlipSettleSeconds);
+    }
+
+    [Fact]
+    public void SlipLead_MarginIsUsedWhenItExceedsTheDeadline()
+    {
+        var shooter = Vector2.Zero;
+        var target = new Vector2(5f, 0f);
+        var velocity = new Vector2(0f, 4.5f);
+
+        var plan = SolveWithMargin(shooter, target, velocity, 4f);
+
+        plan.Lead.Should().BeApproximately(4f, 0.001f);
+        ArrivesInTime(shooter, target, velocity, plan.Lead, TickLead).Should().BeTrue();
+    }
+
+    [Fact]
+    public void SlipLead_MarginIsCappedByTheThrowRange()
+    {
+        var shooter = Vector2.Zero;
+        var target = new Vector2(5f, 0f);
+        var velocity = new Vector2(0f, 4.5f);
+
+        var plan = SolveWithMargin(shooter, target, velocity, 100f);
+
+        var distance = (target + Vector2.Normalize(velocity) * plan.Lead - shooter).Length();
+        distance.Should().BeLessThanOrEqualTo(ThrowRange + 0.001f);
+        plan.Lead.Should().BeGreaterThan(0f);
     }
 
     [Fact]
@@ -231,37 +276,37 @@ public class RobustaAimSolverTests
         var target = new Vector2(5f, 0f);
         var velocity = new Vector2(0f, 2.5f);
 
-        var lead = Solve(shooter, target, velocity);
+        var plan = Solve(shooter, target, velocity);
 
-        lead.Should().BeApproximately(MinLead, 0.001f);
-        var point = target + Vector2.Normalize(velocity) * lead;
+        plan.Lead.Should().BeApproximately(MinLead, 0.001f);
+        var point = target + Vector2.Normalize(velocity) * plan.Lead;
         point.Y.Should().BeGreaterThan(target.Y, "the item must land in front of them, not where they were");
     }
 
     [Fact]
     public void SlipLead_StationaryTarget_GetsTheItemUnderfoot()
     {
-        Solve(Vector2.Zero, new Vector2(5f, 0f), Vector2.Zero).Should().Be(0f);
+        Solve(Vector2.Zero, new Vector2(5f, 0f), Vector2.Zero).Lead.Should().Be(0f);
     }
 
     [Fact]
     public void SlipLead_BarelyMovingTarget_CountsAsStationary()
     {
         // Below the heading epsilon there is no direction of travel worth leading along.
-        Solve(Vector2.Zero, new Vector2(5f, 0f), new Vector2(0f, 0.2f)).Should().Be(0f);
+        Solve(Vector2.Zero, new Vector2(5f, 0f), new Vector2(0f, 0.2f)).Lead.Should().Be(0f);
     }
 
     [Fact]
     public void SlipLead_UnreachableTarget_ReportsNoPlacement()
     {
-        // Far away and fast enough that even maximum range lands after they have gone past.
-        Solve(Vector2.Zero, new Vector2(7.9f, 0f), new Vector2(0f, 40f)).Should().BeLessThan(0f);
+        // Far away and every lead out of range.
+        Solve(Vector2.Zero, new Vector2(10f, 0f), new Vector2(0f, 40f)).Lead.Should().BeLessThan(0f);
     }
 
     [Fact]
     public void SlipLead_TargetBeyondThrowRange_ReportsNoPlacement()
     {
-        Solve(Vector2.Zero, new Vector2(10f, 0f), new Vector2(0f, 4f)).Should().BeLessThan(0f);
+        Solve(Vector2.Zero, new Vector2(10f, 0f), new Vector2(0f, 4f)).Lead.Should().BeLessThan(0f);
     }
 
     [Fact]
@@ -273,29 +318,45 @@ public class RobustaAimSolverTests
         var target = new Vector2(5f, 0f);
         var velocity = new Vector2(4f, 0f);
 
-        var lead = Solve(shooter, target, velocity);
+        var plan = Solve(shooter, target, velocity);
 
-        lead.Should().BeGreaterThanOrEqualTo(0f);
-        var distance = (target + Vector2.Normalize(velocity) * lead - shooter).Length();
+        plan.Lead.Should().BeGreaterThanOrEqualTo(0f);
+        var distance = (target + Vector2.Normalize(velocity) * plan.Lead - shooter).Length();
         distance.Should().BeLessThanOrEqualTo(ThrowRange + 0.001f);
     }
 
     [Fact]
-    public void SlipLead_RecedingTargetOutOfReach_ReportsNoPlacement()
+    public void SlipLead_RecedingTargetOutOfReach_StillGivesTheFurthestPoint()
     {
-        // Seven metres away and running: no in-range throw can land before they pass the spot, so the
-        // honest answer is "cannot place" rather than a point the server would clamp short.
-        Solve(Vector2.Zero, new Vector2(7f, 0f), new Vector2(4f, 0f)).Should().BeLessThan(0f);
+        // Seven metres away and running: no in-range throw lands before they pass the spot. The answer is
+        // the furthest point the throw can reach, flagged as late, not a bail that drops the throw back to
+        // the raw cursor.
+        var plan = Solve(Vector2.Zero, new Vector2(7f, 0f), new Vector2(4f, 0f));
+
+        plan.Lead.Should().BeGreaterThan(0f);
+        plan.ReadyInTime.Should().BeFalse();
+        (new Vector2(7f, 0f) + new Vector2(plan.Lead, 0f)).X.Should().BeLessThanOrEqualTo(ThrowRange + 0.001f);
+    }
+
+    [Fact]
+    public void SlipLead_TargetBeyondRangeWalkingTowardsTheShooter_StillPlacesAheadOfThem()
+    {
+        // The reachable lead is not monotonic for an approaching target, which the old bisection assumed.
+        var plan = Solve(Vector2.Zero, new Vector2(9f, 0f), new Vector2(-4f, 0f));
+
+        plan.Lead.Should().BeGreaterThan(0f);
+        var point = new Vector2(9f, 0f) + new Vector2(-1f, 0f) * plan.Lead;
+        (point - Vector2.Zero).Length().Should().BeLessThanOrEqualTo(ThrowRange + 0.001f);
     }
 
     [Fact]
     public void SlipLead_NeverExceedsThrowRange()
     {
-        var lead = Solve(Vector2.Zero, new Vector2(7f, 0f), new Vector2(0f, 6f));
+        var plan = Solve(Vector2.Zero, new Vector2(7f, 0f), new Vector2(0f, 6f));
 
-        lead.Should().BeLessThanOrEqualTo(ThrowRange);
+        plan.Lead.Should().BeLessThanOrEqualTo(ThrowRange);
 
-        var distance = (new Vector2(7f, 0f) + new Vector2(0f, lead) - Vector2.Zero).Length();
+        var distance = (new Vector2(7f, 0f) + new Vector2(0f, plan.Lead) - Vector2.Zero).Length();
         distance.Should().BeLessThanOrEqualTo(ThrowRange + 0.001f);
     }
 
@@ -306,11 +367,10 @@ public class RobustaAimSolverTests
         var target = new Vector2(5f, 0f);
         var velocity = new Vector2(0f, 4f);
 
-        var noLag = Solve(shooter, target, velocity);
-        var withLag = RobustaAimSolver.SolveSlipLead(
-            shooter, target, velocity, ThrowSpeed, ThrowRange, 0.1f, TriggerSpeed, MinLead);
+        var noLag = Solve(shooter, target, velocity, netLead: 0f);
+        var withLag = Solve(shooter, target, velocity, netLead: 0.1f);
 
-        withLag.Should().BeGreaterThanOrEqualTo(noLag);
+        withLag.Lead.Should().BeGreaterThan(noLag.Lead);
     }
 
     [Fact]
@@ -324,7 +384,7 @@ public class RobustaAimSolverTests
 
         // A target walking at the thrower needs less lead than one walking away, because the peel and the
         // target close the distance from opposite ends.
-        approaching.Should().BeLessThanOrEqualTo(receding);
+        approaching.Lead.Should().BeLessThanOrEqualTo(receding.Lead);
     }
 
     [Fact]
@@ -341,13 +401,13 @@ public class RobustaAimSolverTests
                 var target = new Vector2(distance, 0f);
                 var velocity = new Vector2(0f, speed);
 
-                var lead = Solve(shooter, target, velocity);
+                var plan = Solve(shooter, target, velocity);
 
-                if (lead < 0f)
+                if (plan.Lead < 0f)
                     continue;
 
                 var point = speed > 0f
-                    ? target + Vector2.Normalize(velocity) * lead
+                    ? target + Vector2.Normalize(velocity) * plan.Lead
                     : target;
 
                 (point - shooter).Length().Should().BeLessThanOrEqualTo(
@@ -381,29 +441,5 @@ public class RobustaAimSolverTests
             .Should().BeFalse();
         RobustaAimSolver.WithinReach(new MapCoordinates(Vector2.Zero, new MapId(2)), origin, 5f)
             .Should().BeFalse("a point on another map is never in reach");
-    }
-
-    [Fact]
-    public void SlipLosTarget_ExcludesTargetWhenPlacedAhead()
-    {
-        var target = new EntityUid(42);
-
-        RobustaPredictionSystem.SlipLosTarget(1.5f, target).Should().BeNull(
-            "when placing ahead of a moving target, hitting the target must not hide obstacles between target and landing spot");
-        RobustaPredictionSystem.SlipLosTarget(0f, target).Should().Be(target);
-    }
-
-    [Theory]
-    [InlineData(SlipPlanStatus.Blocked, true, true)]
-    [InlineData(SlipPlanStatus.Blocked, false, false)]
-    [InlineData(SlipPlanStatus.OutOfRange, true, false)]
-    [InlineData(SlipPlanStatus.OutOfRange, false, false)]
-    [InlineData(SlipPlanStatus.NoTarget, true, false)]
-    public void ShouldContinueBlockedSlip_OnlyContinuesWhenBlockedAndFireWhenBlockedEnabled(
-        SlipPlanStatus status,
-        bool fireWhenBlocked,
-        bool expected)
-    {
-        RobustaThrowPatch.ShouldContinueBlockedSlip(status, fireWhenBlocked).Should().Be(expected);
     }
 }

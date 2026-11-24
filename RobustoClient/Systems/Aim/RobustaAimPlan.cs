@@ -32,12 +32,16 @@ public readonly record struct ShotPlan(
     bool Blocked,
     EntityUid? Blocker);
 
+/// <summary>Placement for a thrown slip item, in the target's heading frame.</summary>
+public readonly record struct SlipLeadPlan(float Lead, bool ReadyInTime);
+
 /// <summary>Outcome of a slip-item throw placement.</summary>
 public enum SlipPlanStatus
 {
     NoTarget,
     Placed,
     Underfoot,
+    Late,
     OutOfRange,
     Blocked,
 }

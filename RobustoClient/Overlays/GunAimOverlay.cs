@@ -1,4 +1,5 @@
 using System.Numerics;
+using RobustoClient.Patches;
 using RobustoClient.Systems;
 using Content.Client.CombatMode;
 using Content.Client.Weapons.Ranged.Systems;
@@ -115,6 +116,19 @@ public class GunAimOverlay(
                 worldHandle.DrawLine(mapPos.Position, solved.WorldPoint, planColor.WithAlpha(0.35f));
                 worldHandle.DrawCircle(solved.WorldPoint, 0.15f, planColor, false);
             }
+        }
+
+        // Slip placement: the point a thrown peel is aimed at, so "ahead of the movement vector" is visible
+        // and can be compared with where the item actually lands.
+        if (RobustaConfig.SlipThrowEnabled &&
+            lockedUid is { } slipTarget &&
+            entManager.System<Content.Shared.Hands.EntitySystems.SharedHandsSystem>().TryGetActiveItem(playerEntity.Value, out var activeItem) &&
+            activeItem is { } slipItem &&
+            RobustaThrowPatch.IsSlipItem(entManager, slipItem) &&
+            entManager.System<RobustaPredictionSystem>().TrySolveSlipThrow(playerEntity.Value, slipTarget, slipItem, out var slipPoint, out _, out _))
+        {
+            worldHandle.DrawLine(mapPos.Position, slipPoint, Color.Orange.WithAlpha(0.35f));
+            worldHandle.DrawCircle(slipPoint, 0.2f, Color.Orange, false);
         }
     }
 

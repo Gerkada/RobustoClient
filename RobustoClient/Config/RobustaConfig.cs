@@ -100,7 +100,7 @@ public static partial class RobustaConfig
     /// <summary> Place thrown slip items (soap, banana peels) where the target will walk onto them. </summary>
     public static bool SlipThrowEnabled = true;
 
-    /// <summary> How far ahead of a target that is too slow to slip to place a thrown slip item. </summary>
+    /// <summary> How far ahead of a target's movement vector a thrown slip item is placed. </summary>
     public static float SlipThrowMinLead = 1f;
 
     public static bool FOVDisable = true;

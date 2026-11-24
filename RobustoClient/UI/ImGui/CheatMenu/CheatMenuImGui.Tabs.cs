@@ -36,7 +36,7 @@ public sealed partial class CheatMenuImGui
             Slider("Aim FOV", "##AimFov", ref RobustaConfig.AimFovPixels, 10f, 500f, "%.0f px", 5f);
             Slider("Lock Distance", "##LockDist", ref RobustaConfig.MaxLockDistance, 1f, 40f, "%.1f m");
             Slider("Max Lead", "##MaxLead", ref RobustaConfig.MaxAimLeadSeconds, 0f, 1f, "%.2f s", 0.05f);
-            Slider("Slip Min Lead", "##SlipMinLead", ref RobustaConfig.SlipThrowMinLead, 0f, 3f, "%.2f m", 0.1f);
+            Slider("Slip Lead", "##SlipMinLead", ref RobustaConfig.SlipThrowMinLead, 0f, 3f, "%.2f m", 0.1f);
 
             RobustaImGuiWidgets.MutedText("Ping Compensation");
             DrawPingCompensationSelector();
