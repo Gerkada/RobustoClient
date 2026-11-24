@@ -408,6 +408,8 @@ public sealed partial class RobustaConstructionSolver
                     ExpectedNextNode: null));
             }
 
+            int edgeStepStart = steps.Count;
+
             for (int i = 0; i < edgePath.Count; i++)
             {
                 var (fromNode, edge, toNode) = edgePath[i];
@@ -443,6 +445,16 @@ public sealed partial class RobustaConstructionSolver
 
             if (steps.Count == 0)
                 continue;
+
+            // Resume mid-edge: a wall that already reports a deconstruction stage has finished the leading
+            // steps of this edge. Replaying them would restart the wall from the top.
+            if (snapshot.CompletedDeconstructSteps > 0)
+            {
+                int edgeStepCount = steps.Count - edgeStepStart;
+                int skip = Math.Min(snapshot.CompletedDeconstructSteps, edgeStepCount - 1);
+                if (skip > 0)
+                    steps.RemoveRange(edgeStepStart, skip);
+            }
 
             return new SolvedConstructionPlan(
                 graph.Id,
@@ -523,6 +535,9 @@ public sealed partial class RobustaConstructionSolver
             IsSecurityWiresAccessible: isSecurityWiresAccessible,
             SecurityExamine: securityExamine,
             HasMachineFrameBoard: hasMachineFrameBoard,
-            MachineBoard: machineBoard);
+            MachineBoard: machineBoard,
+            CompletedDeconstructSteps: GetDeconstructionStage(target, out var visualizerName) is { } stage
+                ? GetCompletedStepCount(visualizerName, stage)
+                : 0);
     }
 }

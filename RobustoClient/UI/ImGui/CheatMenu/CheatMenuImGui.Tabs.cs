@@ -36,7 +36,7 @@ public sealed partial class CheatMenuImGui
             Slider("Aim FOV", "##AimFov", ref RobustaConfig.AimFovPixels, 10f, 500f, "%.0f px", 5f);
             Slider("Lock Distance", "##LockDist", ref RobustaConfig.MaxLockDistance, 1f, 40f, "%.1f m");
             Slider("Max Lead", "##MaxLead", ref RobustaConfig.MaxAimLeadSeconds, 0f, 1f, "%.2f s", 0.05f);
-            Slider("Slip Min Lead", "##SlipMinLead", ref RobustaConfig.SlipThrowMinLead, 0f, 3f, "%.2f m", 0.1f);
+            Slider("Slip Lead", "##SlipMinLead", ref RobustaConfig.SlipThrowMinLead, 0f, 3f, "%.2f m", 0.1f);
 
             RobustaImGuiWidgets.MutedText("Ping Compensation");
             DrawPingCompensationSelector();
@@ -53,7 +53,7 @@ public sealed partial class CheatMenuImGui
             if (RobustaImGuiWidgets.ToggleSwitch(
                     "Disable Visual Overlays",
                     ref RobustaConfig.DisableVisualOverlays,
-                    "Hides flash, blindness, blurry vision, drunk and rainbow effects."))
+                    "Hides upstream vision effects: flash, blindness, etc."))
             {
                 MarkConfigDirty();
             }
@@ -76,6 +76,15 @@ public sealed partial class CheatMenuImGui
                 RobustaConfig.Esp.Icons.Enabled = icons;
                 MarkConfigDirty();
                 CheatMenuActions.SetJobIconsOverlay(icons);
+            }
+
+            // Applies to both overlays above, so it sits under them.
+            if (RobustaImGuiWidgets.ToggleSwitch(
+                    "Show Own Icons",
+                    ref RobustaConfig.ShowOwnStatusIcons,
+                    "Draws your own health bar and job icons above your head."))
+            {
+                MarkConfigDirty();
             }
         }),
 

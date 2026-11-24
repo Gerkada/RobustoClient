@@ -284,17 +284,7 @@ public sealed partial class CheatMenuImGui
 
         try
         {
-            inputManager.RegisterBinding(new KeyBindingRegistration
-            {
-                Function = command,
-                BaseKey = bind.BaseKey,
-                Mod1 = bind.Mod1,
-                Mod2 = bind.Mod2,
-                Mod3 = bind.Mod3,
-                Priority = 10,
-                Type = KeyBindingType.Command,
-                CommandWhenUIFocused = false
-            }, false);
+            inputManager.RegisterBinding(RobustaKeybindRegistration.Create(command, bind, 10), false);
         }
         catch (Exception ex)
         {

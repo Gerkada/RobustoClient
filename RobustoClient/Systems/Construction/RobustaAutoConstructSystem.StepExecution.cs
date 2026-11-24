@@ -93,6 +93,34 @@ public sealed partial class RobustaAutoConstructSystem
 
         var step = _activePlan.Steps[_stepIndex];
 
+        // A pipe is anchored on the subfloor layer and its pipe layer is then set with a screwdriver, which
+        // cannot reach a covered entity. Lift the floor covering before the first interaction of such a plan.
+        if (IsUnderfloorPipeGraph(_activePlan.GraphId) &&
+            Exists(_currentTarget) &&
+            _phase == StepExecutionPhase.PrepareAndEquip)
+        {
+            switch (EnsureFloorCoveringPried(_currentTarget, _targetCoordinates))
+            {
+                case FloorPryResult.Issued:
+                    _currentDiagnosticStatus = "Prying floor tile to reach the pipe layer...";
+                    _waitTimer = 1.2f;
+                    return;
+
+                case FloorPryResult.NoTool:
+                    _equipRetryCount++;
+                    _currentDiagnosticStatus = $"Waiting for a crowbar to lift the floor tile (Attempt {_equipRetryCount})...";
+                    if (_stepTotalElapsed >= 4f)
+                    {
+                        FailBlueprintOrJob(
+                            $"Missing a crowbar (Prying + ToolTileCompatible) to lift the floor tile for '{_currentTargetLabel}'.");
+                        return;
+                    }
+
+                    _waitTimer = 0.45f;
+                    return;
+            }
+        }
+
         // Skip redundant door-weld step if door is already welded shut
         if (step.Kind == ConstructionActionKind.UseTool &&
             step.Description.StartsWith("Weld door shut", StringComparison.OrdinalIgnoreCase) &&

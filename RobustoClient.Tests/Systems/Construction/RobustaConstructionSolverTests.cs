@@ -586,4 +586,32 @@ public class RobustaConstructionSolverTests
             new ConstructionActionStep(ConstructionActionKind.UseTool, "Use Cutting tool", "Cutting", 1, 1f, "missingWires"),
             new ConstructionActionStep(ConstructionActionKind.UseTool, "Use Screwing tool", "Screwing", 1, 1f, "start"));
     }
+
+    [Theory]
+    [InlineData("ReinforcedWallVisuals", 5, 1)]
+    [InlineData("ReinforcedWallVisuals", 4, 3)]
+    [InlineData("ReinforcedWallVisuals", 3, 5)]
+    [InlineData("ReinforcedWallVisuals", 2, 6)]
+    [InlineData("ReinforcedWallVisuals", 1, 7)]
+    [InlineData("ReinforcedWallVisuals", 0, 8)]
+    [InlineData("ShuttleWallVisuals", 5, 2)]
+    [InlineData("ShuttleWallVisuals", 4, 4)]
+    [InlineData("ShuttleWallVisuals", 3, 6)]
+    [InlineData("ShuttleWallVisuals", 2, 7)]
+    [InlineData("ShuttleWallVisuals", 1, 8)]
+    [InlineData("ShuttleWallVisuals", 0, 9)]
+    public void GetCompletedStepCount_MapsWallStageToFinishedSteps(string visualizer, int stage, int expected)
+    {
+        RobustaConstructionSolver.GetCompletedStepCount(visualizer, stage).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("ReinforcedWallVisuals", -1)]
+    [InlineData("ShuttleWallVisuals", -1)]
+    [InlineData(null, 3)]
+    [InlineData("UnknownVisuals", 3)]
+    public void GetCompletedStepCount_TreatsIntactOrUnknownAsNoProgress(string? visualizer, int stage)
+    {
+        RobustaConstructionSolver.GetCompletedStepCount(visualizer, stage).Should().Be(0);
+    }
 }

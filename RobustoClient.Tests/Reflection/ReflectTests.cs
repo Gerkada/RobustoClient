@@ -213,6 +213,93 @@ public class ReflectTests
     [Fact]
     public void FindType_ReturnsNullForABogusName() =>
         Reflect.FindType("No.Such.Namespace.NoSuchType").Should().BeNull();
+
+    [Fact]
+    public void FindTypeByName_ResolvesWithoutTheNamespace() =>
+        // The fork-safe form: a namespace or assembly move does not break the lookup.
+        Reflect.FindTypeByName("Reflect").Should().Be(typeof(Reflect));
+
+    [Fact]
+    public void FindTypeByName_ReturnsNullForABogusName() =>
+        Reflect.FindTypeByName("NoSuchTypeAnywhere").Should().BeNull();
+
+    [Fact]
+    public void FindTypeByName_IsCaseSensitive() =>
+        Reflect.FindTypeByName("reflect").Should().BeNull();
+
+    [Fact]
+    public void TryFindTypeByName_ReportsPresence()
+    {
+        Reflect.TryFindTypeByName("Reflect", out var found).Should().BeTrue();
+        found.Should().Be(typeof(Reflect));
+
+        Reflect.TryFindTypeByName("NoSuchTypeAnywhere", out var missing).Should().BeFalse();
+        missing.Should().BeNull();
+    }
+
+    [Fact]
+    public void FindTypeByName_RejectsBlankInput()
+    {
+        Reflect.FindTypeByName("").Should().BeNull();
+        Reflect.FindTypeByName("   ").Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildTypeIndex_IsIdempotent()
+    {
+        Reflect.BuildTypeIndex();
+        var first = Reflect.FindTypeByName("Reflect");
+
+        Reflect.BuildTypeIndex();
+        var second = Reflect.FindTypeByName("Reflect");
+
+        first.Should().Be(typeof(Reflect));
+        second.Should().Be(first);
+    }
+
+    [Fact]
+    public void FindTypeByName_ResolvesWithoutAnExplicitBuild()
+    {
+        // The index is built on demand, so a caller that never warms it still gets an answer.
+        Reflect.FindTypeByName("Reflect").Should().Be(typeof(Reflect));
+    }
+
+    [Fact]
+    public void BuildTypeIndex_ReportsItsCost()
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        Reflect.BuildTypeIndex();
+        watch.Stop();
+
+        // Informational: the build is a one-time boot cost, so surface it rather than guess.
+        System.Console.WriteLine($"[Reflect] index build: {watch.ElapsedMilliseconds} ms");
+        watch.ElapsedMilliseconds.Should().BeLessThan(5000, "the index is a boot cost, not a per-frame one");
+    }
+
+    [Fact]
+    public void FindTypeByName_PrefersTheDerivedType()
+    {
+        // Content ships a client type deriving from a shared type under one simple name in a few cases.
+        // The derived type must win regardless of which assembly was indexed first.
+        Reflect.FindTypeByName(nameof(SharedHolder.DerivedProbe))
+            .Should().Be(typeof(ClientHolder.DerivedProbe));
+    }
+
+    /// <summary>Base half of a deliberate simple-name collision, see <see cref="ClientHolder"/>.</summary>
+    private static class SharedHolder
+    {
+        public class DerivedProbe
+        {
+        }
+    }
+
+    /// <summary>Derived half. The index must resolve the shared simple name to this type.</summary>
+    private static class ClientHolder
+    {
+        public sealed class DerivedProbe : SharedHolder.DerivedProbe
+        {
+        }
+    }
 }
 
 /// <summary>

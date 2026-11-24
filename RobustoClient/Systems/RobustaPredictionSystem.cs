@@ -207,45 +207,47 @@ public class RobustaPredictionSystem : EntitySystem
             ? step.RequiredTriggeredSpeed
             : DefaultTriggerSpeed;
 
-        var lead = RobustaAimSolver.SolveSlipLead(
+        // The client draws the target behind the server's authoritative position, so the placement is
+        // anchored to where the target actually is when the click leaves.
+        var anchor = targetPos + targetVel * NetworkLeadSeconds();
+
+        var plan = RobustaAimSolver.SolveSlipLead(
             shooterPos,
-            targetPos,
+            anchor,
             targetVel,
             throwSpeed,
             maxRange,
-            NetworkLeadSeconds(),
+            (float) _timing.TickPeriod.TotalSeconds,
             minTriggerSpeed,
             RobustaConfig.SlipThrowMinLead);
 
-        if (lead < 0f)
+        if (plan.Lead < 0f)
         {
             status = SlipPlanStatus.OutOfRange;
             return false;
         }
 
-        var speed = targetVel.Length();
-
-        // The solver returns a positive lead only when it saw a heading, so the division is safe.
-        var point = lead > 0f
-            ? targetPos + targetVel / speed * lead
-            : targetPos;
+        // A positive lead means the solver saw a heading, so the normalisation is safe.
+        var point = plan.Lead > 0f
+            ? anchor + Vector2.Normalize(targetVel) * plan.Lead
+            : anchor;
 
         worldPoint = point;
 
-        // When placing ahead of a moving target, hitting the target itself must not hide an obstacle
-        // further along the ray (or mid-air body block) before the landing point.
+        // The target itself is never an obstacle here: a peel that clips them still slips them.
         if (RobustaConfig.AimLineOfSight &&
-            !IsPathClear(shooter, SlipLosTarget(lead, target), mapId, shooterPos, point, ThrownMask, out blocker))
+            !IsPathClear(shooter, target, mapId, shooterPos, point, ThrownMask, out blocker))
         {
             status = SlipPlanStatus.Blocked;
             return false;
         }
 
-        status = lead <= 0f ? SlipPlanStatus.Underfoot : SlipPlanStatus.Placed;
+        status = plan.Lead <= 0f
+            ? SlipPlanStatus.Underfoot
+            : plan.ReadyInTime ? SlipPlanStatus.Placed : SlipPlanStatus.Late;
+
         return true;
     }
-
-    internal static EntityUid? SlipLosTarget(float lead, EntityUid target) => lead > 0f ? null : target;
 
     private bool Solve(EntityUid shooter, EntityUid target, AimProfile profile, float extraLead, out ShotPlan plan)
     {

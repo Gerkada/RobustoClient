@@ -36,5 +36,33 @@ public class RobustaJobIconsSystem : LocalPlayerAddCompSystem<ShowJobIconsCompon
 }
 
 public class RobustaCriminalRecordIcons : LocalPlayerAddCompSystem<ShowCriminalRecordIconsComponent>;
-public class RobustaMindShieldIcons : LocalPlayerAddCompSystem<ShowMindShieldIconsComponent>;
+
+/// <summary>
+/// Turns the upstream mindshield badge on or off.
+/// </summary>
+public class RobustaMindShieldIcons : LocalPlayerAddCompSystem<ShowMindShieldIconsComponent>
+{
+    [Dependency] private readonly IPlayerManager _playerManager = default!;
+
+    /// <summary>Restores the saved switch when a new local player attaches.</summary>
+    protected override void OnAttached(LocalPlayerAttachedEvent ev) =>
+        SetEnabled(RobustaConfig.Esp.Icons.Enabled);
+
+    public void SetEnabled(bool enabled)
+    {
+        if (_playerManager.LocalEntity is not { } uid || !Exists(uid))
+            return;
+
+        if (enabled)
+        {
+            if (!HasComp<ShowMindShieldIconsComponent>(uid))
+                AddComp(uid, new ShowMindShieldIconsComponent { NetSyncEnabled = false });
+        }
+        else if (HasComp<ShowMindShieldIconsComponent>(uid))
+        {
+            RemComp<ShowMindShieldIconsComponent>(uid);
+        }
+    }
+}
+
 public class RobustaSyndicateIcons : LocalPlayerAddCompSystem<ShowSyndicateIconsComponent>;

@@ -14,6 +14,7 @@ using Robust.Shared.Containers;
 using Robust.Shared.GameObjects;
 using Robust.Shared.Prototypes;
 using RobustoClient.Reflection;
+using RobustoClient.Systems.Abstract;
 
 namespace RobustoClient.Systems.PlayerState;
 
@@ -25,7 +26,8 @@ public sealed partial class PlayerStateUtility
         IEntityManager EntMan,
         InventorySystem Inventory,
         SharedHandsSystem Hands,
-        IPrototypeManager Prototypes)
+        IPrototypeManager Prototypes,
+        ItemUtilitySystem Items)
     {
         public RobustaSyndicateDetectorSystem Syndicate =>
             EntMan.System<RobustaSyndicateDetectorSystem>();
@@ -211,9 +213,9 @@ public sealed partial class PlayerStateUtility
         bool includeHands,
         FlagContext ctx)
     {
-        if (includeHands && ctx.EntMan.TryGetComponent<HandsComponent>(uid, out var hands))
+        if (includeHands && ctx.EntMan.TryGetComponent<HandsComponent>(uid, out _))
         {
-            foreach (var held in ctx.Hands.EnumerateHeld((uid, hands)))
+            foreach (var held in ctx.Items.GetHeldItems(uid))
                 yield return held;
         }
 

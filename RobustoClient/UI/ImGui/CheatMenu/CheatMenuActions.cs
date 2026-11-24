@@ -30,8 +30,13 @@ internal static class CheatMenuActions
     public static void SetHealthOverlay(bool enabled) =>
         System<RobustaHealthBarSystem>()?.SetEnabled(enabled);
 
-    public static void SetJobIconsOverlay(bool enabled) =>
+    public static void SetJobIconsOverlay(bool enabled)
+    {
         System<RobustaJobIconsSystem>()?.SetEnabled(enabled);
+
+        // The mindshield badge draws in the job-icon slot, so it goes with them.
+        System<RobustaMindShieldIcons>()?.SetEnabled(enabled);
+    }
 
     /// <summary>
     /// Starts placing a saved blueprint so it is displayed in the world. Uses the same hijack the

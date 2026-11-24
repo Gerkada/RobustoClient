@@ -51,6 +51,77 @@ public sealed partial class RobustaConstructionSolver
         return false;
     }
 
+    /// <summary>
+    /// The wall visualizer's current deconstruction stage, or null when the entity has none.
+    /// </summary>
+    /// <remarks>
+    /// Reinforced and shuttle walls walk a nine- or ten-step edge without changing graph node, so this stage is
+    /// the only client-visible record of how far a cancelled deconstruction got. <c>-1</c> means intact.
+    /// </remarks>
+    public int? GetDeconstructionStage(EntityUid uid, out string? visualizerName)
+    {
+        visualizerName = null;
+        if (_entMan == null || !_entMan.EntityExists(uid))
+            return null;
+
+        var appComp = FindComponentByName(uid, "AppearanceComponent");
+        if (appComp == null)
+            return null;
+
+        if (GetMemberValue(appComp, "AppearanceData") is not IDictionary dict)
+            return null;
+
+        foreach (DictionaryEntry entry in dict)
+        {
+            var keyName = entry.Key?.ToString() ?? string.Empty;
+            if (!keyName.Contains("DeconstructionStage", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (entry.Value is not int stage)
+                continue;
+
+            visualizerName = keyName.Contains("ShuttleWallVisuals", StringComparison.OrdinalIgnoreCase)
+                ? "ShuttleWallVisuals"
+                : keyName.Contains("ReinforcedWallVisuals", StringComparison.OrdinalIgnoreCase)
+                    ? "ReinforcedWallVisuals"
+                    : null;
+
+            return stage;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// How many steps of a wall deconstruction edge the given visualizer stage has already completed.
+    /// </summary>
+    /// <remarks>
+    /// shortcut: the stage-to-step mapping is mirrored from the upstream Girder graph, because the graph's
+    /// <c>completed</c> actions are declared <c>serverOnly</c> and never reach the client. A step that writes
+    /// no stage is <c>-1</c>. If upstream reorders either edge the table stops matching and no steps are
+    /// skipped, which is the old behaviour; upgrade by reading the stages from the prototype once upstream
+    /// ships them to the client.
+    /// </remarks>
+    public static int GetCompletedStepCount(string? visualizerName, int stage)
+    {
+        // -1 is the intact default, so it never counts as progress.
+        if (stage < 0)
+            return 0;
+
+        int[]? stages = visualizerName switch
+        {
+            "ReinforcedWallVisuals" => [5, -1, 4, -1, 3, 2, 1, 0, -1],
+            "ShuttleWallVisuals" => [-1, 5, -1, 4, -1, 3, 2, 1, 0, -1],
+            _ => null
+        };
+
+        if (stages == null)
+            return 0;
+
+        int index = Array.IndexOf(stages, stage);
+        return index < 0 ? 0 : index + 1;
+    }
+
     private bool TryGetMachineFrameVisualState(EntityUid uid, out int visualState)
     {
         visualState = 0;
